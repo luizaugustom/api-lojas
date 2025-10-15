@@ -16,6 +16,7 @@ import { FiscalModule } from './application/fiscal/fiscal.module';
 import { UploadModule } from './application/upload/upload.module';
 import { WhatsappModule } from './application/whatsapp/whatsapp.module';
 import { N8nModule } from './application/n8n/n8n.module';
+import { ReportsModule } from './application/reports/reports.module';
 
 @Module({
   imports: [
@@ -46,6 +47,7 @@ import { N8nModule } from './application/n8n/n8n.module';
     UploadModule,
     WhatsappModule,
     N8nModule,
+    ReportsModule,
   ],
 })
 export class AppModule {}

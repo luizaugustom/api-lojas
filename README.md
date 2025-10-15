@@ -47,7 +47,13 @@ Uma API completa para sistema SaaS de lojas com arquitetura DDD, Clean Code e to
 - Produtos mais vendidos
 - Performance de vendedores
 - Análise de formas de pagamento
-- Exportação em PDF
+- **Relatórios Contábeis Completos** (Novo!)
+  - Exportação em JSON, XML e Excel
+  - Relatórios de vendas detalhados
+  - Relatórios de produtos e estoque
+  - Relatórios de notas fiscais
+  - Relatórios completos para contabilidade
+  - Download ou envio por email
 
 ### 🖨️ Integrações
 - **Impressora Térmica**: USB, Network e Bluetooth
@@ -89,6 +95,7 @@ src/
 │   ├── cash-closure/     # Fechamento de caixa
 │   ├── printer/          # Integração com impressoras
 │   ├── fiscal/           # Notas fiscais
+│   ├── reports/          # Relatórios contábeis (Novo!)
 │   ├── upload/           # Upload de arquivos
 │   ├── whatsapp/         # Integração WhatsApp
 │   └── n8n/              # Integração N8N
@@ -178,6 +185,12 @@ A documentação completa da API está disponível via Swagger:
 #### Clientes
 - `GET /api/customer` - Listar clientes
 - `POST /api/customer` - Criar cliente
+
+#### Relatórios (Novo!)
+- `POST /api/reports/generate` - Gerar relatório contábil
+  - Tipos: `sales`, `products`, `invoices`, `complete`
+  - Formatos: `json`, `xml`, `excel`
+  - Filtros por período e vendedor
 
 ## 🧪 Testes
 
@@ -340,7 +353,10 @@ Este projeto está licenciado sob a Licença MIT - veja o arquivo [LICENSE](LICE
 - [ ] Sistema de comissões avançado
 - [ ] IA para previsão de demanda
 - [ ] App mobile nativo
-- [ ] Integração com contabilidade
+- [x] **Integração com contabilidade** (Concluído!)
+  - [x] Relatórios em JSON, XML e Excel
+  - [x] Exportação completa de dados
+  - [ ] Envio automático por email
 
 ### Versão 2.1
 - [ ] Sistema de fidelidade

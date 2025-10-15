@@ -1,0 +1,227 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Exemplo - Gerador de Relatórios</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 50px auto;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        .container {
+            background: white;
+            padding: 30px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        h1 {
+            color: #333;
+            margin-bottom: 30px;
+        }
+        .form-group {
+            margin-bottom: 20px;
+        }
+        label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: bold;
+            color: #555;
+        }
+        select, input {
+            width: 100%;
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            font-size: 14px;
+        }
+        button {
+            background-color: #4CAF50;
+            color: white;
+            padding: 12px 30px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 16px;
+            width: 100%;
+        }
+        button:hover {
+            background-color: #45a049;
+        }
+        button:disabled {
+            background-color: #cccccc;
+            cursor: not-allowed;
+        }
+        .status {
+            margin-top: 20px;
+            padding: 10px;
+            border-radius: 4px;
+            display: none;
+        }
+        .status.success {
+            background-color: #d4edda;
+            color: #155724;
+            border: 1px solid #c3e6cb;
+        }
+        .status.error {
+            background-color: #f8d7da;
+            color: #721c24;
+            border: 1px solid #f5c6cb;
+        }
+        .status.info {
+            background-color: #d1ecf1;
+            color: #0c5460;
+            border: 1px solid #bee5eb;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>📊 Gerador de Relatórios para Contabilidade</h1>
+        
+        <div class="form-group">
+            <label for="reportType">Tipo de Relatório:</label>
+            <select id="reportType">
+                <option value="complete">Relatório Completo</option>
+                <option value="sales">Relatório de Vendas</option>
+                <option value="products">Relatório de Produtos</option>
+                <option value="invoices">Relatório de Notas Fiscais</option>
+            </select>
+        </div>
+
+        <div class="form-group">
+            <label for="format">Formato:</label>
+            <select id="format">
+                <option value="excel">Excel (.xlsx)</option>
+                <option value="xml">XML</option>
+                <option value="json">JSON</option>
+            </select>
+        </div>
+
+        <div class="form-group">
+            <label for="startDate">Data Inicial:</label>
+            <input type="date" id="startDate">
+        </div>
+
+        <div class="form-group">
+            <label for="endDate">Data Final:</label>
+            <input type="date" id="endDate">
+        </div>
+
+        <div class="form-group">
+            <label for="token">Token de Autenticação (JWT):</label>
+            <input type="text" id="token" placeholder="Cole seu token JWT aqui">
+        </div>
+
+        <button onclick="generateReport()">Gerar Relatório</button>
+
+        <div id="status" class="status"></div>
+    </div>
+
+    <script>
+        // Configurar datas padrão (mês atual)
+        const today = new Date();
+        const firstDay = new Date(today.getFullYear(), today.getMonth(), 1);
+        const lastDay = new Date(today.getFullYear(), today.getMonth() + 1, 0);
+        
+        document.getElementById('startDate').valueAsDate = firstDay;
+        document.getElementById('endDate').valueAsDate = lastDay;
+
+        async function generateReport() {
+            const statusDiv = document.getElementById('status');
+            const button = document.querySelector('button');
+            
+            // Obter valores do formulário
+            const reportType = document.getElementById('reportType').value;
+            const format = document.getElementById('format').value;
+            const startDate = document.getElementById('startDate').value;
+            const endDate = document.getElementById('endDate').value;
+            const token = document.getElementById('token').value;
+
+            // Validar token
+            if (!token) {
+                showStatus('error', 'Por favor, insira o token de autenticação.');
+                return;
+            }
+
+            // Desabilitar botão
+            button.disabled = true;
+            showStatus('info', 'Gerando relatório...');
+
+            try {
+                // Preparar dados da requisição
+                const requestBody = {
+                    reportType,
+                    format
+                };
+
+                if (startDate) {
+                    requestBody.startDate = new Date(startDate).toISOString();
+                }
+                if (endDate) {
+                    requestBody.endDate = new Date(endDate + 'T23:59:59').toISOString();
+                }
+
+                // Fazer requisição
+                const response = await fetch('http://localhost:3000/reports/generate', {
+                    method: 'POST',
+                    headers: {
+                        'Authorization': `Bearer ${token}`,
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify(requestBody)
+                });
+
+                if (!response.ok) {
+                    const error = await response.json();
+                    throw new Error(error.message || 'Erro ao gerar relatório');
+                }
+
+                // Obter nome do arquivo do header
+                const contentDisposition = response.headers.get('Content-Disposition');
+                let filename = `relatorio-${reportType}-${Date.now()}`;
+                
+                if (contentDisposition) {
+                    const filenameMatch = contentDisposition.match(/filename="(.+)"/);
+                    if (filenameMatch) {
+                        filename = filenameMatch[1];
+                    }
+                }
+
+                // Download do arquivo
+                const blob = await response.blob();
+                const url = window.URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = filename;
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+                window.URL.revokeObjectURL(url);
+
+                showStatus('success', `Relatório gerado com sucesso! Download iniciado: ${filename}`);
+            } catch (error) {
+                showStatus('error', `Erro: ${error.message}`);
+            } finally {
+                button.disabled = false;
+            }
+        }
+
+        function showStatus(type, message) {
+            const statusDiv = document.getElementById('status');
+            statusDiv.className = `status ${type}`;
+            statusDiv.textContent = message;
+            statusDiv.style.display = 'block';
+
+            if (type === 'success') {
+                setTimeout(() => {
+                    statusDiv.style.display = 'none';
+                }, 5000);
+            }
+        }
+    </script>
+</body>
+</html>

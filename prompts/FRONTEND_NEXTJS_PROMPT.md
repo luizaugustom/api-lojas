@@ -66,6 +66,14 @@ Crie um frontend completo em Next.js 14 com App Router para a API Lojas SaaS. O 
 - Vendedores
 - Formas de pagamento
 - Exportação em PDF/Excel
+- **Relatórios Contábeis** (Novo!)
+  - Seleção de tipo de relatório (vendas, produtos, notas fiscais, completo)
+  - Seleção de formato (JSON, XML, Excel)
+  - Filtros de período (data inicial e final)
+  - Filtro por vendedor (opcional)
+  - Download automático do arquivo gerado
+  - Preview dos dados antes do download
+  - Histórico de relatórios gerados
 
 #### 9. Integrações
 - WhatsApp (envio de mensagens)
@@ -168,6 +176,11 @@ Base URL: `https://your-api-domain.com/api`
 - `POST /upload/single` - Upload de arquivo único
 - `POST /upload/multiple` - Upload múltiplos arquivos
 
+#### Relatórios Contábeis (Novo!)
+- `POST /reports/generate` - Gerar relatório
+  - Body: `{ reportType: "sales" | "products" | "invoices" | "complete", format: "json" | "xml" | "excel", startDate?: string, endDate?: string, sellerId?: string }`
+  - Retorna: Arquivo para download (JSON, XML ou Excel)
+
 ### Tipos de Usuário e Permissões:
 
 #### Admin
@@ -182,6 +195,7 @@ Base URL: `https://your-api-domain.com/api`
 - Gerenciar produtos
 - Ver vendas da empresa
 - Relatórios da empresa
+- **Gerar relatórios contábeis** (Novo!)
 
 #### Vendedor
 - Criar vendas
@@ -281,6 +295,23 @@ interface SaleFormProps {
   products: Product[];
   onSubmit: (sale: CreateSaleDto) => void;
   loading?: boolean;
+}
+```
+
+#### Accounting Reports Form (Novo!)
+```tsx
+interface ReportsFormProps {
+  onGenerate: (params: GenerateReportDto) => void;
+  loading?: boolean;
+  sellers?: Seller[];
+}
+
+interface GenerateReportDto {
+  reportType: 'sales' | 'products' | 'invoices' | 'complete';
+  format: 'json' | 'xml' | 'excel';
+  startDate?: string;
+  endDate?: string;
+  sellerId?: string;
 }
 ```
 
@@ -459,13 +490,262 @@ Agora implemente as seguintes funcionalidades específicas para o sistema de loj
 - Exportação em PDF
 - Compartilhamento
 
-### 5. Notificações em Tempo Real
+### 5. Relatórios Contábeis (Novo!)
+- Página dedicada para geração de relatórios
+- Formulário com seleção de tipo (vendas, produtos, notas fiscais, completo)
+- Seleção de formato (JSON, XML, Excel)
+- Date picker para período
+- Select para filtrar por vendedor
+- Botão de download com loading state
+- Preview dos dados antes do download (para JSON)
+- Histórico de relatórios gerados com data e hora
+- Indicador visual do tamanho do arquivo
+- Mensagens de sucesso/erro com toast
+- Validação de datas (data final não pode ser menor que inicial)
+
+### 6. Notificações em Tempo Real
 - WebSocket para atualizações
 - Notificações push
 - Alertas de estoque
 - Lembretes de vencimento
 
 Implemente essas funcionalidades com foco na usabilidade e performance.
+```
+
+## Exemplo de Página de Relatórios Contábeis
+
+```tsx
+'use client';
+
+import { useState } from 'react';
+import { useForm } from 'react-hook-form';
+import { zodResolver } from '@hookform/resolvers/zod';
+import * as z from 'zod';
+import { toast } from 'react-hot-toast';
+import { Download, FileText, Calendar } from 'lucide-react';
+import { Button } from '@/components/ui/button';
+import { Select } from '@/components/ui/select';
+import { DatePicker } from '@/components/ui/date-picker';
+import { Card } from '@/components/ui/card';
+
+const reportSchema = z.object({
+  reportType: z.enum(['sales', 'products', 'invoices', 'complete']),
+  format: z.enum(['json', 'xml', 'excel']),
+  startDate: z.string().optional(),
+  endDate: z.string().optional(),
+  sellerId: z.string().optional(),
+}).refine(
+  (data) => {
+    if (data.startDate && data.endDate) {
+      return new Date(data.startDate) <= new Date(data.endDate);
+    }
+    return true;
+  },
+  {
+    message: 'Data final deve ser maior que data inicial',
+    path: ['endDate'],
+  }
+);
+
+type ReportFormData = z.infer<typeof reportSchema>;
+
+export default function AccountingReportsPage() {
+  const [loading, setLoading] = useState(false);
+  const [history, setHistory] = useState<any[]>([]);
+
+  const { register, handleSubmit, formState: { errors } } = useForm<ReportFormData>({
+    resolver: zodResolver(reportSchema),
+    defaultValues: {
+      reportType: 'complete',
+      format: 'excel',
+    },
+  });
+
+  const onSubmit = async (data: ReportFormData) => {
+    setLoading(true);
+    try {
+      const response = await fetch('/api/reports/generate', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`,
+        },
+        body: JSON.stringify(data),
+      });
+
+      if (!response.ok) throw new Error('Erro ao gerar relatório');
+
+      const blob = await response.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `relatorio-${data.reportType}-${Date.now()}.${data.format === 'excel' ? 'xlsx' : data.format}`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      window.URL.revokeObjectURL(url);
+
+      // Add to history
+      setHistory([
+        {
+          type: data.reportType,
+          format: data.format,
+          date: new Date().toISOString(),
+          size: blob.size,
+        },
+        ...history,
+      ]);
+
+      toast.success('Relatório gerado com sucesso!');
+    } catch (error) {
+      toast.error('Erro ao gerar relatório');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <div className="container mx-auto p-6">
+      <div className="mb-8">
+        <h1 className="text-3xl font-bold mb-2">Relatórios Contábeis</h1>
+        <p className="text-gray-600">
+          Gere relatórios completos para envio à contabilidade
+        </p>
+      </div>
+
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        <Card className="lg:col-span-2 p-6">
+          <h2 className="text-xl font-semibold mb-4 flex items-center gap-2">
+            <FileText className="w-5 h-5" />
+            Gerar Novo Relatório
+          </h2>
+
+          <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
+            <div>
+              <label className="block text-sm font-medium mb-2">
+                Tipo de Relatório
+              </label>
+              <Select {...register('reportType')}>
+                <option value="sales">Relatório de Vendas</option>
+                <option value="products">Relatório de Produtos</option>
+                <option value="invoices">Relatório de Notas Fiscais</option>
+                <option value="complete">Relatório Completo</option>
+              </Select>
+              {errors.reportType && (
+                <p className="text-red-500 text-sm mt-1">{errors.reportType.message}</p>
+              )}
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium mb-2">
+                Formato
+              </label>
+              <Select {...register('format')}>
+                <option value="excel">Excel (.xlsx)</option>
+                <option value="xml">XML</option>
+                <option value="json">JSON</option>
+              </Select>
+            </div>
+
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className="block text-sm font-medium mb-2">
+                  Data Inicial
+                </label>
+                <DatePicker {...register('startDate')} />
+              </div>
+              <div>
+                <label className="block text-sm font-medium mb-2">
+                  Data Final
+                </label>
+                <DatePicker {...register('endDate')} />
+                {errors.endDate && (
+                  <p className="text-red-500 text-sm mt-1">{errors.endDate.message}</p>
+                )}
+              </div>
+            </div>
+
+            <Button
+              type="submit"
+              disabled={loading}
+              className="w-full"
+            >
+              {loading ? (
+                <>
+                  <span className="animate-spin mr-2">⏳</span>
+                  Gerando...
+                </>
+              ) : (
+                <>
+                  <Download className="w-4 h-4 mr-2" />
+                  Gerar e Baixar Relatório
+                </>
+              )}
+            </Button>
+          </form>
+        </Card>
+
+        <Card className="p-6">
+          <h2 className="text-xl font-semibold mb-4 flex items-center gap-2">
+            <Calendar className="w-5 h-5" />
+            Histórico
+          </h2>
+
+          <div className="space-y-3">
+            {history.length === 0 ? (
+              <p className="text-gray-500 text-sm">Nenhum relatório gerado ainda</p>
+            ) : (
+              history.map((item, index) => (
+                <div
+                  key={index}
+                  className="p-3 border rounded-lg hover:bg-gray-50"
+                >
+                  <div className="flex justify-between items-start mb-1">
+                    <span className="font-medium text-sm capitalize">
+                      {item.type}
+                    </span>
+                    <span className="text-xs text-gray-500 uppercase">
+                      {item.format}
+                    </span>
+                  </div>
+                  <div className="text-xs text-gray-500">
+                    {new Date(item.date).toLocaleString('pt-BR')}
+                  </div>
+                  <div className="text-xs text-gray-400 mt-1">
+                    {(item.size / 1024).toFixed(2)} KB
+                  </div>
+                </div>
+              ))
+            )}
+          </div>
+        </Card>
+      </div>
+
+      <div className="mt-8 grid grid-cols-1 md:grid-cols-4 gap-4">
+        <Card className="p-4 text-center">
+          <div className="text-3xl font-bold text-blue-600">📊</div>
+          <div className="mt-2 text-sm font-medium">Vendas</div>
+          <div className="text-xs text-gray-500">Relatório detalhado</div>
+        </Card>
+        <Card className="p-4 text-center">
+          <div className="text-3xl font-bold text-green-600">📦</div>
+          <div className="mt-2 text-sm font-medium">Produtos</div>
+          <div className="text-xs text-gray-500">Estoque e vendas</div>
+        </Card>
+        <Card className="p-4 text-center">
+          <div className="text-3xl font-bold text-purple-600">📄</div>
+          <div className="mt-2 text-sm font-medium">Notas Fiscais</div>
+          <div className="text-xs text-gray-500">Documentos fiscais</div>
+        </Card>
+        <Card className="p-4 text-center">
+          <div className="text-3xl font-bold text-orange-600">📋</div>
+          <div className="mt-2 text-sm font-medium">Completo</div>
+          <div className="text-xs text-gray-500">Todos os dados</div>
+        </Card>
+      </div>
+    </div>
+  );
+}
 ```
 
 ## Prompt para Melhorias e Otimizações

@@ -10,6 +10,7 @@ import {
   Query,
   ParseUUIDPipe,
   ParseIntPipe,
+  BadRequestException,
 } from '@nestjs/common';
 import {
   ApiTags,

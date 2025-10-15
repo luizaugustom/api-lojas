@@ -51,6 +51,13 @@ Crie um aplicativo móvel completo em React Native para a API Lojas SaaS. O app 
 - Produtos mais vendidos
 - Comissões do vendedor
 - Relatórios de fechamento
+- **Relatórios Contábeis** (Novo!)
+  - Geração de relatórios para contabilidade
+  - Seleção de tipo (vendas, produtos, notas fiscais, completo)
+  - Seleção de formato (JSON, XML, Excel)
+  - Filtros de período
+  - Download e compartilhamento via WhatsApp/Email
+  - Visualização prévia dos dados
 
 #### 7. Configurações
 - Perfil do usuário
@@ -81,6 +88,8 @@ Crie um aplicativo móvel completo em React Native para a API Lojas SaaS. O app 
 - **Image Picker**: React Native Image Picker
 - **Push Notifications**: React Native Push Notification
 - **Splash Screen**: React Native Splash Screen
+- **File Sharing**: React Native Share (para compartilhar relatórios)
+- **Document Viewer**: React Native PDF (para visualizar relatórios)
 
 ### Estrutura de Pastas:
 
@@ -686,6 +695,340 @@ const MainScreen = () => {
 ```
 
 Crie um aplicativo móvel completo, otimizado para vendas e com funcionalidades offline robustas. O foco deve ser na usabilidade, performance e confiabilidade para operações comerciais.
+```
+
+## Exemplo de Tela de Relatórios Contábeis
+
+```tsx
+import React, { useState } from 'react';
+import {
+  View,
+  Text,
+  ScrollView,
+  TouchableOpacity,
+  StyleSheet,
+  ActivityIndicator,
+  Alert,
+} from 'react-native';
+import { Picker } from '@react-native-picker/picker';
+import DatePicker from 'react-native-date-picker';
+import Share from 'react-native-share';
+import RNFS from 'react-native-fs';
+import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
+
+interface ReportParams {
+  reportType: 'sales' | 'products' | 'invoices' | 'complete';
+  format: 'json' | 'xml' | 'excel';
+  startDate?: Date;
+  endDate?: Date;
+}
+
+const AccountingReportsScreen = () => {
+  const [loading, setLoading] = useState(false);
+  const [reportType, setReportType] = useState<ReportParams['reportType']>('complete');
+  const [format, setFormat] = useState<ReportParams['format']>('excel');
+  const [startDate, setStartDate] = useState<Date | undefined>();
+  const [endDate, setEndDate] = useState<Date | undefined>();
+  const [showStartDatePicker, setShowStartDatePicker] = useState(false);
+  const [showEndDatePicker, setShowEndDatePicker] = useState(false);
+
+  const generateReport = async () => {
+    if (startDate && endDate && startDate > endDate) {
+      Alert.alert('Erro', 'Data final deve ser maior que data inicial');
+      return;
+    }
+
+    setLoading(true);
+    try {
+      const response = await fetch('https://api.example.com/reports/generate', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          reportType,
+          format,
+          startDate: startDate?.toISOString(),
+          endDate: endDate?.toISOString(),
+        }),
+      });
+
+      if (!response.ok) throw new Error('Erro ao gerar relatório');
+
+      const blob = await response.blob();
+      const extension = format === 'excel' ? 'xlsx' : format;
+      const filename = `relatorio-${reportType}-${Date.now()}.${extension}`;
+      const path = `${RNFS.DocumentDirectoryPath}/${filename}`;
+
+      // Save file
+      await RNFS.writeFile(path, blob, 'base64');
+
+      // Share file
+      await Share.open({
+        url: `file://${path}`,
+        type: format === 'excel' 
+          ? 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+          : `application/${format}`,
+        title: 'Compartilhar Relatório',
+      });
+
+      Alert.alert('Sucesso', 'Relatório gerado com sucesso!');
+    } catch (error) {
+      Alert.alert('Erro', 'Não foi possível gerar o relatório');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <ScrollView style={styles.container}>
+      <View style={styles.header}>
+        <Icon name="file-chart" size={40} color="#4CAF50" />
+        <Text style={styles.title}>Relatórios Contábeis</Text>
+        <Text style={styles.subtitle}>
+          Gere relatórios completos para envio à contabilidade
+        </Text>
+      </View>
+
+      <View style={styles.card}>
+        <Text style={styles.label}>Tipo de Relatório</Text>
+        <View style={styles.pickerContainer}>
+          <Picker
+            selectedValue={reportType}
+            onValueChange={(value) => setReportType(value)}
+            style={styles.picker}
+          >
+            <Picker.Item label="Relatório Completo" value="complete" />
+            <Picker.Item label="Relatório de Vendas" value="sales" />
+            <Picker.Item label="Relatório de Produtos" value="products" />
+            <Picker.Item label="Relatório de Notas Fiscais" value="invoices" />
+          </Picker>
+        </View>
+
+        <Text style={styles.label}>Formato</Text>
+        <View style={styles.pickerContainer}>
+          <Picker
+            selectedValue={format}
+            onValueChange={(value) => setFormat(value)}
+            style={styles.picker}
+          >
+            <Picker.Item label="Excel (.xlsx)" value="excel" />
+            <Picker.Item label="XML" value="xml" />
+            <Picker.Item label="JSON" value="json" />
+          </Picker>
+        </View>
+
+        <Text style={styles.label}>Período</Text>
+        <View style={styles.dateRow}>
+          <TouchableOpacity
+            style={styles.dateButton}
+            onPress={() => setShowStartDatePicker(true)}
+          >
+            <Icon name="calendar" size={20} color="#666" />
+            <Text style={styles.dateText}>
+              {startDate ? startDate.toLocaleDateString('pt-BR') : 'Data Inicial'}
+            </Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={styles.dateButton}
+            onPress={() => setShowEndDatePicker(true)}
+          >
+            <Icon name="calendar" size={20} color="#666" />
+            <Text style={styles.dateText}>
+              {endDate ? endDate.toLocaleDateString('pt-BR') : 'Data Final'}
+            </Text>
+          </TouchableOpacity>
+        </View>
+
+        <TouchableOpacity
+          style={[styles.generateButton, loading && styles.generateButtonDisabled]}
+          onPress={generateReport}
+          disabled={loading}
+        >
+          {loading ? (
+            <ActivityIndicator color="#fff" />
+          ) : (
+            <>
+              <Icon name="download" size={20} color="#fff" />
+              <Text style={styles.generateButtonText}>Gerar e Compartilhar</Text>
+            </>
+          )}
+        </TouchableOpacity>
+      </View>
+
+      <View style={styles.infoCards}>
+        <View style={styles.infoCard}>
+          <Text style={styles.infoIcon}>📊</Text>
+          <Text style={styles.infoTitle}>Vendas</Text>
+          <Text style={styles.infoDesc}>Relatório detalhado</Text>
+        </View>
+        <View style={styles.infoCard}>
+          <Text style={styles.infoIcon}>📦</Text>
+          <Text style={styles.infoTitle}>Produtos</Text>
+          <Text style={styles.infoDesc}>Estoque e vendas</Text>
+        </View>
+        <View style={styles.infoCard}>
+          <Text style={styles.infoIcon}>📄</Text>
+          <Text style={styles.infoTitle}>Notas Fiscais</Text>
+          <Text style={styles.infoDesc}>Documentos fiscais</Text>
+        </View>
+        <View style={styles.infoCard}>
+          <Text style={styles.infoIcon}>📋</Text>
+          <Text style={styles.infoTitle}>Completo</Text>
+          <Text style={styles.infoDesc}>Todos os dados</Text>
+        </View>
+      </View>
+
+      <DatePicker
+        modal
+        open={showStartDatePicker}
+        date={startDate || new Date()}
+        mode="date"
+        onConfirm={(date) => {
+          setShowStartDatePicker(false);
+          setStartDate(date);
+        }}
+        onCancel={() => setShowStartDatePicker(false)}
+      />
+
+      <DatePicker
+        modal
+        open={showEndDatePicker}
+        date={endDate || new Date()}
+        mode="date"
+        onConfirm={(date) => {
+          setShowEndDatePicker(false);
+          setEndDate(date);
+        }}
+        onCancel={() => setShowEndDatePicker(false)}
+      />
+    </ScrollView>
+  );
+};
+
+const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+    backgroundColor: '#f5f5f5',
+  },
+  header: {
+    padding: 20,
+    backgroundColor: '#fff',
+    alignItems: 'center',
+    borderBottomWidth: 1,
+    borderBottomColor: '#e0e0e0',
+  },
+  title: {
+    fontSize: 24,
+    fontWeight: 'bold',
+    marginTop: 10,
+    color: '#333',
+  },
+  subtitle: {
+    fontSize: 14,
+    color: '#666',
+    marginTop: 5,
+    textAlign: 'center',
+  },
+  card: {
+    margin: 16,
+    padding: 16,
+    backgroundColor: '#fff',
+    borderRadius: 8,
+    elevation: 2,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+  },
+  label: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#333',
+    marginTop: 16,
+    marginBottom: 8,
+  },
+  pickerContainer: {
+    borderWidth: 1,
+    borderColor: '#ddd',
+    borderRadius: 8,
+    overflow: 'hidden',
+  },
+  picker: {
+    height: 50,
+  },
+  dateRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    gap: 12,
+  },
+  dateButton: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 12,
+    borderWidth: 1,
+    borderColor: '#ddd',
+    borderRadius: 8,
+    gap: 8,
+  },
+  dateText: {
+    fontSize: 14,
+    color: '#666',
+  },
+  generateButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#4CAF50',
+    padding: 16,
+    borderRadius: 8,
+    marginTop: 24,
+    gap: 8,
+  },
+  generateButtonDisabled: {
+    backgroundColor: '#ccc',
+  },
+  generateButtonText: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: 'bold',
+  },
+  infoCards: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    padding: 8,
+    gap: 8,
+  },
+  infoCard: {
+    flex: 1,
+    minWidth: '45%',
+    backgroundColor: '#fff',
+    padding: 16,
+    borderRadius: 8,
+    alignItems: 'center',
+    elevation: 1,
+  },
+  infoIcon: {
+    fontSize: 32,
+    marginBottom: 8,
+  },
+  infoTitle: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#333',
+    marginBottom: 4,
+  },
+  infoDesc: {
+    fontSize: 12,
+    color: '#666',
+    textAlign: 'center',
+  },
+});
+
+export default AccountingReportsScreen;
 ```
 
 ## Prompt Adicional para Funcionalidades Avançadas
