@@ -1,0 +1,271 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Admin {
+  id        String   @id @default(cuid())
+  login     String   @unique
+  password  String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relations
+  companies Company[]
+
+  @@map("admins")
+}
+
+model Company {
+  id              String   @id @default(cuid())
+  name            String
+  login           String   @unique
+  password        String
+  phone           String?
+  cnpj            String   @unique
+  stateRegistration String?
+  municipalRegistration String?
+  email           String   @unique
+  logoUrl         String?
+  brandColor      String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  // Address
+  zipCode         String?
+  state           String?
+  city            String?
+  district        String?
+  street          String?
+  number          String?
+  complement      String?
+
+  // Banking Data
+  beneficiaryName String?
+  beneficiaryCpfCnpj String?
+  bankCode        String?
+  bankName        String?
+  agency          String?
+  accountNumber   String?
+  accountType     String?
+
+  // Relations
+  adminId         String
+  admin           Admin           @relation(fields: [adminId], references: [id], onDelete: Cascade)
+  sellers         Seller[]
+  products        Product[]
+  sales           Sale[]
+  customers       Customer[]
+  billsToPay      BillToPay[]
+  cashClosures    CashClosure[]
+  fiscalDocuments FiscalDocument[]
+
+  @@map("companies")
+}
+
+model Seller {
+  id          String   @id @default(cuid())
+  login       String   @unique
+  password    String
+  name        String
+  cpf         String?
+  birthDate   DateTime?
+  email       String?
+  phone       String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  // Relations
+  companyId   String
+  company     Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  sales       Sale[]
+
+  @@map("sellers")
+}
+
+model Product {
+  id              String   @id @default(cuid())
+  name            String
+  photos          String[] // Array of photo URLs
+  barcode         String   @unique
+  size            String?
+  stockQuantity   Int      @default(0)
+  price           Decimal  @db.Decimal(10, 2)
+  category        String?
+  expirationDate  DateTime?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  // Relations
+  companyId       String
+  company         Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  saleItems       SaleItem[]
+  productExchanges ProductExchange[]
+
+  @@map("products")
+}
+
+model Sale {
+  id              String   @id @default(cuid())
+  total           Decimal  @db.Decimal(10, 2)
+  clientCpfCnpj   String?
+  clientName      String?
+  paymentMethod   String[] // Array of payment methods
+  change          Decimal  @db.Decimal(10, 2) @default(0)
+  isInstallment   Boolean  @default(false)
+  saleDate        DateTime @default(now())
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  // Relations
+  companyId       String
+  company         Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  sellerId        String
+  seller          Seller @relation(fields: [sellerId], references: [id])
+  items           SaleItem[]
+  exchanges       ProductExchange[]
+  cashClosureId   String?
+  cashClosure     CashClosure? @relation(fields: [cashClosureId], references: [id])
+
+  @@map("sales")
+}
+
+model SaleItem {
+  id          String  @id @default(cuid())
+  quantity    Int
+  unitPrice   Decimal @db.Decimal(10, 2)
+  totalPrice  Decimal @db.Decimal(10, 2)
+  createdAt   DateTime @default(now())
+
+  // Relations
+  saleId      String
+  sale        Sale @relation(fields: [saleId], references: [id], onDelete: Cascade)
+  productId   String
+  product     Product @relation(fields: [productId], references: [id])
+
+  @@map("sale_items")
+}
+
+model Customer {
+  id          String   @id @default(cuid())
+  name        String
+  phone       String?
+  cpfCnpj     String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  // Address
+  zipCode     String?
+  state       String?
+  city        String?
+  district    String?
+  street      String?
+  number      String?
+  complement  String?
+
+  // Relations
+  companyId   String
+  company     Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  @@map("customers")
+}
+
+model BillToPay {
+  id              String   @id @default(cuid())
+  title           String
+  barcode         String?
+  paymentInfo     String?
+  dueDate         DateTime
+  amount          Decimal  @db.Decimal(10, 2)
+  isPaid          Boolean  @default(false)
+  paidAt          DateTime?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  // Relations
+  companyId       String
+  company         Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  @@map("bills_to_pay")
+}
+
+model CashClosure {
+  id              String   @id @default(cuid())
+  openingDate     DateTime @default(now())
+  closingDate     DateTime?
+  openingAmount   Decimal  @db.Decimal(10, 2) @default(0)
+  closingAmount   Decimal  @db.Decimal(10, 2) @default(0)
+  totalSales      Decimal  @db.Decimal(10, 2) @default(0)
+  totalWithdrawals Decimal @db.Decimal(10, 2) @default(0)
+  isClosed        Boolean  @default(false)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  // Relations
+  companyId       String
+  company         Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  sales           Sale[]
+
+  @@map("cash_closures")
+}
+
+model ProductExchange {
+  id              String   @id @default(cuid())
+  reason          String
+  exchangeDate    DateTime @default(now())
+  originalQuantity Int
+  exchangedQuantity Int
+  createdAt       DateTime @default(now())
+
+  // Relations
+  originalSaleId  String
+  originalSale    Sale @relation(fields: [originalSaleId], references: [id], onDelete: Cascade)
+  productId       String
+  product         Product @relation(fields: [productId], references: [id])
+
+  @@map("product_exchanges")
+}
+
+model FiscalDocument {
+  id              String   @id @default(cuid())
+  documentType    String   // NFe, NFSe, etc.
+  documentNumber  String
+  accessKey       String   @unique
+  status          String   // Emitida, Cancelada, etc.
+  xmlContent      String?  // XML content
+  pdfUrl          String?  // PDF URL
+  emissionDate    DateTime @default(now())
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  // Relations
+  companyId       String
+  company         Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  @@map("fiscal_documents")
+}
+
+model Printer {
+  id              String   @id @default(cuid())
+  name            String
+  type            String   // USB, Network, Bluetooth
+  connectionInfo  String   // IP, MAC, etc.
+  isConnected     Boolean  @default(false)
+  paperStatus     String   @default("OK") // OK, LOW, EMPTY
+  lastStatusCheck DateTime?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  // Relations
+  companyId       String
+  company         Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  @@map("printers")
+}
