@@ -36,6 +36,7 @@ async function main() {
       municipalRegistration: '12345678',
       email: 'contato@lojaexemplo.com',
       brandColor: '#FF0000',
+      isActive: true,
       zipCode: '01234-567',
       state: 'SP',
       city: 'São Paulo',

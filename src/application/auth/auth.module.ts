@@ -1,4 +1,4 @@
-import { Module } from '@nestjs/common';
+import { Module, forwardRef } from '@nestjs/common';
 import { JwtModule } from '@nestjs/jwt';
 import { PassportModule } from '@nestjs/passport';
 import { ConfigService } from '@nestjs/config';
@@ -20,9 +20,9 @@ import { SellerModule } from '../seller/seller.module';
         signOptions: { expiresIn: configService.get('JWT_EXPIRES_IN', '24h') },
       }),
     }),
-    AdminModule,
-    CompanyModule,
-    SellerModule,
+  forwardRef(() => AdminModule),
+  forwardRef(() => CompanyModule),
+  forwardRef(() => SellerModule),
   ],
   providers: [AuthService, JwtStrategy, LocalStrategy],
   controllers: [AuthController],

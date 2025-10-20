@@ -115,8 +115,10 @@ describe('ReportsService', () => {
       expect(result.data).toHaveProperty('company');
       expect(result.data).toHaveProperty('reportMetadata');
       expect(result.data).toHaveProperty('data');
-      expect(result.data.data).toHaveProperty('summary');
-      expect(result.data.data).toHaveProperty('sales');
+      if (typeof result.data !== 'string' && !Buffer.isBuffer(result.data)) {
+        expect((result.data as any).data).toHaveProperty('summary');
+        expect((result.data as any).data).toHaveProperty('sales');
+      }
     });
 
     it('should generate complete report in XML format', async () => {

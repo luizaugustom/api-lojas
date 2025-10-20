@@ -1,5 +1,5 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { IsString, IsNotEmpty, MinLength, MaxLength, IsEmail, IsOptional, Matches, Length } from 'class-validator';
+import { IsString, IsNotEmpty, MinLength, MaxLength, IsEmail, IsOptional, Matches, Length, IsBoolean } from 'class-validator';
 
 export class CreateCompanyDto {
   @ApiProperty({
@@ -109,6 +109,16 @@ export class CreateCompanyDto {
     message: 'Cor deve estar no formato hexadecimal (#RRGGBB)',
   })
   brandColor?: string;
+
+  @ApiProperty({
+    description: 'Status ativo da empresa',
+    example: true,
+    default: true,
+    required: false,
+  })
+  @IsOptional()
+  @IsBoolean()
+  isActive?: boolean;
 
   // Address fields
   @ApiProperty({

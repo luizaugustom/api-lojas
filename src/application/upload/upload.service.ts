@@ -66,17 +66,32 @@ export class UploadService {
 
   async deleteFile(fileUrl: string): Promise<boolean> {
     try {
-      // Extract file path from URL
-      const fileName = fileUrl.replace('/uploads/', '');
+      let fileName: string;
+      
+      // Extract file path from URL - handle different URL formats
+      if (fileUrl.startsWith('/uploads/')) {
+        // Format: /uploads/filename or /uploads/subfolder/filename
+        fileName = fileUrl.substring('/uploads/'.length);
+      } else if (fileUrl.startsWith('uploads/')) {
+        // Format: uploads/filename or uploads/subfolder/filename
+        fileName = fileUrl.substring('uploads/'.length);
+      } else if (fileUrl.startsWith('./uploads/')) {
+        // Format: ./uploads/filename
+        fileName = fileUrl.substring('./uploads/'.length);
+      } else {
+        // Assume it's just the filename
+        fileName = fileUrl;
+      }
+
       const filePath = path.join(this.uploadPath, fileName);
 
       if (fs.existsSync(filePath)) {
         fs.unlinkSync(filePath);
-        this.logger.log(`File deleted successfully: ${fileUrl}`);
+        this.logger.log(`File deleted successfully: ${fileUrl} -> ${filePath}`);
         return true;
       }
 
-      this.logger.warn(`File not found: ${fileUrl}`);
+      this.logger.warn(`File not found: ${fileUrl} -> ${filePath}`);
       return false;
     } catch (error) {
       this.logger.error('Error deleting file:', error);

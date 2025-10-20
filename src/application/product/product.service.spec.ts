@@ -1,6 +1,7 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { ProductService } from './product.service';
 import { PrismaService } from '../../infrastructure/database/prisma.service';
+import { UploadService } from '../upload/upload.service';
 
 describe('ProductService', () => {
   let service: ProductService;
@@ -29,6 +30,10 @@ describe('ProductService', () => {
         {
           provide: PrismaService,
           useValue: mockPrismaService,
+        },
+        {
+          provide: UploadService,
+          useValue: { deleteMultipleFiles: jest.fn(), deleteFile: jest.fn() },
         },
       ],
     }).compile();
@@ -88,7 +93,7 @@ describe('ProductService', () => {
         price: 29.99,
       };
 
-      const error = new Error('Unique constraint failed');
+      const error = new Error('Unique constraint failed') as any;
       error.code = 'P2002';
 
       mockPrismaService.product.create.mockRejectedValue(error);
@@ -226,6 +231,7 @@ describe('ProductService', () => {
         price: 29.99,
         stockQuantity: 100,
         company: { id: '1', name: 'Company 1' },
+        companyId: 'company-1',
       };
 
       mockPrismaService.product.findFirst.mockResolvedValue(mockProduct);
@@ -266,12 +272,14 @@ describe('ProductService', () => {
         barcode: '1234567890',
         price: 29.99,
         stockQuantity: 100,
+        companyId: 'company-1',
       };
 
       const updatedProduct = {
         ...existingProduct,
         ...updateProductDto,
         company: { id: '1', name: 'Company 1' },
+        companyId: 'company-1',
       };
 
       mockPrismaService.product.findUnique.mockResolvedValue(existingProduct);
@@ -313,6 +321,7 @@ describe('ProductService', () => {
         barcode: '1234567890',
         price: 29.99,
         stockQuantity: 100,
+        companyId: 'company-1',
       };
 
       mockPrismaService.product.findUnique.mockResolvedValue(existingProduct);

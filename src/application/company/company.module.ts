@@ -2,10 +2,10 @@ import { Module } from '@nestjs/common';
 import { CompanyService } from './company.service';
 import { CompanyController } from './company.controller';
 import { PrismaModule } from '../../infrastructure/database/prisma.module';
-import { AuthModule } from '../auth/auth.module';
+import { HashModule } from '../../shared/services/hash.module';
 
 @Module({
-  imports: [PrismaModule, AuthModule],
+  imports: [PrismaModule, HashModule],
   providers: [CompanyService],
   controllers: [CompanyController],
   exports: [CompanyService],

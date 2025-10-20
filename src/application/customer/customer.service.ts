@@ -1,5 +1,6 @@
 import { Injectable, NotFoundException, ConflictException, Logger } from '@nestjs/common';
 import { PrismaService } from '../../infrastructure/database/prisma.service';
+import { EmailService } from '../../shared/services/email.service';
 import { CreateCustomerDto } from './dto/create-customer.dto';
 import { UpdateCustomerDto } from './dto/update-customer.dto';
 
@@ -7,7 +8,10 @@ import { UpdateCustomerDto } from './dto/update-customer.dto';
 export class CustomerService {
   private readonly logger = new Logger(CustomerService.name);
 
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly emailService: EmailService,
+  ) {}
 
   async create(companyId: string, createCustomerDto: CreateCustomerDto) {
     try {
@@ -27,6 +31,22 @@ export class CustomerService {
       });
 
       this.logger.log(`Customer created: ${customer.id} for company: ${companyId}`);
+
+      // Enviar email de boas-vindas se o cliente tiver email
+      if (customer.email) {
+        try {
+          await this.emailService.sendWelcomeEmail(
+            customer.email,
+            customer.name,
+            customer.company.name
+          );
+          this.logger.log(`Welcome email sent to customer: ${customer.email}`);
+        } catch (emailError) {
+          this.logger.error(`Failed to send welcome email to ${customer.email}:`, emailError);
+          // Não falha a criação do cliente se o email falhar
+        }
+      }
+
       return customer;
     } catch (error) {
       this.logger.error('Error creating customer:', error);
@@ -257,5 +277,157 @@ export class CustomerService {
     });
 
     return sales;
+  }
+
+  async sendPromotionalEmail(customerId: string, promotionData: any): Promise<boolean> {
+    try {
+      const customer = await this.prisma.customer.findUnique({
+        where: { id: customerId },
+        include: {
+          company: {
+            select: {
+              name: true,
+            },
+          },
+        },
+      });
+
+      if (!customer) {
+        throw new NotFoundException('Cliente não encontrado');
+      }
+
+      if (!customer.email) {
+        this.logger.warn(`Customer ${customerId} does not have email address`);
+        return false;
+      }
+
+      const success = await this.emailService.sendPromotionalEmail(
+        customer.email,
+        customer.name,
+        promotionData,
+        customer.company.name
+      );
+
+      if (success) {
+        this.logger.log(`Promotional email sent to customer: ${customer.email}`);
+      }
+
+      return success;
+    } catch (error) {
+      this.logger.error(`Error sending promotional email to customer ${customerId}:`, error);
+      return false;
+    }
+  }
+
+  async sendSaleConfirmationEmail(customerId: string, saleId: string): Promise<boolean> {
+    try {
+      const customer = await this.prisma.customer.findUnique({
+        where: { id: customerId },
+        include: {
+          company: {
+            select: {
+              name: true,
+            },
+          },
+        },
+      });
+
+      if (!customer) {
+        throw new NotFoundException('Cliente não encontrado');
+      }
+
+      if (!customer.email) {
+        this.logger.warn(`Customer ${customerId} does not have email address`);
+        return false;
+      }
+
+      const sale = await this.prisma.sale.findUnique({
+        where: { id: saleId },
+        include: {
+          items: {
+            include: {
+              product: {
+                select: {
+                  name: true,
+                },
+              },
+            },
+          },
+        },
+      });
+
+      if (!sale) {
+        throw new NotFoundException('Venda não encontrada');
+      }
+
+      const success = await this.emailService.sendSaleConfirmationEmail(
+        customer.email,
+        customer.name,
+        sale,
+        customer.company.name
+      );
+
+      if (success) {
+        this.logger.log(`Sale confirmation email sent to customer: ${customer.email}`);
+      }
+
+      return success;
+    } catch (error) {
+      this.logger.error(`Error sending sale confirmation email to customer ${customerId}:`, error);
+      return false;
+    }
+  }
+
+  async sendBulkPromotionalEmail(companyId: string, promotionData: any): Promise<{ sent: number; failed: number }> {
+    try {
+      const customers = await this.prisma.customer.findMany({
+        where: {
+          companyId,
+          email: {
+            not: null,
+          },
+        },
+        select: {
+          id: true,
+          name: true,
+          email: true,
+          company: {
+            select: {
+              name: true,
+            },
+          },
+        },
+      });
+
+      let sent = 0;
+      let failed = 0;
+
+      for (const customer of customers) {
+        try {
+          const success = await this.emailService.sendPromotionalEmail(
+            customer.email!,
+            customer.name,
+            promotionData,
+            customer.company.name
+          );
+
+          if (success) {
+            sent++;
+            this.logger.log(`Promotional email sent to customer: ${customer.email}`);
+          } else {
+            failed++;
+          }
+        } catch (error) {
+          failed++;
+          this.logger.error(`Failed to send promotional email to ${customer.email}:`, error);
+        }
+      }
+
+      this.logger.log(`Bulk promotional email completed. Sent: ${sent}, Failed: ${failed}`);
+      return { sent, failed };
+    } catch (error) {
+      this.logger.error(`Error sending bulk promotional email for company ${companyId}:`, error);
+      return { sent: 0, failed: 0 };
+    }
   }
 }

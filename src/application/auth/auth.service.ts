@@ -1,7 +1,8 @@
-import { Injectable, UnauthorizedException, Logger } from '@nestjs/common';
+import { Injectable, UnauthorizedException, Logger, Inject, forwardRef, BadRequestException } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { ConfigService } from '@nestjs/config';
 import * as bcrypt from 'bcryptjs';
+import * as crypto from 'crypto';
 import { PrismaService } from '../../infrastructure/database/prisma.service';
 import { AdminService } from '../admin/admin.service';
 import { CompanyService } from '../company/company.service';
@@ -35,10 +36,21 @@ export class AuthService {
     private readonly jwtService: JwtService,
     private readonly configService: ConfigService,
     private readonly prisma: PrismaService,
-    private readonly adminService: AdminService,
-    private readonly companyService: CompanyService,
-    private readonly sellerService: SellerService,
+  @Inject(forwardRef(() => AdminService))
+  private readonly adminService: AdminService,
+  @Inject(forwardRef(() => CompanyService))
+  private readonly companyService: CompanyService,
+  @Inject(forwardRef(() => SellerService))
+  private readonly sellerService: SellerService,
   ) {}
+
+  private hashToken(token: string) {
+    return crypto.createHash('sha256').update(token).digest('hex');
+  }
+
+  private generateRandomToken() {
+    return crypto.randomBytes(64).toString('hex');
+  }
 
   async validateUser(login: string, password: string): Promise<any> {
     try {
@@ -72,11 +84,19 @@ export class AuthService {
         return null;
       }
 
+      // Mapear companyId para cada role
+      let mappedCompanyId: string | null = null;
+      if (role === 'company') {
+        mappedCompanyId = user.id; // a própria empresa
+      } else if (role === 'seller') {
+        mappedCompanyId = user.companyId || null;
+      }
+
       return {
         id: user.id,
         login: user.login,
         role,
-        companyId: user.companyId || null,
+        companyId: mappedCompanyId,
         name: user.name || null,
       };
     } catch (error) {
@@ -99,7 +119,22 @@ export class AuthService {
       companyId: user.companyId,
     };
 
-    const access_token = this.jwtService.sign(payload);
+    const access_token = this.jwtService.sign(payload, { expiresIn: this.configService.get('JWT_EXPIRES_IN', '15m') });
+
+    // Generate refresh token (random string) and persist its hash
+    const refreshToken = this.generateRandomToken();
+    const refreshTokenHash = this.hashToken(refreshToken);
+    const refreshTtlSeconds = Number(this.configService.get('REFRESH_TOKEN_TTL_SECONDS', 60 * 60 * 24 * 30)); // default 30 days
+
+    // persist
+    await this.prisma.refreshToken.create({
+      data: {
+        tokenHash: refreshTokenHash,
+        userId: user.id,
+        role: user.role,
+        expiresAt: new Date(Date.now() + refreshTtlSeconds * 1000),
+      },
+    });
 
     this.logger.log(`User ${user.login} (${user.role}) logged in successfully`);
 
@@ -112,7 +147,89 @@ export class AuthService {
         companyId: user.companyId,
         name: user.name,
       },
+      // also return refreshToken value so controller can set cookie
+      refresh_token: refreshToken,
+    } as any;
+  }
+
+  async refresh(refreshToken: string) {
+    if (!refreshToken) {
+      throw new UnauthorizedException('Refresh token missing');
+    }
+
+    const hash = this.hashToken(refreshToken);
+    const tokenRecord = await this.prisma.refreshToken.findUnique({ where: { tokenHash: hash } });
+
+    if (!tokenRecord || tokenRecord.revoked) {
+      throw new UnauthorizedException('Invalid refresh token');
+    }
+
+    if (tokenRecord.expiresAt.getTime() < Date.now()) {
+      throw new UnauthorizedException('Refresh token expired');
+    }
+
+    // find user details
+    let user: any = null;
+    switch (tokenRecord.role) {
+      case 'admin':
+        user = await this.prisma.admin.findUnique({ where: { id: tokenRecord.userId } });
+        break;
+      case 'company':
+        user = await this.prisma.company.findUnique({ where: { id: tokenRecord.userId } });
+        break;
+      case 'seller':
+        user = await this.prisma.seller.findUnique({ where: { id: tokenRecord.userId } });
+        break;
+    }
+
+    if (!user) {
+      throw new UnauthorizedException('User not found');
+    }
+
+    const payload: JwtPayload = {
+      sub: user.id,
+      login: user.login,
+      role: tokenRecord.role,
+      companyId: (user.companyId as string) || undefined,
     };
+
+    const access_token = this.jwtService.sign(payload, { expiresIn: this.configService.get('JWT_EXPIRES_IN', '15m') });
+
+    // Optional: rotate refresh token. We'll issue a new one and revoke the old
+    const newRefresh = this.generateRandomToken();
+    const newHash = this.hashToken(newRefresh);
+
+    await this.prisma.refreshToken.update({ where: { id: tokenRecord.id }, data: { revoked: true } });
+    const refreshTtlSeconds = Number(this.configService.get('REFRESH_TOKEN_TTL_SECONDS', 60 * 60 * 24 * 30));
+    await this.prisma.refreshToken.create({
+      data: {
+        tokenHash: newHash,
+        userId: tokenRecord.userId,
+        role: tokenRecord.role,
+        expiresAt: new Date(Date.now() + refreshTtlSeconds * 1000),
+      },
+    });
+
+    return {
+      access_token,
+      refresh_token: newRefresh,
+      user: {
+        id: user.id,
+        login: user.login,
+        role: tokenRecord.role,
+        companyId: (user.companyId as string) || undefined,
+        name: user.name || undefined,
+      },
+    };
+  }
+
+  async revokeRefreshToken(refreshToken: string) {
+    if (!refreshToken) return;
+    const hash = this.hashToken(refreshToken);
+    const record = await this.prisma.refreshToken.findUnique({ where: { tokenHash: hash } });
+    if (record) {
+      await this.prisma.refreshToken.update({ where: { id: record.id }, data: { revoked: true } });
+    }
   }
 
   async validateJwtPayload(payload: JwtPayload): Promise<any> {
@@ -143,11 +260,19 @@ export class AuthService {
         return null;
       }
 
+      // Ajustar companyId no objeto do usuário retornado ao request
+      let mappedCompanyId: string | null = null;
+      if (payload.role === 'company') {
+        mappedCompanyId = user.id;
+      } else if (payload.role === 'seller') {
+        mappedCompanyId = user.companyId || null;
+      }
+
       return {
         id: user.id,
         login: user.login,
         role: payload.role,
-        companyId: user.companyId || null,
+        companyId: mappedCompanyId,
         name: user.name || null,
       };
     } catch (error) {

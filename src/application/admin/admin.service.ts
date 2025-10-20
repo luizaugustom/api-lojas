@@ -1,6 +1,6 @@
 import { Injectable, ConflictException, NotFoundException, Logger } from '@nestjs/common';
 import { PrismaService } from '../../infrastructure/database/prisma.service';
-import { AuthService } from '../auth/auth.service';
+import { HashService } from '../../shared/services/hash.service';
 import { CreateAdminDto } from './dto/create-admin.dto';
 import { UpdateAdminDto } from './dto/update-admin.dto';
 
@@ -10,12 +10,12 @@ export class AdminService {
 
   constructor(
     private readonly prisma: PrismaService,
-    private readonly authService: AuthService,
+    private readonly hashService: HashService,
   ) {}
 
   async create(createAdminDto: CreateAdminDto) {
     try {
-      const hashedPassword = await this.authService.hashPassword(createAdminDto.password);
+      const hashedPassword = await this.hashService.hashPassword(createAdminDto.password);
 
       const admin = await this.prisma.admin.create({
         data: {
@@ -104,7 +104,7 @@ export class AdminService {
       }
 
       if (updateAdminDto.password) {
-        updateData.password = await this.authService.hashPassword(updateAdminDto.password);
+        updateData.password = await this.hashService.hashPassword(updateAdminDto.password);
       }
 
       const admin = await this.prisma.admin.update({

@@ -8,7 +8,6 @@ import {
   Delete,
   UseGuards,
   Query,
-  ParseUUIDPipe,
   ParseIntPipe,
   ParseBoolPipe,
 } from '@nestjs/common';
@@ -27,6 +26,7 @@ import { JwtAuthGuard } from '../../shared/guards/jwt-auth.guard';
 import { RolesGuard } from '../../shared/guards/roles.guard';
 import { Roles, UserRole } from '../../shared/decorators/roles.decorator';
 import { CurrentUser } from '../../shared/decorators/current-user.decorator';
+import { UuidValidationPipe } from '../../shared/pipes/uuid-validation.pipe';
 
 @ApiTags('bill')
 @Controller('bill-to-pay')
@@ -112,7 +112,7 @@ export class BillToPayController {
   @ApiResponse({ status: 200, description: 'Conta a pagar encontrada' })
   @ApiResponse({ status: 404, description: 'Conta a pagar não encontrada' })
   findOne(
-    @Param('id', ParseUUIDPipe) id: string,
+    @Param('id', UuidValidationPipe) id: string,
     @CurrentUser() user: any,
   ) {
     if (user.role === UserRole.ADMIN) {
@@ -128,7 +128,7 @@ export class BillToPayController {
   @ApiResponse({ status: 404, description: 'Conta a pagar não encontrada' })
   @ApiResponse({ status: 400, description: 'Não é possível editar conta já paga' })
   update(
-    @Param('id', ParseUUIDPipe) id: string,
+    @Param('id', UuidValidationPipe) id: string,
     @Body() updateBillToPayDto: UpdateBillToPayDto,
     @CurrentUser() user: any,
   ) {
@@ -145,7 +145,7 @@ export class BillToPayController {
   @ApiResponse({ status: 404, description: 'Conta a pagar não encontrada' })
   @ApiResponse({ status: 400, description: 'Conta já está marcada como paga' })
   markAsPaid(
-    @Param('id', ParseUUIDPipe) id: string,
+    @Param('id', UuidValidationPipe) id: string,
     @Body() markAsPaidDto: MarkAsPaidDto,
     @CurrentUser() user: any,
   ) {
@@ -162,7 +162,7 @@ export class BillToPayController {
   @ApiResponse({ status: 404, description: 'Conta a pagar não encontrada' })
   @ApiResponse({ status: 400, description: 'Não é possível excluir conta já paga' })
   remove(
-    @Param('id', ParseUUIDPipe) id: string,
+    @Param('id', UuidValidationPipe) id: string,
     @CurrentUser() user: any,
   ) {
     if (user.role === UserRole.ADMIN) {

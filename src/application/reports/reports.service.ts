@@ -110,6 +110,7 @@ export class ReportsService {
             product: true,
           },
         },
+        paymentMethods: true,
         seller: true,
       },
       orderBy: {
@@ -133,7 +134,7 @@ export class ReportsService {
         total: Number(sale.total),
         clientName: sale.clientName,
         clientCpfCnpj: sale.clientCpfCnpj,
-        paymentMethods: sale.paymentMethod,
+        paymentMethods: sale.paymentMethods,
         change: Number(sale.change),
         isInstallment: sale.isInstallment,
         seller: {
@@ -353,7 +354,7 @@ export class ReportsService {
       this.addCashClosuresSheet(workbook, data.data.cashClosures);
     }
 
-    return await workbook.xlsx.writeBuffer() as Buffer;
+    return (await workbook.xlsx.writeBuffer()) as any;
   }
 
   private addCompanyInfo(sheet: ExcelJS.Worksheet, company: any) {
@@ -380,7 +381,7 @@ export class ReportsService {
       { header: 'Pagamento', key: 'paymentMethods', width: 30 },
     ];
 
-    salesData.sales.forEach((sale: any) => {
+  (salesData?.sales || []).forEach((sale: any) => {
       sheet.addRow({
         saleDate: sale.saleDate,
         total: sale.total,
@@ -403,7 +404,7 @@ export class ReportsService {
       { header: 'Vendidos', key: 'totalSold', width: 15 },
     ];
 
-    productsData.products.forEach((product: any) => {
+  (productsData?.products || []).forEach((product: any) => {
       sheet.addRow(product);
     });
 

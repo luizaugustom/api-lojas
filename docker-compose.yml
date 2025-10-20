@@ -5,6 +5,7 @@ services:
     build: .
     ports:
       - "3000:3000"
+    command: ["node", "dist/src/main.js"]
     environment:
       - NODE_ENV=production
       - DATABASE_URL=postgresql://postgres:password@db:5432/api_lojas?schema=public
@@ -34,8 +35,8 @@ services:
       - "80:80"
       - "443:443"
     volumes:
-      - ./nginx.conf:/etc/nginx/nginx.conf
-      - ./ssl:/etc/nginx/ssl
+      - ./nginx_conf_backup/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./ssl:/etc/nginx/ssl:ro
     depends_on:
       - app
     restart: unless-stopped

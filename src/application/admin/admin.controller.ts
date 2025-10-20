@@ -8,7 +8,6 @@ import {
   Delete,
   UseGuards,
   Query,
-  ParseUUIDPipe,
 } from '@nestjs/common';
 import {
   ApiTags,
@@ -24,6 +23,7 @@ import { JwtAuthGuard } from '../../shared/guards/jwt-auth.guard';
 import { RolesGuard } from '../../shared/guards/roles.guard';
 import { Roles, UserRole } from '../../shared/decorators/roles.decorator';
 import { CurrentUser } from '../../shared/decorators/current-user.decorator';
+import { UuidValidationPipe } from '../../shared/pipes/uuid-validation.pipe';
 
 @ApiTags('admin')
 @Controller('admin')
@@ -59,7 +59,7 @@ export class AdminController {
   @ApiOperation({ summary: 'Buscar admin por ID' })
   @ApiResponse({ status: 200, description: 'Admin encontrado' })
   @ApiResponse({ status: 404, description: 'Admin não encontrado' })
-  findOne(@Param('id', ParseUUIDPipe) id: string) {
+  findOne(@Param('id', UuidValidationPipe) id: string) {
     return this.adminService.findOne(id);
   }
 
@@ -70,7 +70,7 @@ export class AdminController {
   @ApiResponse({ status: 404, description: 'Admin não encontrado' })
   @ApiResponse({ status: 409, description: 'Login já está em uso' })
   update(
-    @Param('id', ParseUUIDPipe) id: string,
+    @Param('id', UuidValidationPipe) id: string,
     @Body() updateAdminDto: UpdateAdminDto,
   ) {
     return this.adminService.update(id, updateAdminDto);
@@ -81,7 +81,7 @@ export class AdminController {
   @ApiOperation({ summary: 'Remover admin' })
   @ApiResponse({ status: 200, description: 'Admin removido com sucesso' })
   @ApiResponse({ status: 404, description: 'Admin não encontrado' })
-  remove(@Param('id', ParseUUIDPipe) id: string) {
+  remove(@Param('id', UuidValidationPipe) id: string) {
     return this.adminService.remove(id);
   }
 }

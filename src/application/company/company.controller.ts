@@ -8,7 +8,6 @@ import {
   Delete,
   UseGuards,
   Query,
-  ParseUUIDPipe,
 } from '@nestjs/common';
 import {
   ApiTags,
@@ -23,6 +22,7 @@ import { JwtAuthGuard } from '../../shared/guards/jwt-auth.guard';
 import { RolesGuard } from '../../shared/guards/roles.guard';
 import { Roles, UserRole } from '../../shared/decorators/roles.decorator';
 import { CurrentUser } from '../../shared/decorators/current-user.decorator';
+import { UuidValidationPipe } from '../../shared/pipes/uuid-validation.pipe';
 
 @ApiTags('company')
 @Controller('company')
@@ -75,7 +75,8 @@ export class CompanyController {
   @ApiOperation({ summary: 'Buscar empresa por ID' })
   @ApiResponse({ status: 200, description: 'Empresa encontrada' })
   @ApiResponse({ status: 404, description: 'Empresa não encontrada' })
-  findOne(@Param('id', ParseUUIDPipe) id: string) {
+  @ApiResponse({ status: 400, description: 'ID inválido' })
+  findOne(@Param('id', UuidValidationPipe) id: string) {
     return this.companyService.findOne(id);
   }
 
@@ -92,14 +93,35 @@ export class CompanyController {
     return this.companyService.update(user.companyId, updateCompanyDto);
   }
 
+  @Patch(':id/activate')
+  @Roles(UserRole.ADMIN)
+  @ApiOperation({ summary: 'Ativar empresa' })
+  @ApiResponse({ status: 200, description: 'Empresa ativada com sucesso' })
+  @ApiResponse({ status: 404, description: 'Empresa não encontrada' })
+  @ApiResponse({ status: 400, description: 'ID inválido' })
+  activate(@Param('id', UuidValidationPipe) id: string) {
+    return this.companyService.activate(id);
+  }
+
+  @Patch(':id/deactivate')
+  @Roles(UserRole.ADMIN)
+  @ApiOperation({ summary: 'Desativar empresa' })
+  @ApiResponse({ status: 200, description: 'Empresa desativada com sucesso' })
+  @ApiResponse({ status: 404, description: 'Empresa não encontrada' })
+  @ApiResponse({ status: 400, description: 'ID inválido' })
+  deactivate(@Param('id', UuidValidationPipe) id: string) {
+    return this.companyService.deactivate(id);
+  }
+
   @Patch(':id')
   @Roles(UserRole.ADMIN)
   @ApiOperation({ summary: 'Atualizar empresa' })
   @ApiResponse({ status: 200, description: 'Empresa atualizada com sucesso' })
   @ApiResponse({ status: 404, description: 'Empresa não encontrada' })
   @ApiResponse({ status: 409, description: 'Dados já estão em uso' })
+  @ApiResponse({ status: 400, description: 'ID inválido' })
   update(
-    @Param('id', ParseUUIDPipe) id: string,
+    @Param('id', UuidValidationPipe) id: string,
     @Body() updateCompanyDto: UpdateCompanyDto,
   ) {
     return this.companyService.update(id, updateCompanyDto);
@@ -110,7 +132,8 @@ export class CompanyController {
   @ApiOperation({ summary: 'Remover empresa' })
   @ApiResponse({ status: 200, description: 'Empresa removida com sucesso' })
   @ApiResponse({ status: 404, description: 'Empresa não encontrada' })
-  remove(@Param('id', ParseUUIDPipe) id: string) {
+  @ApiResponse({ status: 400, description: 'ID inválido' })
+  remove(@Param('id', UuidValidationPipe) id: string) {
     return this.companyService.remove(id);
   }
 }

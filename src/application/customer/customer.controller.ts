@@ -8,7 +8,6 @@ import {
   Delete,
   UseGuards,
   Query,
-  ParseUUIDPipe,
   ParseIntPipe,
 } from '@nestjs/common';
 import {
@@ -21,10 +20,12 @@ import {
 import { CustomerService } from './customer.service';
 import { CreateCustomerDto } from './dto/create-customer.dto';
 import { UpdateCustomerDto } from './dto/update-customer.dto';
+import { SendPromotionalEmailDto, SendBulkPromotionalEmailDto } from './dto/send-email.dto';
 import { JwtAuthGuard } from '../../shared/guards/jwt-auth.guard';
 import { RolesGuard } from '../../shared/guards/roles.guard';
 import { Roles, UserRole } from '../../shared/decorators/roles.decorator';
 import { CurrentUser } from '../../shared/decorators/current-user.decorator';
+import { UuidValidationPipe } from '../../shared/pipes/uuid-validation.pipe';
 
 @ApiTags('customer')
 @Controller('customer')
@@ -95,7 +96,7 @@ export class CustomerController {
   @ApiResponse({ status: 200, description: 'Cliente encontrado' })
   @ApiResponse({ status: 404, description: 'Cliente não encontrado' })
   findOne(
-    @Param('id', ParseUUIDPipe) id: string,
+    @Param('id', UuidValidationPipe) id: string,
     @CurrentUser() user: any,
   ) {
     if (user.role === UserRole.ADMIN) {
@@ -109,7 +110,7 @@ export class CustomerController {
   @ApiOperation({ summary: 'Obter vendas a prazo do cliente' })
   @ApiResponse({ status: 200, description: 'Vendas a prazo do cliente' })
   getInstallments(
-    @Param('id') id: string,
+    @Param('id', UuidValidationPipe) id: string,
     @CurrentUser() user: any,
   ) {
     if (user.role === UserRole.ADMIN) {
@@ -124,7 +125,7 @@ export class CustomerController {
   @ApiResponse({ status: 200, description: 'Cliente atualizado com sucesso' })
   @ApiResponse({ status: 404, description: 'Cliente não encontrado' })
   update(
-    @Param('id', ParseUUIDPipe) id: string,
+    @Param('id', UuidValidationPipe) id: string,
     @Body() updateCustomerDto: UpdateCustomerDto,
     @CurrentUser() user: any,
   ) {
@@ -134,13 +135,50 @@ export class CustomerController {
     return this.customerService.update(id, updateCustomerDto, user.companyId);
   }
 
+  @Post(':id/send-promotional-email')
+  @Roles(UserRole.ADMIN, UserRole.COMPANY)
+  @ApiOperation({ summary: 'Enviar email promocional para cliente específico' })
+  @ApiResponse({ status: 200, description: 'Email promocional enviado com sucesso' })
+  @ApiResponse({ status: 404, description: 'Cliente não encontrado' })
+  sendPromotionalEmail(
+    @Param('id', UuidValidationPipe) id: string,
+    @Body() promotionalEmailDto: SendPromotionalEmailDto,
+    @CurrentUser() user: any,
+  ) {
+    return this.customerService.sendPromotionalEmail(id, promotionalEmailDto);
+  }
+
+  @Post(':id/send-sale-confirmation/:saleId')
+  @Roles(UserRole.ADMIN, UserRole.COMPANY)
+  @ApiOperation({ summary: 'Enviar confirmação de venda por email' })
+  @ApiResponse({ status: 200, description: 'Email de confirmação enviado com sucesso' })
+  @ApiResponse({ status: 404, description: 'Cliente ou venda não encontrado' })
+  sendSaleConfirmationEmail(
+    @Param('id', UuidValidationPipe) id: string,
+    @Param('saleId') saleId: string,
+    @CurrentUser() user: any,
+  ) {
+    return this.customerService.sendSaleConfirmationEmail(id, saleId);
+  }
+
+  @Post('send-bulk-promotional-email')
+  @Roles(UserRole.ADMIN, UserRole.COMPANY)
+  @ApiOperation({ summary: 'Enviar email promocional para todos os clientes da empresa' })
+  @ApiResponse({ status: 200, description: 'Emails promocionais enviados' })
+  sendBulkPromotionalEmail(
+    @Body() bulkPromotionalEmailDto: SendBulkPromotionalEmailDto,
+    @CurrentUser() user: any,
+  ) {
+    return this.customerService.sendBulkPromotionalEmail(user.companyId, bulkPromotionalEmailDto);
+  }
+
   @Delete(':id')
   @Roles(UserRole.ADMIN, UserRole.COMPANY)
   @ApiOperation({ summary: 'Remover cliente' })
   @ApiResponse({ status: 200, description: 'Cliente removido com sucesso' })
   @ApiResponse({ status: 404, description: 'Cliente não encontrado' })
   remove(
-    @Param('id', ParseUUIDPipe) id: string,
+    @Param('id', UuidValidationPipe) id: string,
     @CurrentUser() user: any,
   ) {
     if (user.role === UserRole.ADMIN) {

@@ -1,0 +1,125 @@
+import { Response } from 'express';
+import { FiscalService } from './fiscal.service';
+import { GenerateNFeDto } from './dto/generate-nfe.dto';
+import { GenerateNFSeDto } from './dto/generate-nfse.dto';
+import { GenerateNFCeDto } from './dto/generate-nfce.dto';
+import { CancelFiscalDocumentDto } from './dto/cancel-fiscal-document.dto';
+export declare class FiscalController {
+    private readonly fiscalService;
+    constructor(fiscalService: FiscalService);
+    generateNFe(user: any, generateNFeDto: GenerateNFeDto): Promise<any>;
+    generateNFSe(user: any, generateNFSeDto: GenerateNFSeDto): Promise<any>;
+    generateNFCe(user: any, generateNFCeDto: GenerateNFCeDto): Promise<any>;
+    getFiscalDocuments(user: any, page?: number, limit?: number, documentType?: string): Promise<{
+        documents: ({
+            company: {
+                id: string;
+                name: string;
+                cnpj: string;
+            };
+        } & {
+            id: string;
+            createdAt: Date;
+            updatedAt: Date;
+            companyId: string;
+            documentNumber: string;
+            accessKey: string;
+            status: string;
+            xmlContent: string | null;
+            pdfUrl: string | null;
+            documentType: string;
+            totalValue: import("@prisma/client/runtime/library").Decimal | null;
+            emissionDate: Date;
+        })[];
+        total: number;
+        page: number;
+        limit: number;
+        totalPages: number;
+    }>;
+    getFiscalApiStatus(user: any): Promise<any>;
+    uploadCertificate(user: any, body: {
+        certificatePath: string;
+        password: string;
+    }): Promise<{
+        success: boolean;
+        message: string;
+    }>;
+    validateCompanyFiscalData(user: any): Promise<{
+        valid: boolean;
+        errors: string[];
+    }>;
+    uploadXmlFiscal(file: Express.Multer.File, user: any): Promise<{
+        id: string;
+        documentNumber: string;
+        documentType: string;
+        accessKey: string;
+        emissionDate: Date;
+        status: string;
+        totalValue: import("@prisma/client/runtime/library").Decimal;
+        message: string;
+    }>;
+    getFiscalDocumentByAccessKey(accessKey: string, user: any): Promise<{
+        company: {
+            id: string;
+            name: string;
+            cnpj: string;
+        };
+    } & {
+        id: string;
+        createdAt: Date;
+        updatedAt: Date;
+        companyId: string;
+        documentNumber: string;
+        accessKey: string;
+        status: string;
+        xmlContent: string | null;
+        pdfUrl: string | null;
+        documentType: string;
+        totalValue: import("@prisma/client/runtime/library").Decimal | null;
+        emissionDate: Date;
+    }>;
+    getFiscalDocument(id: string, user: any): Promise<{
+        company: {
+            id: string;
+            name: string;
+            cnpj: string;
+        };
+    } & {
+        id: string;
+        createdAt: Date;
+        updatedAt: Date;
+        companyId: string;
+        documentNumber: string;
+        accessKey: string;
+        status: string;
+        xmlContent: string | null;
+        pdfUrl: string | null;
+        documentType: string;
+        totalValue: import("@prisma/client/runtime/library").Decimal | null;
+        emissionDate: Date;
+    }>;
+    downloadFiscalDocument(id: string, format: 'xml' | 'pdf', user: any, res: Response): Promise<void | Response<any, Record<string, any>>>;
+    getDownloadInfo(id: string, user: any): Promise<{
+        documentId: string;
+        documentNumber: string;
+        documentType: string;
+        accessKey: string;
+        emissionDate: Date;
+        status: string;
+        availableFormats: any[];
+    }>;
+    cancelFiscalDocument(id: string, cancelDto: CancelFiscalDocumentDto, user: any): Promise<{
+        id: string;
+        createdAt: Date;
+        updatedAt: Date;
+        companyId: string;
+        documentNumber: string;
+        accessKey: string;
+        status: string;
+        xmlContent: string | null;
+        pdfUrl: string | null;
+        documentType: string;
+        totalValue: import("@prisma/client/runtime/library").Decimal | null;
+        emissionDate: Date;
+    }>;
+}

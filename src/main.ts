@@ -4,23 +4,38 @@ import { SwaggerModule, DocumentBuilder } from '@nestjs/swagger';
 import { ConfigService } from '@nestjs/config';
 import helmet from 'helmet';
 import * as compression from 'compression';
+import * as cookieParser from 'cookie-parser';
+import { NestExpressApplication } from '@nestjs/platform-express';
+import { join } from 'path';
 import { AppModule } from './app.module';
 
 async function bootstrap() {
   const logger = new Logger('Bootstrap');
   
-  const app = await NestFactory.create(AppModule);
+  const app = await NestFactory.create<NestExpressApplication>(AppModule);
   const configService = app.get(ConfigService);
+
+  // Serve static files from uploads directory
+  app.useStaticAssets(join(__dirname, '..', 'uploads'), {
+    prefix: '/uploads/',
+  });
 
   // Security
   app.use(helmet());
   app.use(compression());
 
-  // CORS
+  // CORS (credentials-compatible): when CORS_ORIGIN='*', reflect the request origin instead of '*'
+  const corsOriginEnv = configService.get<string>('CORS_ORIGIN', '*');
+  const corsOrigin = corsOriginEnv === '*'
+    ? true // reflect request origin
+    : corsOriginEnv.split(',').map((o) => o.trim());
   app.enableCors({
-    origin: configService.get('CORS_ORIGIN', '*'),
+    origin: corsOrigin,
     credentials: true,
   });
+
+  // Cookie parser (required to read httpOnly refresh token cookie)
+  app.use(cookieParser());
 
   // Global validation pipe
   app.useGlobalPipes(
@@ -35,15 +50,13 @@ async function bootstrap() {
   );
 
   // Rate limiting
-  app.use((req, res, next) => {
-    // Basic rate limiting middleware
-    const rateLimit = require('express-rate-limit')({
-      windowMs: configService.get('THROTTLE_TTL', 60) * 1000,
-      max: configService.get('THROTTLE_LIMIT', 100),
-      message: 'Too many requests from this IP',
-    });
-    rateLimit(req, res, next);
+  // Rate limiting - create the limiter once during app initialization
+  const rateLimit = require('express-rate-limit')({
+    windowMs: configService.get('THROTTLE_TTL', 60) * 1000,
+    max: configService.get('THROTTLE_LIMIT', 100),
+    message: 'Too many requests from this IP',
   });
+  app.use(rateLimit);
 
   // Swagger Documentation
   const config = new DocumentBuilder()

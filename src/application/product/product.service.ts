@@ -3,15 +3,22 @@ import { PrismaService } from '../../infrastructure/database/prisma.service';
 import { CreateProductDto } from './dto/create-product.dto';
 import { UpdateProductDto } from './dto/update-product.dto';
 import { UpdateStockDto } from './dto/update-stock.dto';
+import { UploadService } from '../upload/upload.service';
 
 @Injectable()
 export class ProductService {
   private readonly logger = new Logger(ProductService.name);
 
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly uploadService: UploadService,
+  ) {}
 
   async create(companyId: string, createProductDto: CreateProductDto) {
     try {
+      this.logger.log(`🚀 Creating product for company: ${companyId}`);
+      this.logger.log(`📋 Product data: ${JSON.stringify(createProductDto)}`);
+      
       const product = await this.prisma.product.create({
         data: {
           ...createProductDto,
@@ -27,7 +34,8 @@ export class ProductService {
         },
       });
 
-      this.logger.log(`Product created: ${product.id} for company: ${companyId}`);
+      this.logger.log(`✅ Product created: ${product.id} for company: ${companyId}`);
+      this.logger.log(`📸 Product photos: ${JSON.stringify(product.photos)}`);
       return product;
     } catch (error) {
       if (error.code === 'P2002') {
@@ -83,13 +91,9 @@ export class ProductService {
   }
 
   async findOne(id: string, companyId?: string) {
-    const where: any = { id };
-    if (companyId) {
-      where.companyId = companyId;
-    }
-
+    // Always fetch by the unique id, then validate company ownership if provided
     const product = await this.prisma.product.findUnique({
-      where,
+      where: { id },
       include: {
         company: {
           select: {
@@ -106,6 +110,11 @@ export class ProductService {
     });
 
     if (!product) {
+      throw new NotFoundException('Produto não encontrado');
+    }
+
+    if (companyId && product.companyId && product.companyId !== companyId) {
+      // Hide existence of a product that belongs to another company
       throw new NotFoundException('Produto não encontrado');
     }
 
@@ -139,16 +148,14 @@ export class ProductService {
 
   async update(id: string, updateProductDto: UpdateProductDto, companyId?: string) {
     try {
-      const where: any = { id };
-      if (companyId) {
-        where.companyId = companyId;
-      }
-
-      const existingProduct = await this.prisma.product.findUnique({
-        where,
-      });
+      // Fetch by id and validate ownership
+      const existingProduct = await this.prisma.product.findUnique({ where: { id } });
 
       if (!existingProduct) {
+        throw new NotFoundException('Produto não encontrado');
+      }
+
+      if (companyId && existingProduct.companyId && existingProduct.companyId !== companyId) {
         throw new NotFoundException('Produto não encontrado');
       }
 
@@ -178,16 +185,15 @@ export class ProductService {
 
   async remove(id: string, companyId?: string) {
     try {
-      const where: any = { id };
-      if (companyId) {
-        where.companyId = companyId;
-      }
-
-      const existingProduct = await this.prisma.product.findUnique({
-        where,
-      });
+      this.logger.log(`🚀 Starting product deletion process for ID: ${id}, CompanyID: ${companyId || 'null'}`);
+      
+      const existingProduct = await this.prisma.product.findUnique({ where: { id } });
 
       if (!existingProduct) {
+        throw new NotFoundException('Produto não encontrado');
+      }
+
+      if (companyId && existingProduct.companyId !== companyId) {
         throw new NotFoundException('Produto não encontrado');
       }
 
@@ -200,9 +206,25 @@ export class ProductService {
         throw new BadRequestException('Não é possível excluir produto que possui vendas');
       }
 
-      await this.prisma.product.delete({
-        where: { id },
-      });
+      // Delete product images before deleting the product
+      if (existingProduct.photos && existingProduct.photos.length > 0) {
+        this.logger.log(`🗑️ Deleting ${existingProduct.photos.length} images for product: ${id}`);
+        this.logger.log(`📋 Photos to delete: ${JSON.stringify(existingProduct.photos)}`);
+        
+        const deleteResult = await this.uploadService.deleteMultipleFiles(existingProduct.photos);
+        
+        this.logger.log(`✅ Images deletion result for product ${id}: ${deleteResult.deleted} deleted, ${deleteResult.failed} failed`);
+        
+        // Log warning if some files failed to delete
+        if (deleteResult.failed > 0) {
+          this.logger.warn(`⚠️ Failed to delete ${deleteResult.failed} images for product ${id}. Product will still be deleted.`);
+        }
+      } else {
+        this.logger.log(`ℹ️ No photos to delete for product: ${id}`);
+      }
+
+      // Delete the product from database
+      await this.prisma.product.delete({ where: { id } });
 
       this.logger.log(`Product deleted: ${id}`);
       return { message: 'Produto removido com sucesso' };
@@ -218,11 +240,14 @@ export class ProductService {
       where.companyId = companyId;
     }
 
-    const existingProduct = await this.prisma.product.findUnique({
-      where,
-    });
+    // Fetch by id and validate ownership
+    const existingProduct = await this.prisma.product.findUnique({ where: { id } });
 
     if (!existingProduct) {
+      throw new NotFoundException('Produto não encontrado');
+    }
+
+    if (companyId && existingProduct.companyId && existingProduct.companyId !== companyId) {
       throw new NotFoundException('Produto não encontrado');
     }
 
@@ -356,5 +381,165 @@ export class ProductService {
     });
 
     return categories.map(item => item.category).filter(Boolean);
+  }
+
+  async addPhoto(id: string, photoUrl: string, companyId?: string) {
+    // First verify the product exists and belongs to the company
+    const existingProduct = await this.prisma.product.findUnique({ where: { id } });
+
+    if (!existingProduct) {
+      throw new NotFoundException('Produto não encontrado');
+    }
+
+    if (companyId && existingProduct.companyId && existingProduct.companyId !== companyId) {
+      throw new NotFoundException('Produto não encontrado');
+    }
+
+    // Add the new photo to the existing photos array
+    const updatedPhotos = [...existingProduct.photos, photoUrl];
+
+    const product = await this.prisma.product.update({
+      where: { id },
+      data: {
+        photos: updatedPhotos,
+      },
+      include: {
+        company: {
+          select: {
+            id: true,
+            name: true,
+          },
+        },
+      },
+    });
+
+    this.logger.log(`Photo added to product: ${product.id}`);
+    return product;
+  }
+
+  async addPhotos(id: string, photoUrls: string[], companyId?: string) {
+    // First verify the product exists and belongs to the company
+    const existingProduct = await this.prisma.product.findUnique({ where: { id } });
+
+    if (!existingProduct) {
+      throw new NotFoundException('Produto não encontrado');
+    }
+
+    if (companyId && existingProduct.companyId && existingProduct.companyId !== companyId) {
+      throw new NotFoundException('Produto não encontrado');
+    }
+
+    // Add the new photos to the existing photos array
+    const updatedPhotos = [...existingProduct.photos, ...photoUrls];
+
+    const product = await this.prisma.product.update({
+      where: { id },
+      data: {
+        photos: updatedPhotos,
+      },
+      include: {
+        company: {
+          select: {
+            id: true,
+            name: true,
+          },
+        },
+      },
+    });
+
+    this.logger.log(`${photoUrls.length} photos added to product: ${product.id}`);
+    return product;
+  }
+
+  async removePhoto(id: string, photoUrl: string, companyId?: string) {
+    // First verify the product exists and belongs to the company
+    const existingProduct = await this.prisma.product.findUnique({ where: { id } });
+
+    if (!existingProduct) {
+      throw new NotFoundException('Produto não encontrado');
+    }
+
+    if (companyId && existingProduct.companyId && existingProduct.companyId !== companyId) {
+      throw new NotFoundException('Produto não encontrado');
+    }
+
+    // Check if the photo exists in the product's photos array
+    if (!existingProduct.photos.includes(photoUrl)) {
+      throw new NotFoundException('Foto não encontrada no produto');
+    }
+
+    // Remove the photo from the array
+    const updatedPhotos = existingProduct.photos.filter(photo => photo !== photoUrl);
+
+    // Delete the photo file from the filesystem
+    const fileDeleted = await this.uploadService.deleteFile(photoUrl);
+    if (fileDeleted) {
+      this.logger.log(`Photo file deleted from filesystem: ${photoUrl}`);
+    } else {
+      this.logger.warn(`Failed to delete photo file from filesystem: ${photoUrl}`);
+    }
+
+    const product = await this.prisma.product.update({
+      where: { id },
+      data: {
+        photos: updatedPhotos,
+      },
+      include: {
+        company: {
+          select: {
+            id: true,
+            name: true,
+          },
+        },
+      },
+    });
+
+    this.logger.log(`Photo removed from product: ${product.id}`);
+    return product;
+  }
+
+  async removeAllPhotos(id: string, companyId?: string) {
+    // First verify the product exists and belongs to the company
+    const existingProduct = await this.prisma.product.findUnique({ where: { id } });
+
+    if (!existingProduct) {
+      throw new NotFoundException('Produto não encontrado');
+    }
+
+    if (companyId && existingProduct.companyId !== companyId) {
+      throw new NotFoundException('Produto não encontrado');
+    }
+
+    // Delete all photo files from the filesystem
+    if (existingProduct.photos && existingProduct.photos.length > 0) {
+      this.logger.log(`Deleting ${existingProduct.photos.length} photos from filesystem for product: ${id}`);
+      
+      const deleteResult = await this.uploadService.deleteMultipleFiles(existingProduct.photos);
+      
+      this.logger.log(`Photos deletion result for product ${id}: ${deleteResult.deleted} deleted, ${deleteResult.failed} failed`);
+      
+      // Log warning if some files failed to delete
+      if (deleteResult.failed > 0) {
+        this.logger.warn(`Failed to delete ${deleteResult.failed} photos for product ${id}. Product photos will still be cleared.`);
+      }
+    }
+
+    const product = await this.prisma.product.update({
+      where: { id },
+      data: {
+        photos: [],
+      },
+      include: {
+        company: {
+          select: {
+            id: true,
+            name: true,
+          },
+        },
+      },
+    });
+
+    this.logger.log(`All photos removed from product: ${product.id}`);
+    return product;
   }
 }

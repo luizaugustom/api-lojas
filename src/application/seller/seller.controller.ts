@@ -8,7 +8,6 @@ import {
   Delete,
   UseGuards,
   Query,
-  ParseUUIDPipe,
   ParseIntPipe,
 } from '@nestjs/common';
 import {
@@ -25,6 +24,7 @@ import { JwtAuthGuard } from '../../shared/guards/jwt-auth.guard';
 import { RolesGuard } from '../../shared/guards/roles.guard';
 import { Roles, UserRole } from '../../shared/decorators/roles.decorator';
 import { CurrentUser } from '../../shared/decorators/current-user.decorator';
+import { UuidValidationPipe } from '../../shared/pipes/uuid-validation.pipe';
 
 @ApiTags('seller')
 @Controller('seller')
@@ -92,7 +92,7 @@ export class SellerController {
   @ApiResponse({ status: 200, description: 'Vendedor encontrado' })
   @ApiResponse({ status: 404, description: 'Vendedor não encontrado' })
   findOne(
-    @Param('id', ParseUUIDPipe) id: string,
+    @Param('id', UuidValidationPipe) id: string,
     @CurrentUser() user: any,
   ) {
     if (user.role === UserRole.COMPANY) {
@@ -106,7 +106,7 @@ export class SellerController {
   @ApiOperation({ summary: 'Obter estatísticas do vendedor' })
   @ApiResponse({ status: 200, description: 'Estatísticas do vendedor' })
   getStats(
-    @Param('id', ParseUUIDPipe) id: string,
+    @Param('id', UuidValidationPipe) id: string,
     @CurrentUser() user: any,
   ) {
     if (user.role === UserRole.COMPANY) {
@@ -122,7 +122,7 @@ export class SellerController {
   @ApiQuery({ name: 'limit', required: false, type: Number })
   @ApiResponse({ status: 200, description: 'Vendas do vendedor' })
   getSales(
-    @Param('id', ParseUUIDPipe) id: string,
+    @Param('id', UuidValidationPipe) id: string,
     @CurrentUser() user: any,
     @Query('page', new ParseIntPipe({ optional: true })) page = 1,
     @Query('limit', new ParseIntPipe({ optional: true })) limit = 10,
@@ -151,7 +151,7 @@ export class SellerController {
   @ApiResponse({ status: 404, description: 'Vendedor não encontrado' })
   @ApiResponse({ status: 409, description: 'Login já está em uso' })
   update(
-    @Param('id', ParseUUIDPipe) id: string,
+    @Param('id', UuidValidationPipe) id: string,
     @Body() updateSellerDto: UpdateSellerDto,
     @CurrentUser() user: any,
   ) {
@@ -167,7 +167,7 @@ export class SellerController {
   @ApiResponse({ status: 200, description: 'Vendedor removido com sucesso' })
   @ApiResponse({ status: 404, description: 'Vendedor não encontrado' })
   remove(
-    @Param('id', ParseUUIDPipe) id: string,
+    @Param('id', UuidValidationPipe) id: string,
     @CurrentUser() user: any,
   ) {
     if (user.role === UserRole.COMPANY) {

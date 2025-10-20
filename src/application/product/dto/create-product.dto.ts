@@ -1,6 +1,6 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { IsString, IsNotEmpty, MinLength, MaxLength, IsOptional, IsNumber, IsDateString, IsArray, IsPositive, Min } from 'class-validator';
-import { Type } from 'class-transformer';
+import { IsString, IsNotEmpty, MinLength, MaxLength, IsOptional, IsNumber, IsDateString, IsArray, IsPositive, Min, ValidateNested } from 'class-validator';
+import { Type, Transform } from 'class-transformer';
 
 export class CreateProductDto {
   @ApiProperty({
@@ -24,6 +24,11 @@ export class CreateProductDto {
   @IsOptional()
   @IsArray()
   @IsString({ each: true })
+  @Transform(({ value }) => {
+    // Garantir que é um array de strings válidas
+    if (!Array.isArray(value)) return [];
+    return value.filter(item => typeof item === 'string' && item.trim().length > 0);
+  })
   photos?: string[];
 
   @ApiProperty({
@@ -87,5 +92,15 @@ export class CreateProductDto {
   })
   @IsOptional()
   @IsDateString()
+  @Transform(({ value }) => {
+    if (!value) return value;
+    
+    // Se é apenas uma data (YYYY-MM-DD), converter para DateTime
+    if (typeof value === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(value)) {
+      return new Date(value + 'T00:00:00.000Z').toISOString();
+    }
+    
+    return value;
+  })
   expirationDate?: string;
 }

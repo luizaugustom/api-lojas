@@ -29,7 +29,12 @@ describe('AuthService', () => {
   };
 
   const mockConfigService = {
-    get: jest.fn().mockReturnValue('test-secret'),
+    get: jest.fn((key: string, defaultValue?: any) => {
+      if (key === 'JWT_EXPIRES_IN') return '15m';
+      if (key === 'BCRYPT_ROUNDS') return 12;
+      if (key === 'REFRESH_TOKEN_TTL_SECONDS') return 60 * 60 * 24 * 30;
+      return defaultValue;
+    }),
   };
 
   const mockAdminService = {};

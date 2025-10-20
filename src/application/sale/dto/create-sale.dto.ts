@@ -1,14 +1,7 @@
 import { ApiProperty } from '@nestjs/swagger';
 import { IsArray, IsNotEmpty, IsOptional, IsString, IsNumber, IsBoolean, IsUUID, Min, ValidateNested, IsEnum } from 'class-validator';
 import { Type } from 'class-transformer';
-
-export enum PaymentMethod {
-  CREDIT_CARD = 'credit_card',
-  DEBIT_CARD = 'debit_card',
-  CASH = 'cash',
-  PIX = 'pix',
-  INSTALLMENT = 'installment',
-}
+import { PaymentMethodDto, PaymentMethod } from './payment-method.dto';
 
 export class SaleItemDto {
   @ApiProperty({
@@ -68,14 +61,17 @@ export class CreateSaleDto {
   clientName?: string;
 
   @ApiProperty({
-    description: 'Métodos de pagamento',
-    example: ['cash', 'pix'],
-    enum: PaymentMethod,
-    isArray: true,
+    description: 'Métodos de pagamento com valores específicos',
+    type: [PaymentMethodDto],
+    example: [
+      { method: 'cash', amount: 50.00 },
+      { method: 'pix', amount: 30.00 }
+    ],
   })
   @IsArray()
-  @IsEnum(PaymentMethod, { each: true })
-  paymentMethods: PaymentMethod[];
+  @ValidateNested({ each: true })
+  @Type(() => PaymentMethodDto)
+  paymentMethods: PaymentMethodDto[];
 
   @ApiProperty({
     description: 'Valor total pago (para cálculo de troco)',

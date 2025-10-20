@@ -1,6 +1,6 @@
 import { Injectable, ConflictException, NotFoundException, Logger, ForbiddenException } from '@nestjs/common';
 import { PrismaService } from '../../infrastructure/database/prisma.service';
-import { AuthService } from '../auth/auth.service';
+import { HashService } from '../../shared/services/hash.service';
 import { CreateSellerDto } from './dto/create-seller.dto';
 import { UpdateSellerDto } from './dto/update-seller.dto';
 
@@ -10,12 +10,12 @@ export class SellerService {
 
   constructor(
     private readonly prisma: PrismaService,
-    private readonly authService: AuthService,
+    private readonly hashService: HashService,
   ) {}
 
   async create(companyId: string, createSellerDto: CreateSellerDto) {
     try {
-      const hashedPassword = await this.authService.hashPassword(createSellerDto.password);
+      const hashedPassword = await this.hashService.hashPassword(createSellerDto.password);
 
       const seller = await this.prisma.seller.create({
         data: {
@@ -135,7 +135,7 @@ export class SellerService {
       const updateData: any = { ...updateSellerDto };
 
       if (updateSellerDto.password) {
-        updateData.password = await this.authService.hashPassword(updateSellerDto.password);
+        updateData.password = await this.hashService.hashPassword(updateSellerDto.password);
       }
 
       const seller = await this.prisma.seller.update({

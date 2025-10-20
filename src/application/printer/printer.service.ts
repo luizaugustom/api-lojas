@@ -36,6 +36,40 @@ export interface ReceiptData {
   };
 }
 
+export interface NFCePrintData {
+  company: {
+    name: string;
+    cnpj: string;
+    address?: string;
+    phone?: string;
+    email?: string;
+  };
+  fiscal: {
+    documentNumber: string;
+    accessKey: string;
+    emissionDate: Date;
+    status: string;
+  };
+  sale: {
+    id: string;
+    total: number;
+    clientName?: string;
+    clientCpfCnpj?: string;
+    paymentMethod: string[];
+    change: number;
+    saleDate: Date;
+    sellerName: string;
+  };
+  items: Array<{
+    productName: string;
+    barcode: string;
+    quantity: number;
+    unitPrice: number;
+    totalPrice: number;
+  }>;
+  customFooter?: string;
+}
+
 export interface CashClosureReportData {
   company: {
     name: string;
@@ -228,6 +262,22 @@ export class PrinterService {
     }
   }
 
+  async printNFCe(nfceData: NFCePrintData): Promise<boolean> {
+    try {
+      const nfce = this.generateNFCeContent(nfceData);
+      const success = await this.sendToPrinter(nfce);
+      
+      if (success) {
+        this.logger.log(`NFCe printed successfully for sale: ${nfceData.sale.id}`);
+      }
+      
+      return success;
+    } catch (error) {
+      this.logger.error('Error printing NFCe:', error);
+      return false;
+    }
+  }
+
   private generateReceiptContent(data: ReceiptData): string {
     const { company, sale, items, seller, client } = data;
     
@@ -350,6 +400,105 @@ export class PrinterService {
     return report;
   }
 
+  private generateNFCeContent(data: NFCePrintData): string {
+    const { company, fiscal, sale, items, customFooter } = data;
+    
+    let nfce = '';
+    
+    // Header
+    nfce += this.centerText(company.name) + '\n';
+    nfce += this.centerText(`CNPJ: ${company.cnpj}`) + '\n';
+    if (company.address) {
+      nfce += this.centerText(company.address) + '\n';
+    }
+    if (company.phone) {
+      nfce += this.centerText(`Tel: ${company.phone}`) + '\n';
+    }
+    if (company.email) {
+      nfce += this.centerText(`Email: ${company.email}`) + '\n';
+    }
+    nfce += this.centerText('--------------------------------') + '\n';
+    nfce += this.centerText('NOTA FISCAL DO CONSUMIDOR') + '\n';
+    nfce += this.centerText('ELETRÔNICA - NFCe') + '\n';
+    nfce += this.centerText('--------------------------------') + '\n';
+    
+    // Fiscal info
+    nfce += `Número: ${fiscal.documentNumber}\n`;
+    nfce += `Chave de Acesso:\n${fiscal.accessKey}\n`;
+    nfce += `Data/Hora Emissão: ${this.formatDate(fiscal.emissionDate)}\n`;
+    nfce += `Status: ${fiscal.status}\n`;
+    nfce += this.centerText('--------------------------------') + '\n';
+    
+    // Sale info
+    nfce += `Venda: ${sale.id}\n`;
+    nfce += `Data: ${this.formatDate(sale.saleDate)}\n`;
+    nfce += `Vendedor: ${sale.sellerName}\n`;
+    
+    if (sale.clientName) {
+      nfce += `Cliente: ${sale.clientName}\n`;
+    }
+    if (sale.clientCpfCnpj) {
+      nfce += `CPF/CNPJ: ${sale.clientCpfCnpj}\n`;
+    }
+    
+    nfce += this.centerText('--------------------------------') + '\n';
+    
+    // Items
+    nfce += 'ITEM DESCRIÇÃO           QTD  V.UNIT  TOTAL\n';
+    nfce += '----------------------------------------\n';
+    
+    items.forEach((item, index) => {
+      const itemNumber = (index + 1).toString().padStart(3);
+      const description = item.productName.substring(0, 20).padEnd(20);
+      const quantity = item.quantity.toString().padStart(3);
+      const unitPrice = this.formatCurrency(item.unitPrice).padStart(7);
+      const totalPrice = this.formatCurrency(item.totalPrice).padStart(8);
+      
+      nfce += `${itemNumber} ${description} ${quantity} ${unitPrice} ${totalPrice}\n`;
+      
+      if (item.barcode) {
+        nfce += `     Código: ${item.barcode}\n`;
+      }
+    });
+    
+    nfce += this.centerText('--------------------------------') + '\n';
+    
+    // Payment methods
+    nfce += 'FORMA DE PAGAMENTO:\n';
+    sale.paymentMethod.forEach(method => {
+      nfce += `- ${this.getPaymentMethodName(method)}\n`;
+    });
+    
+    if (sale.change > 0) {
+      nfce += `Troco: ${this.formatCurrency(sale.change)}\n`;
+    }
+    
+    nfce += this.centerText('--------------------------------') + '\n';
+    nfce += `TOTAL: ${this.formatCurrency(sale.total)}\n`;
+    nfce += this.centerText('--------------------------------') + '\n';
+    
+    // QR Code info
+    nfce += this.centerText('CONSULTE A CHAVE DE ACESSO') + '\n';
+    nfce += this.centerText('NO SITE DA RECEITA FEDERAL') + '\n';
+    nfce += this.centerText('OU USE O QR CODE ABAIXO') + '\n';
+    nfce += this.centerText('--------------------------------') + '\n';
+    
+    // Custom footer
+    if (customFooter) {
+      nfce += this.centerText('--------------------------------') + '\n';
+      nfce += this.centerText(customFooter) + '\n';
+      nfce += this.centerText('--------------------------------') + '\n';
+    }
+    
+    nfce += this.centerText('OBRIGADO PELA PREFERÊNCIA!') + '\n';
+    nfce += this.centerText('VOLTE SEMPRE!') + '\n';
+    nfce += this.centerText('--------------------------------') + '\n';
+    nfce += this.centerText(this.formatDate(new Date())) + '\n';
+    nfce += this.centerText('--------------------------------') + '\n\n\n';
+    
+    return nfce;
+  }
+
   private async sendToPrinter(content: string): Promise<boolean> {
     // This would send the content to the actual printer
     // For now, just log the content
@@ -445,5 +594,33 @@ export class PrinterService {
       paperStatus: printer.paperStatus,
       lastStatusCheck: printer.lastStatusCheck,
     };
+  }
+
+  async updateCustomFooter(companyId: string, customFooter: string): Promise<void> {
+    try {
+      await this.prisma.company.update({
+        where: { id: companyId },
+        data: { customFooter },
+      });
+      
+      this.logger.log(`Custom footer updated for company: ${companyId}`);
+    } catch (error) {
+      this.logger.error('Error updating custom footer:', error);
+      throw new BadRequestException('Erro ao atualizar footer personalizado');
+    }
+  }
+
+  async getCustomFooter(companyId: string): Promise<string | null> {
+    try {
+      const company = await this.prisma.company.findUnique({
+        where: { id: companyId },
+        select: { customFooter: true },
+      });
+      
+      return company?.customFooter || null;
+    } catch (error) {
+      this.logger.error('Error getting custom footer:', error);
+      return null;
+    }
   }
 }

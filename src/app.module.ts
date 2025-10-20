@@ -2,6 +2,8 @@ import { Module } from '@nestjs/common';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { ThrottlerModule } from '@nestjs/throttler';
 import { PrismaModule } from './infrastructure/database/prisma.module';
+import { HashModule } from './shared/services/hash.module';
+import { EmailModule } from './shared/services/email.module';
 import { AuthModule } from './application/auth/auth.module';
 import { AdminModule } from './application/admin/admin.module';
 import { CompanyModule } from './application/company/company.module';
@@ -16,7 +18,9 @@ import { FiscalModule } from './application/fiscal/fiscal.module';
 import { UploadModule } from './application/upload/upload.module';
 import { WhatsappModule } from './application/whatsapp/whatsapp.module';
 import { N8nModule } from './application/n8n/n8n.module';
+import { HealthModule } from './application/health/health.module';
 import { ReportsModule } from './application/reports/reports.module';
+import { DashboardModule } from './application/dashboard/dashboard.module';
 
 @Module({
   imports: [
@@ -28,11 +32,15 @@ import { ReportsModule } from './application/reports/reports.module';
       imports: [ConfigModule],
       inject: [ConfigService],
       useFactory: (config: ConfigService) => ({
-        ttl: config.get('THROTTLE_TTL', 60),
-        limit: config.get('THROTTLE_LIMIT', 100),
+        throttlers: [{
+          ttl: parseInt(config.get('THROTTLE_TTL', '60')),
+          limit: parseInt(config.get('THROTTLE_LIMIT', '100')),
+        }]
       }),
     }),
     PrismaModule,
+    HashModule,
+    EmailModule,
     AuthModule,
     AdminModule,
     CompanyModule,
@@ -48,6 +56,8 @@ import { ReportsModule } from './application/reports/reports.module';
     WhatsappModule,
     N8nModule,
     ReportsModule,
+    DashboardModule,
+    HealthModule,
   ],
 })
 export class AppModule {}

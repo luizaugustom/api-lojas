@@ -11,7 +11,7 @@ datasource db {
 }
 
 model Admin {
-  id        String   @id @default(cuid())
+  id        String   @id @default(uuid())
   login     String   @unique
   password  String
   createdAt DateTime @default(now())
@@ -24,7 +24,7 @@ model Admin {
 }
 
 model Company {
-  id              String   @id @default(cuid())
+  id              String   @id @default(uuid())
   name            String
   login           String   @unique
   password        String
@@ -35,6 +35,8 @@ model Company {
   email           String   @unique
   logoUrl         String?
   brandColor      String?
+  customFooter    String?  // Footer personalizado para NFCe
+  isActive        Boolean  @default(true)
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
 
@@ -66,12 +68,13 @@ model Company {
   billsToPay      BillToPay[]
   cashClosures    CashClosure[]
   fiscalDocuments FiscalDocument[]
+  printers        Printer[]
 
   @@map("companies")
 }
 
 model Seller {
-  id          String   @id @default(cuid())
+  id          String   @id @default(uuid())
   login       String   @unique
   password    String
   name        String
@@ -91,7 +94,7 @@ model Seller {
 }
 
 model Product {
-  id              String   @id @default(cuid())
+  id              String   @id @default(uuid())
   name            String
   photos          String[] // Array of photo URLs
   barcode         String   @unique
@@ -113,11 +116,10 @@ model Product {
 }
 
 model Sale {
-  id              String   @id @default(cuid())
+  id              String   @id @default(uuid())
   total           Decimal  @db.Decimal(10, 2)
   clientCpfCnpj   String?
   clientName      String?
-  paymentMethod   String[] // Array of payment methods
   change          Decimal  @db.Decimal(10, 2) @default(0)
   isInstallment   Boolean  @default(false)
   saleDate        DateTime @default(now())
@@ -130,6 +132,7 @@ model Sale {
   sellerId        String
   seller          Seller @relation(fields: [sellerId], references: [id])
   items           SaleItem[]
+  paymentMethods  SalePaymentMethod[]
   exchanges       ProductExchange[]
   cashClosureId   String?
   cashClosure     CashClosure? @relation(fields: [cashClosureId], references: [id])
@@ -137,8 +140,22 @@ model Sale {
   @@map("sales")
 }
 
+model SalePaymentMethod {
+  id              String   @id @default(uuid())
+  method          String   // payment method (cash, pix, credit_card, etc.)
+  amount          Decimal  @db.Decimal(10, 2)
+  additionalInfo  String?  // additional payment information
+  createdAt       DateTime @default(now())
+
+  // Relations
+  saleId          String
+  sale            Sale @relation(fields: [saleId], references: [id], onDelete: Cascade)
+
+  @@map("sale_payment_methods")
+}
+
 model SaleItem {
-  id          String  @id @default(cuid())
+  id          String  @id @default(uuid())
   quantity    Int
   unitPrice   Decimal @db.Decimal(10, 2)
   totalPrice  Decimal @db.Decimal(10, 2)
@@ -154,9 +171,10 @@ model SaleItem {
 }
 
 model Customer {
-  id          String   @id @default(cuid())
+  id          String   @id @default(uuid())
   name        String
   phone       String?
+  email       String?
   cpfCnpj     String?
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
@@ -178,7 +196,7 @@ model Customer {
 }
 
 model BillToPay {
-  id              String   @id @default(cuid())
+  id              String   @id @default(uuid())
   title           String
   barcode         String?
   paymentInfo     String?
@@ -197,7 +215,7 @@ model BillToPay {
 }
 
 model CashClosure {
-  id              String   @id @default(cuid())
+  id              String   @id @default(uuid())
   openingDate     DateTime @default(now())
   closingDate     DateTime?
   openingAmount   Decimal  @db.Decimal(10, 2) @default(0)
@@ -217,7 +235,7 @@ model CashClosure {
 }
 
 model ProductExchange {
-  id              String   @id @default(cuid())
+  id              String   @id @default(uuid())
   reason          String
   exchangeDate    DateTime @default(now())
   originalQuantity Int
@@ -234,11 +252,12 @@ model ProductExchange {
 }
 
 model FiscalDocument {
-  id              String   @id @default(cuid())
+  id              String   @id @default(uuid())
   documentType    String   // NFe, NFSe, etc.
   documentNumber  String
   accessKey       String   @unique
   status          String   // Emitida, Cancelada, etc.
+  totalValue      Decimal? @db.Decimal(10, 2) // Valor total do documento
   xmlContent      String?  // XML content
   pdfUrl          String?  // PDF URL
   emissionDate    DateTime @default(now())
@@ -253,7 +272,7 @@ model FiscalDocument {
 }
 
 model Printer {
-  id              String   @id @default(cuid())
+  id              String   @id @default(uuid())
   name            String
   type            String   // USB, Network, Bluetooth
   connectionInfo  String   // IP, MAC, etc.
@@ -268,4 +287,16 @@ model Printer {
   company         Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
 
   @@map("printers")
+}
+
+model RefreshToken {
+  id         String   @id @default(uuid())
+  tokenHash  String   @unique
+  userId     String
+  role       String
+  createdAt  DateTime @default(now())
+  expiresAt  DateTime
+  revoked    Boolean  @default(false)
+
+  @@map("refresh_tokens")
 }

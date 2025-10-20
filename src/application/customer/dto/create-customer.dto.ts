@@ -1,5 +1,5 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { IsString, IsNotEmpty, MinLength, MaxLength, IsOptional, Matches } from 'class-validator';
+import { IsString, IsNotEmpty, MinLength, MaxLength, IsOptional, Matches, IsEmail } from 'class-validator';
 
 export class CreateCustomerDto {
   @ApiProperty({
@@ -25,6 +25,17 @@ export class CreateCustomerDto {
     message: 'Telefone deve estar no formato (XX) XXXXX-XXXX',
   })
   phone?: string;
+
+  @ApiProperty({
+    description: 'Email do cliente',
+    example: 'cliente@email.com',
+    required: false,
+  })
+  @IsOptional()
+  @IsEmail({}, {
+    message: 'Email deve ter um formato válido',
+  })
+  email?: string;
 
   @ApiProperty({
     description: 'CPF ou CNPJ do cliente',

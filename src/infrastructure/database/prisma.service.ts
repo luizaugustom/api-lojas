@@ -27,6 +27,8 @@ export class PrismaService extends PrismaClient implements OnModuleInit, OnModul
       ],
     });
 
+    // TODO: Fix Prisma event types
+    /*
     this.$on('query', (e) => {
       if (process.env.NODE_ENV === 'development') {
         this.logger.debug(`Query: ${e.query}`);
@@ -46,6 +48,7 @@ export class PrismaService extends PrismaClient implements OnModuleInit, OnModul
     this.$on('warn', (e) => {
       this.logger.warn(`Database warning: ${e.message}`);
     });
+    */
   }
 
   async onModuleInit() {

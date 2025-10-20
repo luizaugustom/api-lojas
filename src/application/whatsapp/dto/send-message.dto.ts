@@ -25,7 +25,7 @@ export class SendMessageDto {
   })
   @IsOptional()
   @IsEnum(['text', 'image', 'document'])
-  type?: string;
+  type?: 'text' | 'image' | 'document';
 
   @ApiProperty({
     description: 'URL da mídia (para mensagens de imagem ou documento)',

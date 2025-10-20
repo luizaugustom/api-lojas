@@ -8,8 +8,11 @@ import {
   Delete,
   UseGuards,
   Query,
-  ParseUUIDPipe,
   ParseIntPipe,
+  UseInterceptors,
+  UploadedFile,
+  UploadedFiles,
+  BadRequestException,
 } from '@nestjs/common';
 import {
   ApiTags,
@@ -17,7 +20,10 @@ import {
   ApiResponse,
   ApiBearerAuth,
   ApiQuery,
+  ApiConsumes,
+  ApiBody,
 } from '@nestjs/swagger';
+import { FileInterceptor, FilesInterceptor } from '@nestjs/platform-express';
 import { ProductService } from './product.service';
 import { CreateProductDto } from './dto/create-product.dto';
 import { UpdateProductDto } from './dto/update-product.dto';
@@ -26,19 +32,28 @@ import { JwtAuthGuard } from '../../shared/guards/jwt-auth.guard';
 import { RolesGuard } from '../../shared/guards/roles.guard';
 import { Roles, UserRole } from '../../shared/decorators/roles.decorator';
 import { CurrentUser } from '../../shared/decorators/current-user.decorator';
+import { UploadService } from '../upload/upload.service';
+import { SanitizeProductDataInterceptor } from './interceptors/sanitize-product-data.interceptor';
+import { SanitizeUpdateDataInterceptor } from './interceptors/sanitize-update-data.interceptor';
+import { UuidValidationPipe } from '../../shared/pipes/uuid-validation.pipe';
 
 @ApiTags('product')
 @Controller('product')
 @UseGuards(JwtAuthGuard, RolesGuard)
 @ApiBearerAuth()
 export class ProductController {
-  constructor(private readonly productService: ProductService) {}
+  constructor(
+    private readonly productService: ProductService,
+    private readonly uploadService: UploadService,
+  ) {}
 
   @Post()
   @Roles(UserRole.COMPANY)
+  @UseInterceptors(SanitizeProductDataInterceptor)
   @ApiOperation({ summary: 'Criar novo produto' })
   @ApiResponse({ status: 201, description: 'Produto criado com sucesso' })
   @ApiResponse({ status: 409, description: 'Código de barras já está em uso' })
+  @ApiResponse({ status: 400, description: 'Dados inválidos' })
   create(
     @CurrentUser() user: any,
     @Body() createProductDto: CreateProductDto,
@@ -137,8 +152,9 @@ export class ProductController {
   @ApiOperation({ summary: 'Buscar produto por ID' })
   @ApiResponse({ status: 200, description: 'Produto encontrado' })
   @ApiResponse({ status: 404, description: 'Produto não encontrado' })
+  @ApiResponse({ status: 400, description: 'ID inválido' })
   findOne(
-    @Param('id', ParseUUIDPipe) id: string,
+    @Param('id', UuidValidationPipe) id: string,
     @CurrentUser() user: any,
   ) {
     if (user.role === UserRole.ADMIN) {
@@ -149,12 +165,14 @@ export class ProductController {
 
   @Patch(':id')
   @Roles(UserRole.ADMIN, UserRole.COMPANY)
+  @UseInterceptors(SanitizeUpdateDataInterceptor)
   @ApiOperation({ summary: 'Atualizar produto' })
   @ApiResponse({ status: 200, description: 'Produto atualizado com sucesso' })
   @ApiResponse({ status: 404, description: 'Produto não encontrado' })
   @ApiResponse({ status: 409, description: 'Código de barras já está em uso' })
+  @ApiResponse({ status: 400, description: 'Dados inválidos ou ID inválido' })
   update(
-    @Param('id', ParseUUIDPipe) id: string,
+    @Param('id', UuidValidationPipe) id: string,
     @Body() updateProductDto: UpdateProductDto,
     @CurrentUser() user: any,
   ) {
@@ -169,8 +187,9 @@ export class ProductController {
   @ApiOperation({ summary: 'Atualizar estoque do produto' })
   @ApiResponse({ status: 200, description: 'Estoque atualizado com sucesso' })
   @ApiResponse({ status: 404, description: 'Produto não encontrado' })
+  @ApiResponse({ status: 400, description: 'ID inválido' })
   updateStock(
-    @Param('id', ParseUUIDPipe) id: string,
+    @Param('id', UuidValidationPipe) id: string,
     @Body() updateStockDto: UpdateStockDto,
     @CurrentUser() user: any,
   ) {
@@ -185,14 +204,211 @@ export class ProductController {
   @ApiOperation({ summary: 'Remover produto' })
   @ApiResponse({ status: 200, description: 'Produto removido com sucesso' })
   @ApiResponse({ status: 404, description: 'Produto não encontrado' })
-  @ApiResponse({ status: 400, description: 'Produto possui vendas associadas' })
+  @ApiResponse({ status: 400, description: 'Produto possui vendas associadas ou ID inválido' })
   remove(
-    @Param('id', ParseUUIDPipe) id: string,
+    @Param('id', UuidValidationPipe) id: string,
     @CurrentUser() user: any,
   ) {
     if (user.role === UserRole.COMPANY) {
       return this.productService.remove(id, user.companyId);
     }
     return this.productService.remove(id);
+  }
+
+  @Post(':id/photo')
+  @Roles(UserRole.ADMIN, UserRole.COMPANY)
+  @UseInterceptors(FileInterceptor('photo'))
+  @ApiOperation({ summary: 'Adicionar foto ao produto' })
+  @ApiConsumes('multipart/form-data')
+  @ApiBody({
+    description: 'Foto do produto',
+    schema: {
+      type: 'object',
+      properties: {
+        photo: {
+          type: 'string',
+          format: 'binary',
+        },
+      },
+    },
+  })
+  @ApiResponse({ status: 201, description: 'Foto adicionada com sucesso' })
+  @ApiResponse({ status: 404, description: 'Produto não encontrado' })
+  @ApiResponse({ status: 400, description: 'Arquivo inválido' })
+  async addPhoto(
+    @Param('id', UuidValidationPipe) id: string,
+    @UploadedFile() photo: Express.Multer.File,
+    @CurrentUser() user: any,
+  ) {
+    if (!photo) {
+      throw new BadRequestException('Nenhuma foto foi enviada');
+    }
+
+    // Validate file type for images
+    const allowedMimeTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/gif', 'image/webp'];
+    if (!allowedMimeTypes.includes(photo.mimetype)) {
+      throw new BadRequestException('Tipo de arquivo não permitido. Apenas imagens são aceitas.');
+    }
+
+    const subfolder = `products/${user.companyId}`;
+    const photoUrl = await this.uploadService.uploadFile(photo, subfolder);
+
+    if (user.role === UserRole.COMPANY) {
+      return this.productService.addPhoto(id, photoUrl, user.companyId);
+    }
+    return this.productService.addPhoto(id, photoUrl);
+  }
+
+  @Post(':id/photos')
+  @Roles(UserRole.ADMIN, UserRole.COMPANY)
+  @UseInterceptors(FilesInterceptor('photos', 10)) // Max 10 photos
+  @ApiOperation({ summary: 'Adicionar múltiplas fotos ao produto' })
+  @ApiConsumes('multipart/form-data')
+  @ApiBody({
+    description: 'Fotos do produto',
+    schema: {
+      type: 'object',
+      properties: {
+        photos: {
+          type: 'array',
+          items: {
+            type: 'string',
+            format: 'binary',
+          },
+        },
+      },
+    },
+  })
+  @ApiResponse({ status: 201, description: 'Fotos adicionadas com sucesso' })
+  @ApiResponse({ status: 404, description: 'Produto não encontrado' })
+  @ApiResponse({ status: 400, description: 'Arquivos inválidos' })
+  async addPhotos(
+    @Param('id', UuidValidationPipe) id: string,
+    @UploadedFiles() photos: Express.Multer.File[],
+    @CurrentUser() user: any,
+  ) {
+    if (!photos || photos.length === 0) {
+      throw new BadRequestException('Nenhuma foto foi enviada');
+    }
+
+    // Validate all files are images
+    const allowedMimeTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/gif', 'image/webp'];
+    for (const photo of photos) {
+      if (!allowedMimeTypes.includes(photo.mimetype)) {
+        throw new BadRequestException('Tipo de arquivo não permitido. Apenas imagens são aceitas.');
+      }
+    }
+
+    const subfolder = `products/${user.companyId}`;
+    const photoUrls = await this.uploadService.uploadMultipleFiles(photos, subfolder);
+
+    if (user.role === UserRole.COMPANY) {
+      return this.productService.addPhotos(id, photoUrls, user.companyId);
+    }
+    return this.productService.addPhotos(id, photoUrls);
+  }
+
+  @Delete(':id/photo')
+  @Roles(UserRole.ADMIN, UserRole.COMPANY)
+  @ApiOperation({ summary: 'Remover foto do produto' })
+  @ApiResponse({ status: 200, description: 'Foto removida com sucesso' })
+  @ApiResponse({ status: 404, description: 'Produto ou foto não encontrada' })
+  async removePhoto(
+    @Param('id', UuidValidationPipe) id: string,
+    @Body('photoUrl') photoUrl: string,
+    @CurrentUser() user: any,
+  ) {
+    if (!photoUrl) {
+      throw new BadRequestException('URL da foto é obrigatória');
+    }
+
+    if (user.role === UserRole.COMPANY) {
+      return this.productService.removePhoto(id, photoUrl, user.companyId);
+    }
+    return this.productService.removePhoto(id, photoUrl);
+  }
+
+  @Delete(':id/photos')
+  @Roles(UserRole.ADMIN, UserRole.COMPANY)
+  @ApiOperation({ summary: 'Remover todas as fotos do produto' })
+  @ApiResponse({ status: 200, description: 'Todas as fotos removidas com sucesso' })
+  @ApiResponse({ status: 404, description: 'Produto não encontrado' })
+  async removeAllPhotos(
+    @Param('id', UuidValidationPipe) id: string,
+    @CurrentUser() user: any,
+  ) {
+    if (user.role === UserRole.COMPANY) {
+      return this.productService.removeAllPhotos(id, user.companyId);
+    }
+    return this.productService.removeAllPhotos(id);
+  }
+
+  @Post('upload-and-create')
+  @Roles(UserRole.ADMIN, UserRole.COMPANY)
+  @UseInterceptors(FilesInterceptor('photos', 10), SanitizeProductDataInterceptor)
+  @ApiOperation({ summary: 'Fazer upload de fotos e criar produto' })
+  @ApiConsumes('multipart/form-data')
+  @ApiBody({
+    description: 'Fotos e dados do produto',
+    schema: {
+      type: 'object',
+      properties: {
+        photos: {
+          type: 'array',
+          items: {
+            type: 'string',
+            format: 'binary',
+          },
+        },
+        name: { type: 'string' },
+        barcode: { type: 'string' },
+        stockQuantity: { type: 'number' },
+        price: { type: 'number' },
+        size: { type: 'string' },
+        category: { type: 'string' },
+        expirationDate: { type: 'string' },
+      },
+    },
+  })
+  @ApiResponse({ status: 201, description: 'Produto criado com fotos com sucesso' })
+  @ApiResponse({ status: 400, description: 'Dados inválidos' })
+  async uploadPhotosAndCreate(
+    @UploadedFiles() photos: Express.Multer.File[],
+    @Body() productData: any,
+    @CurrentUser() user: any,
+  ) {
+    console.log(`🚀 [ProductController] Upload and create started for company: ${user.companyId}`);
+    console.log(`📸 [ProductController] Photos received: ${photos ? photos.length : 0}`);
+    console.log(`📋 [ProductController] Product data: ${JSON.stringify(productData)}`);
+    
+    let photoUrls: string[] = [];
+
+    if (photos && photos.length > 0) {
+      // Validate all files are images
+      const allowedMimeTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/gif', 'image/webp'];
+      for (const photo of photos) {
+        if (!allowedMimeTypes.includes(photo.mimetype)) {
+          throw new BadRequestException('Tipo de arquivo não permitido. Apenas imagens são aceitas.');
+        }
+      }
+
+      const subfolder = `products/${user.companyId}`;
+      photoUrls = await this.uploadService.uploadMultipleFiles(photos, subfolder);
+      console.log(`📁 [ProductController] Photo URLs generated: ${JSON.stringify(photoUrls)}`);
+    }
+
+    const createProductDto: CreateProductDto = {
+      name: productData.name,
+      barcode: productData.barcode,
+      stockQuantity: parseInt(productData.stockQuantity),
+      price: parseFloat(productData.price),
+      size: productData.size,
+      category: productData.category,
+      expirationDate: productData.expirationDate,
+      photos: photoUrls,
+    };
+
+    console.log(`📦 [ProductController] CreateProductDto prepared: ${JSON.stringify(createProductDto)}`);
+    return this.productService.create(user.companyId, createProductDto);
   }
 }

@@ -8,7 +8,6 @@ import {
   Delete,
   UseGuards,
   Query,
-  ParseUUIDPipe,
   ParseIntPipe,
   BadRequestException,
 } from '@nestjs/common';
@@ -27,6 +26,7 @@ import { JwtAuthGuard } from '../../shared/guards/jwt-auth.guard';
 import { RolesGuard } from '../../shared/guards/roles.guard';
 import { Roles, UserRole } from '../../shared/decorators/roles.decorator';
 import { CurrentUser } from '../../shared/decorators/current-user.decorator';
+import { UuidValidationPipe } from '../../shared/pipes/uuid-validation.pipe';
 
 @ApiTags('sale')
 @Controller('sale')
@@ -129,8 +129,9 @@ export class SaleController {
   @ApiOperation({ summary: 'Buscar venda por ID' })
   @ApiResponse({ status: 200, description: 'Venda encontrada' })
   @ApiResponse({ status: 404, description: 'Venda não encontrada' })
+  @ApiResponse({ status: 400, description: 'ID inválido' })
   findOne(
-    @Param('id', ParseUUIDPipe) id: string,
+    @Param('id', UuidValidationPipe) id: string,
     @CurrentUser() user: any,
   ) {
     const companyId = user.role === UserRole.ADMIN ? undefined : user.companyId;
@@ -153,9 +154,9 @@ export class SaleController {
   @Roles(UserRole.ADMIN, UserRole.COMPANY, UserRole.SELLER)
   @ApiOperation({ summary: 'Reimprimir cupom da venda' })
   @ApiResponse({ status: 200, description: 'Cupom reimpresso com sucesso' })
-  @ApiResponse({ status: 400, description: 'Erro ao reimprimir cupom' })
+  @ApiResponse({ status: 400, description: 'ID inválido ou erro ao reimprimir cupom' })
   reprintReceipt(
-    @Param('id', ParseUUIDPipe) id: string,
+    @Param('id', UuidValidationPipe) id: string,
     @CurrentUser() user: any,
   ) {
     const companyId = user.role === UserRole.ADMIN ? undefined : user.companyId;
@@ -167,9 +168,9 @@ export class SaleController {
   @ApiOperation({ summary: 'Atualizar venda' })
   @ApiResponse({ status: 200, description: 'Venda atualizada com sucesso' })
   @ApiResponse({ status: 404, description: 'Venda não encontrada' })
-  @ApiResponse({ status: 400, description: 'Não é possível editar vendas antigas' })
+  @ApiResponse({ status: 400, description: 'ID inválido ou não é possível editar vendas antigas' })
   update(
-    @Param('id', ParseUUIDPipe) id: string,
+    @Param('id', UuidValidationPipe) id: string,
     @Body() updateSaleDto: UpdateSaleDto,
     @CurrentUser() user: any,
   ) {
@@ -182,9 +183,9 @@ export class SaleController {
   @ApiOperation({ summary: 'Remover venda' })
   @ApiResponse({ status: 200, description: 'Venda removida com sucesso' })
   @ApiResponse({ status: 404, description: 'Venda não encontrada' })
-  @ApiResponse({ status: 400, description: 'Não é possível excluir vendas antigas' })
+  @ApiResponse({ status: 400, description: 'ID inválido ou não é possível excluir vendas antigas' })
   remove(
-    @Param('id', ParseUUIDPipe) id: string,
+    @Param('id', UuidValidationPipe) id: string,
     @CurrentUser() user: any,
   ) {
     const companyId = user.role === UserRole.ADMIN ? undefined : user.companyId;

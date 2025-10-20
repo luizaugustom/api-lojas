@@ -7,7 +7,6 @@ import {
   Param,
   UseGuards,
   Query,
-  ParseUUIDPipe,
   ParseIntPipe,
   ParseBoolPipe,
 } from '@nestjs/common';
@@ -25,6 +24,7 @@ import { JwtAuthGuard } from '../../shared/guards/jwt-auth.guard';
 import { RolesGuard } from '../../shared/guards/roles.guard';
 import { Roles, UserRole } from '../../shared/decorators/roles.decorator';
 import { CurrentUser } from '../../shared/decorators/current-user.decorator';
+import { UuidValidationPipe } from '../../shared/pipes/uuid-validation.pipe';
 
 @ApiTags('cash')
 @Controller('cash-closure')
@@ -101,7 +101,7 @@ export class CashClosureController {
   @ApiResponse({ status: 200, description: 'Fechamento de caixa encontrado' })
   @ApiResponse({ status: 404, description: 'Fechamento de caixa não encontrado' })
   findOne(
-    @Param('id', ParseUUIDPipe) id: string,
+    @Param('id', UuidValidationPipe) id: string,
     @CurrentUser() user: any,
   ) {
     if (user.role === UserRole.ADMIN) {
@@ -128,7 +128,7 @@ export class CashClosureController {
   @ApiResponse({ status: 200, description: 'Relatório reimpresso com sucesso' })
   @ApiResponse({ status: 400, description: 'Erro ao reimprimir relatório' })
   reprintReport(
-    @Param('id', ParseUUIDPipe) id: string,
+    @Param('id', UuidValidationPipe) id: string,
     @CurrentUser() user: any,
   ) {
     if (user.role === UserRole.ADMIN) {

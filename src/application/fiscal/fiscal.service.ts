@@ -1,6 +1,8 @@
 import { Injectable, Logger, BadRequestException, NotFoundException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { PrismaService } from '../../infrastructure/database/prisma.service';
+import { FiscalApiService, NFCeRequest } from '../../shared/services/fiscal-api.service';
+import * as xml2js from 'xml2js';
 
 export interface NFeData {
   companyId: string;
@@ -16,6 +18,24 @@ export interface NFeData {
   paymentMethod: string[];
 }
 
+export interface NFCeData {
+  companyId: string;
+  clientCpfCnpj?: string;
+  clientName?: string;
+  items: Array<{
+    productId: string;
+    productName: string;
+    barcode: string;
+    quantity: number;
+    unitPrice: number;
+    totalPrice: number;
+  }>;
+  totalValue: number;
+  paymentMethod: string[];
+  saleId: string;
+  sellerName: string;
+}
+
 export interface NFSeData {
   companyId: string;
   clientCpfCnpj?: string;
@@ -28,20 +48,12 @@ export interface NFSeData {
 @Injectable()
 export class FiscalService {
   private readonly logger = new Logger(FiscalService.name);
-  private readonly fiscalApiUrl: string;
-  private readonly fiscalApiKey: string;
-  private readonly certificatePath: string;
-  private readonly certificatePassword: string;
 
   constructor(
     private readonly configService: ConfigService,
     private readonly prisma: PrismaService,
-  ) {
-    this.fiscalApiUrl = this.configService.get('FISCAL_API_URL', 'https://api.fiscal.com.br');
-    this.fiscalApiKey = this.configService.get('FISCAL_API_KEY', '');
-    this.certificatePath = this.configService.get('FISCAL_CERTIFICATE_PATH', './certificates/cert.p12');
-    this.certificatePassword = this.configService.get('FISCAL_CERTIFICATE_PASSWORD', '');
-  }
+    private readonly fiscalApiService: FiscalApiService,
+  ) {}
 
   async generateNFe(nfeData: NFeData): Promise<any> {
     try {
@@ -85,8 +97,14 @@ export class FiscalService {
         forma_pagamento: nfeData.paymentMethod,
       };
 
-      // Call fiscal API
-      const response = await this.callFiscalApi('/nfe/emitir', fiscalData);
+      // Call fiscal API (NFe not implemented yet)
+      const response = {
+        numero: Math.floor(Math.random() * 1000000).toString(),
+        chave_acesso: `NFe${Date.now()}${Math.floor(Math.random() * 1000000)}`,
+        status: 'Autorizada',
+        xml: '<?xml version="1.0" encoding="UTF-8"?><nfe></nfe>',
+        pdf_url: 'https://example.com/documento.pdf',
+      };
 
       // Save fiscal document
       const fiscalDocument = await this.prisma.fiscalDocument.create({
@@ -106,6 +124,71 @@ export class FiscalService {
     } catch (error) {
       this.logger.error('Error generating NFe:', error);
       throw new BadRequestException('Erro ao gerar NFe');
+    }
+  }
+
+  async generateNFCe(nfceData: NFCeData): Promise<any> {
+    try {
+      this.logger.log(`Generating NFCe for sale: ${nfceData.saleId}`);
+
+      // Get company data
+      const company = await this.prisma.company.findUnique({
+        where: { id: nfceData.companyId },
+      });
+
+      if (!company) {
+        throw new NotFoundException('Empresa não encontrada');
+      }
+
+      // Prepare NFCe request for fiscal API
+      const nfceRequest: NFCeRequest = {
+        companyId: nfceData.companyId,
+        clientCpfCnpj: nfceData.clientCpfCnpj,
+        clientName: nfceData.clientName,
+        items: nfceData.items.map(item => ({
+          productId: item.productId,
+          productName: item.productName,
+          barcode: item.barcode,
+          quantity: item.quantity,
+          unitPrice: item.unitPrice,
+          totalPrice: item.totalPrice,
+          ncm: '99999999', // Default NCM - should be configured per product
+          cfop: '5102', // Default CFOP for internal sales
+        })),
+        totalValue: nfceData.totalValue,
+        paymentMethod: nfceData.paymentMethod,
+        saleId: nfceData.saleId,
+        sellerName: nfceData.sellerName,
+      };
+
+      // Call fiscal API
+      const fiscalResponse = await this.fiscalApiService.generateNFCe(nfceRequest);
+
+      if (!fiscalResponse.success) {
+        throw new BadRequestException(fiscalResponse.error || 'Erro na geração da NFCe');
+      }
+
+      // Save fiscal document
+      const fiscalDocument = await this.prisma.fiscalDocument.create({
+        data: {
+          documentType: 'NFCe',
+          documentNumber: fiscalResponse.documentNumber,
+          accessKey: fiscalResponse.accessKey,
+          status: fiscalResponse.status,
+          xmlContent: fiscalResponse.xmlContent,
+          pdfUrl: fiscalResponse.pdfUrl,
+          companyId: nfceData.companyId,
+        },
+      });
+
+      this.logger.log(`NFCe generated successfully: ${fiscalDocument.id}`);
+      return {
+        ...fiscalDocument,
+        qrCodeUrl: fiscalResponse.qrCodeUrl,
+      };
+    } catch (error) {
+      this.logger.error('Error generating NFCe:', error);
+      throw new BadRequestException('Erro ao gerar NFCe');
     }
   }
 
@@ -147,8 +230,14 @@ export class FiscalService {
         forma_pagamento: nfseData.paymentMethod,
       };
 
-      // Call fiscal API
-      const response = await this.callFiscalApi('/nfse/emitir', fiscalData);
+      // Call fiscal API (NFSe not implemented yet)
+      const response = {
+        numero: Math.floor(Math.random() * 1000000).toString(),
+        chave_acesso: `NFSe${Date.now()}${Math.floor(Math.random() * 1000000)}`,
+        status: 'Autorizada',
+        xml: '<?xml version="1.0" encoding="UTF-8"?><nfse></nfse>',
+        pdf_url: 'https://example.com/documento.pdf',
+      };
 
       // Save fiscal document
       const fiscalDocument = await this.prisma.fiscalDocument.create({
@@ -257,11 +346,11 @@ export class FiscalService {
         throw new BadRequestException('Documento já está cancelado');
       }
 
-      // Call fiscal API to cancel
-      const response = await this.callFiscalApi(`/${document.documentType.toLowerCase()}/cancelar`, {
-        chave_acesso: document.accessKey,
+      // Call fiscal API to cancel (not implemented yet)
+      const response = {
+        status: 'Cancelada',
         motivo: reason,
-      });
+      };
 
       // Update document status
       const updatedDocument = await this.prisma.fiscalDocument.update({
@@ -283,23 +372,112 @@ export class FiscalService {
     const document = await this.getFiscalDocument(id, companyId);
 
     if (format === 'xml') {
+      if (!document.xmlContent) {
+        throw new BadRequestException('Conteúdo XML não disponível para este documento');
+      }
+
       return {
         content: document.xmlContent,
-        filename: `documento_${document.documentNumber}.xml`,
+        filename: `${document.documentType}_${document.documentNumber}.xml`,
         mimetype: 'application/xml',
+        contentType: 'application/xml; charset=utf-8',
+        size: Buffer.byteLength(document.xmlContent, 'utf8'),
+        downloadUrl: `/api/fiscal/${id}/download?format=xml`
       };
     }
 
-    if (format === 'pdf' && document.pdfUrl) {
-      // In a real implementation, you would fetch the PDF from the URL
+    if (format === 'pdf') {
+      if (!document.pdfUrl) {
+        // Gerar PDF dinamicamente se não existir
+        const generatedPdf = await this.generatePdfFromDocument(document);
+        return {
+          content: generatedPdf,
+          filename: `${document.documentType}_${document.documentNumber}.pdf`,
+          mimetype: 'application/pdf',
+          contentType: 'application/pdf',
+          size: generatedPdf.length,
+          downloadUrl: `/api/fiscal/${id}/download?format=pdf`
+        };
+      }
+
+      // Se existe URL do PDF, retornar informações para download
       return {
         url: document.pdfUrl,
-        filename: `documento_${document.documentNumber}.pdf`,
+        filename: `${document.documentType}_${document.documentNumber}.pdf`,
         mimetype: 'application/pdf',
+        contentType: 'application/pdf',
+        downloadUrl: `/api/fiscal/${id}/download?format=pdf`,
+        isExternal: true
       };
     }
 
-    throw new BadRequestException('Formato não disponível para este documento');
+    throw new BadRequestException('Formato não suportado. Use "xml" ou "pdf"');
+  }
+
+  private async generatePdfFromDocument(document: any): Promise<Buffer> {
+    try {
+      // Simular geração de PDF (em implementação real, usar biblioteca como puppeteer ou jsPDF)
+      const pdfContent = `
+%PDF-1.4
+1 0 obj
+<<
+/Type /Catalog
+/Pages 2 0 R
+>>
+endobj
+
+2 0 obj
+<<
+/Type /Pages
+/Kids [3 0 R]
+/Count 1
+>>
+endobj
+
+3 0 obj
+<<
+/Type /Page
+/Parent 2 0 R
+/MediaBox [0 0 612 792]
+/Contents 4 0 R
+>>
+endobj
+
+4 0 obj
+<<
+/Length 100
+>>
+stream
+BT
+/F1 12 Tf
+100 700 Td
+(Documento Fiscal: ${document.documentType} ${document.documentNumber}) Tj
+ET
+endstream
+endobj
+
+xref
+0 5
+0000000000 65535 f 
+0000000009 00000 n 
+0000000058 00000 n 
+0000000115 00000 n 
+0000000204 00000 n 
+trailer
+<<
+/Size 5
+/Root 1 0 R
+>>
+startxref
+354
+%%EOF
+      `;
+
+      return Buffer.from(pdfContent, 'utf8');
+    } catch (error) {
+      this.logger.error('Error generating PDF:', error);
+      throw new BadRequestException('Erro ao gerar PDF do documento');
+    }
   }
 
   async getFiscalStats(companyId?: string) {
@@ -329,21 +507,38 @@ export class FiscalService {
     };
   }
 
-  private async callFiscalApi(endpoint: string, data: any): Promise<any> {
-    // This would make actual HTTP calls to the fiscal API
-    // For now, return mock data
-    this.logger.log(`Calling fiscal API: ${endpoint}`);
-    
-    // Simulate API call delay
-    await new Promise(resolve => setTimeout(resolve, 1000));
+  async getFiscalDocumentByAccessKey(accessKey: string, companyId?: string) {
+    const where: any = { accessKey };
+    if (companyId) {
+      where.companyId = companyId;
+    }
 
-    return {
-      numero: Math.floor(Math.random() * 1000000).toString(),
-      chave_acesso: `NFe${Date.now()}${Math.floor(Math.random() * 1000000)}`,
-      status: 'Autorizada',
-      xml: '<?xml version="1.0" encoding="UTF-8"?><nfe></nfe>',
-      pdf_url: 'https://example.com/documento.pdf',
-    };
+    const document = await this.prisma.fiscalDocument.findFirst({
+      where,
+      include: {
+        company: {
+          select: {
+            id: true,
+            name: true,
+            cnpj: true,
+          },
+        },
+      },
+    });
+
+    if (!document) {
+      throw new NotFoundException('Documento fiscal não encontrado');
+    }
+
+    return document;
+  }
+
+  async getFiscalApiStatus(): Promise<any> {
+    return await this.fiscalApiService.getFiscalStatus();
+  }
+
+  async uploadCertificate(certificatePath: string, password: string): Promise<boolean> {
+    return await this.fiscalApiService.uploadCertificate(certificatePath, password);
   }
 
   async validateCompanyFiscalData(companyId: string): Promise<{ valid: boolean; errors: string[] }> {
@@ -380,29 +575,160 @@ export class FiscalService {
     };
   }
 
-  async getFiscalDocumentByAccessKey(accessKey: string, companyId?: string) {
-    const where: any = { accessKey };
-    if (companyId) {
-      where.companyId = companyId;
+  async processXmlFile(file: Express.Multer.File, companyId: string) {
+    try {
+      this.logger.log(`Processing XML file: ${file.originalname} for company: ${companyId}`);
+
+      // Converter buffer para string
+      const xmlContent = file.buffer.toString('utf8');
+      
+      // Parsear XML
+      const parser = new xml2js.Parser({ 
+        explicitArray: false,
+        ignoreAttrs: false,
+        mergeAttrs: true
+      });
+
+      const result = await parser.parseStringPromise(xmlContent);
+      
+      // Extrair informações do XML baseado no tipo de documento
+      const documentInfo = this.extractDocumentInfo(result);
+      
+      // Verificar se o documento já existe
+      const existingDocument = await this.prisma.fiscalDocument.findFirst({
+        where: {
+          accessKey: documentInfo.accessKey,
+          companyId: companyId
+        }
+      });
+
+      if (existingDocument) {
+        // Atualizar documento existente
+        const updatedDocument = await this.prisma.fiscalDocument.update({
+          where: { id: existingDocument.id },
+          data: {
+            xmlContent: xmlContent,
+            status: documentInfo.status,
+            totalValue: documentInfo.totalValue,
+            updatedAt: new Date()
+          }
+        });
+
+        this.logger.log(`Updated existing fiscal document: ${updatedDocument.id}`);
+        
+        return {
+          id: updatedDocument.id,
+          documentNumber: updatedDocument.documentNumber,
+          documentType: updatedDocument.documentType,
+          accessKey: updatedDocument.accessKey,
+          emissionDate: updatedDocument.emissionDate,
+          status: updatedDocument.status,
+          totalValue: updatedDocument.totalValue,
+          message: 'XML atualizado com sucesso'
+        };
+      } else {
+        // Criar novo documento
+        const newDocument = await this.prisma.fiscalDocument.create({
+          data: {
+            companyId: companyId,
+            documentNumber: documentInfo.documentNumber,
+            documentType: documentInfo.documentType,
+            accessKey: documentInfo.accessKey,
+            emissionDate: documentInfo.emissionDate,
+            status: documentInfo.status,
+            totalValue: documentInfo.totalValue,
+            xmlContent: xmlContent,
+            pdfUrl: documentInfo.pdfUrl || null
+          }
+        });
+
+        this.logger.log(`Created new fiscal document: ${newDocument.id}`);
+        
+        return {
+          id: newDocument.id,
+          documentNumber: newDocument.documentNumber,
+          documentType: newDocument.documentType,
+          accessKey: newDocument.accessKey,
+          emissionDate: newDocument.emissionDate,
+          status: newDocument.status,
+          totalValue: newDocument.totalValue,
+          message: 'XML processado com sucesso'
+        };
+      }
+
+    } catch (error) {
+      this.logger.error('Error processing XML file:', error);
+      throw new BadRequestException('Erro ao processar arquivo XML: ' + error.message);
     }
-
-    const document = await this.prisma.fiscalDocument.findFirst({
-      where,
-      include: {
-        company: {
-          select: {
-            id: true,
-            name: true,
-            cnpj: true,
-          },
-        },
-      },
-    });
-
-    if (!document) {
-      throw new NotFoundException('Documento fiscal não encontrado');
-    }
-
-    return document;
   }
+
+  private extractDocumentInfo(xmlData: any) {
+    try {
+      // Detectar tipo de documento e extrair informações
+      let documentInfo: any = {};
+
+      // NFe
+      if (xmlData.nfeProc || xmlData.NFe) {
+        const nfe = xmlData.nfeProc?.NFe || xmlData.NFe;
+        const infNFe = nfe.infNFe;
+        const ide = infNFe.ide;
+        const emit = infNFe.emit;
+        const total = infNFe.total?.ICMSTot;
+
+        documentInfo = {
+          documentType: 'NFe',
+          documentNumber: ide.nNF,
+          accessKey: infNFe['@_Id']?.replace('NFe', '') || '',
+          emissionDate: new Date(ide.dhEmi || ide.dEmi),
+          status: xmlData.nfeProc?.protNFe?.infProt?.cStat === '100' ? 'Autorizada' : 'Pendente',
+          totalValue: total?.vNF || 0,
+          pdfUrl: null
+        };
+      }
+      // NFSe
+      else if (xmlData.CompNfse || xmlData.Nfse) {
+        const nfse = xmlData.CompNfse?.Nfse || xmlData.Nfse;
+        const infNfse = nfse.InfNfse;
+        const servico = infNfse.Servico;
+        const valores = servico.Valores;
+
+        documentInfo = {
+          documentType: 'NFSe',
+          documentNumber: infNfse.Numero,
+          accessKey: infNfse.CodigoVerificacao || '',
+          emissionDate: new Date(infNfse.DataEmissao),
+          status: 'Autorizada',
+          totalValue: valores.ValorServicos || 0,
+          pdfUrl: null
+        };
+      }
+      // NFCe
+      else if (xmlData.nfeProc && xmlData.nfeProc.NFe?.infNFe?.ide?.tpEmis === '9') {
+        const nfe = xmlData.nfeProc.NFe;
+        const infNFe = nfe.infNFe;
+        const ide = infNFe.ide;
+        const total = infNFe.total?.ICMSTot;
+
+        documentInfo = {
+          documentType: 'NFCe',
+          documentNumber: ide.nNF,
+          accessKey: infNFe['@_Id']?.replace('NFe', '') || '',
+          emissionDate: new Date(ide.dhEmi || ide.dEmi),
+          status: xmlData.nfeProc.protNFe?.infProt?.cStat === '100' ? 'Autorizada' : 'Pendente',
+          totalValue: total?.vNF || 0,
+          pdfUrl: null
+        };
+      }
+      else {
+        throw new Error('Tipo de documento fiscal não reconhecido');
+      }
+
+      return documentInfo;
+
+    } catch (error) {
+      this.logger.error('Error extracting document info:', error);
+      throw new BadRequestException('Erro ao extrair informações do XML: ' + error.message);
+    }
+  }
+
 }

@@ -1,6 +1,6 @@
 import { Injectable, ConflictException, NotFoundException, Logger } from '@nestjs/common';
 import { PrismaService } from '../../infrastructure/database/prisma.service';
-import { AuthService } from '../auth/auth.service';
+import { HashService } from '../../shared/services/hash.service';
 import { CreateCompanyDto } from './dto/create-company.dto';
 import { UpdateCompanyDto } from './dto/update-company.dto';
 
@@ -10,12 +10,12 @@ export class CompanyService {
 
   constructor(
     private readonly prisma: PrismaService,
-    private readonly authService: AuthService,
+    private readonly hashService: HashService,
   ) {}
 
   async create(adminId: string, createCompanyDto: CreateCompanyDto) {
     try {
-      const hashedPassword = await this.authService.hashPassword(createCompanyDto.password);
+      const hashedPassword = await this.hashService.hashPassword(createCompanyDto.password);
 
       const company = await this.prisma.company.create({
         data: {
@@ -30,6 +30,7 @@ export class CompanyService {
           cnpj: true,
           email: true,
           phone: true,
+          isActive: true,
           createdAt: true,
           updatedAt: true,
         },
@@ -67,6 +68,7 @@ export class CompanyService {
         cnpj: true,
         email: true,
         phone: true,
+        isActive: true,
         createdAt: true,
         updatedAt: true,
         _count: {
@@ -97,6 +99,7 @@ export class CompanyService {
         municipalRegistration: true,
         logoUrl: true,
         brandColor: true,
+        isActive: true,
         zipCode: true,
         state: true,
         city: true,
@@ -150,7 +153,7 @@ export class CompanyService {
       const updateData: any = { ...updateCompanyDto };
 
       if (updateCompanyDto.password) {
-        updateData.password = await this.authService.hashPassword(updateCompanyDto.password);
+        updateData.password = await this.hashService.hashPassword(updateCompanyDto.password);
       }
 
       const company = await this.prisma.company.update({
@@ -163,6 +166,7 @@ export class CompanyService {
           cnpj: true,
           email: true,
           phone: true,
+          isActive: true,
           createdAt: true,
           updatedAt: true,
         },
@@ -254,5 +258,73 @@ export class CompanyService {
       totalSalesValue: totalSales._sum.total || 0,
       pendingBillsValue: pendingBills._sum.amount || 0,
     };
+  }
+
+  async activate(id: string) {
+    try {
+      const existingCompany = await this.prisma.company.findUnique({
+        where: { id },
+      });
+
+      if (!existingCompany) {
+        throw new NotFoundException('Empresa não encontrada');
+      }
+
+      const company = await this.prisma.company.update({
+        where: { id },
+        data: { isActive: true },
+        select: {
+          id: true,
+          name: true,
+          login: true,
+          cnpj: true,
+          email: true,
+          phone: true,
+          isActive: true,
+          createdAt: true,
+          updatedAt: true,
+        },
+      });
+
+      this.logger.log(`Company activated: ${company.id}`);
+      return company;
+    } catch (error) {
+      this.logger.error('Error activating company:', error);
+      throw error;
+    }
+  }
+
+  async deactivate(id: string) {
+    try {
+      const existingCompany = await this.prisma.company.findUnique({
+        where: { id },
+      });
+
+      if (!existingCompany) {
+        throw new NotFoundException('Empresa não encontrada');
+      }
+
+      const company = await this.prisma.company.update({
+        where: { id },
+        data: { isActive: false },
+        select: {
+          id: true,
+          name: true,
+          login: true,
+          cnpj: true,
+          email: true,
+          phone: true,
+          isActive: true,
+          createdAt: true,
+          updatedAt: true,
+        },
+      });
+
+      this.logger.log(`Company deactivated: ${company.id}`);
+      return company;
+    } catch (error) {
+      this.logger.error('Error deactivating company:', error);
+      throw error;
+    }
   }
 }
