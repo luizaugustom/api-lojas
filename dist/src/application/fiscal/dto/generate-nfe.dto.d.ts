@@ -5,16 +5,37 @@ export declare enum PaymentMethod {
     PIX = "pix",
     INSTALLMENT = "installment"
 }
-export declare class NFeItemDto {
-    productId: string;
+export declare class RecipientAddressDto {
+    zipCode?: string;
+    street?: string;
+    number?: string;
+    complement?: string;
+    district?: string;
+    city?: string;
+    state?: string;
+}
+export declare class RecipientDto {
+    document: string;
+    name: string;
+    email?: string;
+    phone?: string;
+    address?: RecipientAddressDto;
+}
+export declare class NFeManualItemDto {
+    description: string;
     quantity: number;
     unitPrice: number;
-    totalPrice: number;
+    ncm?: string;
+    cfop: string;
+    unitOfMeasure: string;
+}
+export declare class PaymentInfoDto {
+    method: string;
 }
 export declare class GenerateNFeDto {
-    clientCpfCnpj?: string;
-    clientName?: string;
-    items: NFeItemDto[];
-    totalValue: number;
-    paymentMethod: PaymentMethod[];
+    saleId?: string;
+    recipient?: RecipientDto;
+    items?: NFeManualItemDto[];
+    payment?: PaymentInfoDto;
+    additionalInfo?: string;
 }

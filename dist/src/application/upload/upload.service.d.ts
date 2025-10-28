@@ -1,11 +1,12 @@
 import { ConfigService } from '@nestjs/config';
+import { FirebaseStorageService } from '../../shared/services/firebase-storage.service';
 export declare class UploadService {
     private readonly configService;
+    private readonly firebaseStorage;
     private readonly logger;
-    private readonly uploadPath;
     private readonly maxFileSize;
-    constructor(configService: ConfigService);
-    private ensureUploadDirectory;
+    private readonly useFirebase;
+    constructor(configService: ConfigService, firebaseStorage: FirebaseStorageService);
     uploadFile(file: Express.Multer.File, subfolder?: string): Promise<string>;
     uploadMultipleFiles(files: Express.Multer.File[], subfolder?: string): Promise<string[]>;
     deleteFile(fileUrl: string): Promise<boolean>;
@@ -17,10 +18,9 @@ export declare class UploadService {
     getFileInfo(fileUrl: string): Promise<{
         exists: boolean;
         size?: number;
-        path?: string;
+        contentType?: string;
     }>;
-    resizeImage(file: Express.Multer.File, maxWidth?: number, maxHeight?: number): Promise<Buffer>;
-    optimizeImage(file: Express.Multer.File): Promise<Buffer>;
-    getUploadPath(): string;
+    fileExists(fileUrl: string): Promise<boolean>;
     getMaxFileSize(): number;
+    private getOptimizationPreset;
 }

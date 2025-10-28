@@ -18,10 +18,12 @@ const swagger_1 = require("@nestjs/swagger");
 const seller_service_1 = require("./seller.service");
 const create_seller_dto_1 = require("./dto/create-seller.dto");
 const update_seller_dto_1 = require("./dto/update-seller.dto");
+const update_seller_profile_dto_1 = require("./dto/update-seller-profile.dto");
 const jwt_auth_guard_1 = require("../../shared/guards/jwt-auth.guard");
 const roles_guard_1 = require("../../shared/guards/roles.guard");
 const roles_decorator_1 = require("../../shared/decorators/roles.decorator");
 const current_user_decorator_1 = require("../../shared/decorators/current-user.decorator");
+const uuid_validation_pipe_1 = require("../../shared/pipes/uuid-validation.pipe");
 let SellerController = class SellerController {
     constructor(sellerService) {
         this.sellerService = sellerService;
@@ -62,8 +64,8 @@ let SellerController = class SellerController {
         }
         return this.sellerService.getSellerSales(id, undefined, page, limit);
     }
-    updateMyProfile(user, updateSellerDto) {
-        return this.sellerService.update(user.id, updateSellerDto);
+    updateMyProfile(user, updateSellerProfileDto) {
+        return this.sellerService.update(user.userId, updateSellerProfileDto);
     }
     update(id, updateSellerDto, user) {
         if (user.role === roles_decorator_1.UserRole.COMPANY) {
@@ -141,7 +143,7 @@ __decorate([
     (0, swagger_1.ApiOperation)({ summary: 'Buscar vendedor por ID' }),
     (0, swagger_1.ApiResponse)({ status: 200, description: 'Vendedor encontrado' }),
     (0, swagger_1.ApiResponse)({ status: 404, description: 'Vendedor não encontrado' }),
-    __param(0, (0, common_1.Param)('id')),
+    __param(0, (0, common_1.Param)('id', uuid_validation_pipe_1.UuidValidationPipe)),
     __param(1, (0, current_user_decorator_1.CurrentUser)()),
     __metadata("design:type", Function),
     __metadata("design:paramtypes", [String, Object]),
@@ -152,7 +154,7 @@ __decorate([
     (0, roles_decorator_1.Roles)(roles_decorator_1.UserRole.ADMIN, roles_decorator_1.UserRole.COMPANY),
     (0, swagger_1.ApiOperation)({ summary: 'Obter estatísticas do vendedor' }),
     (0, swagger_1.ApiResponse)({ status: 200, description: 'Estatísticas do vendedor' }),
-    __param(0, (0, common_1.Param)('id')),
+    __param(0, (0, common_1.Param)('id', uuid_validation_pipe_1.UuidValidationPipe)),
     __param(1, (0, current_user_decorator_1.CurrentUser)()),
     __metadata("design:type", Function),
     __metadata("design:paramtypes", [String, Object]),
@@ -165,7 +167,7 @@ __decorate([
     (0, swagger_1.ApiQuery)({ name: 'page', required: false, type: Number }),
     (0, swagger_1.ApiQuery)({ name: 'limit', required: false, type: Number }),
     (0, swagger_1.ApiResponse)({ status: 200, description: 'Vendas do vendedor' }),
-    __param(0, (0, common_1.Param)('id')),
+    __param(0, (0, common_1.Param)('id', uuid_validation_pipe_1.UuidValidationPipe)),
     __param(1, (0, current_user_decorator_1.CurrentUser)()),
     __param(2, (0, common_1.Query)('page', new common_1.ParseIntPipe({ optional: true }))),
     __param(3, (0, common_1.Query)('limit', new common_1.ParseIntPipe({ optional: true }))),
@@ -181,7 +183,7 @@ __decorate([
     __param(0, (0, current_user_decorator_1.CurrentUser)()),
     __param(1, (0, common_1.Body)()),
     __metadata("design:type", Function),
-    __metadata("design:paramtypes", [Object, update_seller_dto_1.UpdateSellerDto]),
+    __metadata("design:paramtypes", [Object, update_seller_profile_dto_1.UpdateSellerProfileDto]),
     __metadata("design:returntype", void 0)
 ], SellerController.prototype, "updateMyProfile", null);
 __decorate([
@@ -191,7 +193,7 @@ __decorate([
     (0, swagger_1.ApiResponse)({ status: 200, description: 'Vendedor atualizado com sucesso' }),
     (0, swagger_1.ApiResponse)({ status: 404, description: 'Vendedor não encontrado' }),
     (0, swagger_1.ApiResponse)({ status: 409, description: 'Login já está em uso' }),
-    __param(0, (0, common_1.Param)('id')),
+    __param(0, (0, common_1.Param)('id', uuid_validation_pipe_1.UuidValidationPipe)),
     __param(1, (0, common_1.Body)()),
     __param(2, (0, current_user_decorator_1.CurrentUser)()),
     __metadata("design:type", Function),
@@ -204,7 +206,7 @@ __decorate([
     (0, swagger_1.ApiOperation)({ summary: 'Remover vendedor' }),
     (0, swagger_1.ApiResponse)({ status: 200, description: 'Vendedor removido com sucesso' }),
     (0, swagger_1.ApiResponse)({ status: 404, description: 'Vendedor não encontrado' }),
-    __param(0, (0, common_1.Param)('id')),
+    __param(0, (0, common_1.Param)('id', uuid_validation_pipe_1.UuidValidationPipe)),
     __param(1, (0, current_user_decorator_1.CurrentUser)()),
     __metadata("design:type", Function),
     __metadata("design:paramtypes", [String, Object]),

@@ -6,4 +6,6 @@ export declare class CreateSellerDto {
     birthDate?: string;
     email?: string;
     phone?: string;
+    commissionRate?: number;
+    hasIndividualCash?: boolean;
 }

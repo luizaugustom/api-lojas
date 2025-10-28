@@ -64,6 +64,13 @@ export class UploadController {
       throw new BadRequestException('Nenhum arquivo foi enviado');
     }
 
+    // Bloquear upload direto em subfolder de produtos
+    if (subfolder && subfolder.startsWith('products')) {
+      throw new BadRequestException(
+        'Use o endpoint /product/upload-and-create para fazer upload de fotos de produtos'
+      );
+    }
+
     const fileUrl = await this.uploadService.uploadFile(file, subfolder);
     return {
       success: true,
@@ -106,6 +113,13 @@ export class UploadController {
   ) {
     if (!files || files.length === 0) {
       throw new BadRequestException('Nenhum arquivo foi enviado');
+    }
+
+    // Bloquear upload direto em subfolder de produtos
+    if (subfolder && subfolder.startsWith('products')) {
+      throw new BadRequestException(
+        'Use o endpoint /product/upload-and-create para fazer upload de fotos de produtos'
+      );
     }
 
     const fileUrls = await this.uploadService.uploadMultipleFiles(files, subfolder);
@@ -175,53 +189,7 @@ export class UploadController {
     };
   }
 
-  @Post('resize')
-  @Roles(UserRole.ADMIN, UserRole.COMPANY)
-  @UseInterceptors(FileInterceptor('file'))
-  @ApiOperation({ summary: 'Redimensionar imagem' })
-  @ApiConsumes('multipart/form-data')
-  @ApiResponse({ status: 201, description: 'Imagem redimensionada com sucesso' })
-  async resizeImage(
-    @UploadedFile() file: Express.Multer.File,
-    @Query('maxWidth') maxWidth?: string,
-    @Query('maxHeight') maxHeight?: string,
-  ) {
-    if (!file) {
-      throw new BadRequestException('Nenhum arquivo foi enviado');
-    }
-
-    const maxW = maxWidth ? parseInt(maxWidth) : 800;
-    const maxH = maxHeight ? parseInt(maxHeight) : 600;
-
-    const resizedBuffer = await this.uploadService.resizeImage(file, maxW, maxH);
-    
-    return {
-      success: true,
-      message: 'Imagem redimensionada com sucesso',
-      originalSize: file.buffer.length,
-      resizedSize: resizedBuffer.length,
-    };
-  }
-
-  @Post('optimize')
-  @Roles(UserRole.ADMIN, UserRole.COMPANY)
-  @UseInterceptors(FileInterceptor('file'))
-  @ApiOperation({ summary: 'Otimizar imagem' })
-  @ApiConsumes('multipart/form-data')
-  @ApiResponse({ status: 201, description: 'Imagem otimizada com sucesso' })
-  async optimizeImage(@UploadedFile() file: Express.Multer.File) {
-    if (!file) {
-      throw new BadRequestException('Nenhum arquivo foi enviado');
-    }
-
-    const optimizedBuffer = await this.uploadService.optimizeImage(file);
-    
-    return {
-      success: true,
-      message: 'Imagem otimizada com sucesso',
-      originalSize: file.buffer.length,
-      optimizedSize: optimizedBuffer.length,
-      savings: file.buffer.length - optimizedBuffer.length,
-    };
-  }
+  // Nota: Redimensionamento e otimização agora são automáticos no upload
+  // As imagens são otimizadas automaticamente baseadas no tipo de conteúdo
+  // Para controlar a otimização, use os parâmetros de subfolder ao fazer upload
 }

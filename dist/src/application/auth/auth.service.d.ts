@@ -50,4 +50,9 @@ export declare class AuthService {
     validateJwtPayload(payload: JwtPayload): Promise<any>;
     hashPassword(password: string): Promise<string>;
     verifyPassword(password: string, hashedPassword: string): Promise<boolean>;
+    getProfile(userId: string, role: string): Promise<any>;
+    updateProfile(userId: string, role: string, updateData: any): Promise<any>;
+    changePassword(userId: string, role: string, currentPassword: string, newPassword: string): Promise<{
+        message: string;
+    }>;
 }

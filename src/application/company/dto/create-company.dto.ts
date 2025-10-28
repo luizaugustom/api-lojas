@@ -1,5 +1,6 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { IsString, IsNotEmpty, MinLength, MaxLength, IsEmail, IsOptional, Matches, Length, IsBoolean } from 'class-validator';
+import { IsString, IsNotEmpty, MinLength, MaxLength, IsEmail, IsOptional, Matches, Length, IsBoolean, IsEnum } from 'class-validator';
+import { PlanType } from '@prisma/client';
 
 export class CreateCompanyDto {
   @ApiProperty({
@@ -109,6 +110,19 @@ export class CreateCompanyDto {
     message: 'Cor deve estar no formato hexadecimal (#RRGGBB)',
   })
   brandColor?: string;
+
+  @ApiProperty({
+    description: 'Plano da empresa',
+    enum: PlanType,
+    example: PlanType.BASIC,
+    default: PlanType.BASIC,
+    required: false,
+  })
+  @IsOptional()
+  @IsEnum(PlanType, {
+    message: 'Plano deve ser BASIC, PLUS ou PRO',
+  })
+  plan?: PlanType;
 
   @ApiProperty({
     description: 'Status ativo da empresa',

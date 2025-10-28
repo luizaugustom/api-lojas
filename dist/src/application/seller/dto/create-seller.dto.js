@@ -73,7 +73,7 @@ __decorate([
         required: false,
     }),
     (0, class_validator_1.IsOptional)(),
-    (0, class_validator_1.IsDateString)(),
+    (0, class_validator_1.IsString)(),
     __metadata("design:type", String)
 ], CreateSellerDto.prototype, "birthDate", void 0);
 __decorate([
@@ -100,4 +100,30 @@ __decorate([
     }),
     __metadata("design:type", String)
 ], CreateSellerDto.prototype, "phone", void 0);
+__decorate([
+    (0, swagger_1.ApiProperty)({
+        description: 'Taxa de comissão do vendedor em porcentagem',
+        example: 5.5,
+        minimum: 0,
+        maximum: 100,
+        default: 0,
+        required: false,
+    }),
+    (0, class_validator_1.IsOptional)(),
+    (0, class_validator_1.IsNumber)(),
+    (0, class_validator_1.Min)(0, { message: 'Comissão não pode ser negativa' }),
+    (0, class_validator_1.Max)(100, { message: 'Comissão não pode ser maior que 100%' }),
+    __metadata("design:type", Number)
+], CreateSellerDto.prototype, "commissionRate", void 0);
+__decorate([
+    (0, swagger_1.ApiProperty)({
+        description: 'Define se o vendedor tem caixa individual (true) ou usa o caixa compartilhado da empresa (false)',
+        example: false,
+        default: false,
+        required: false,
+    }),
+    (0, class_validator_1.IsOptional)(),
+    (0, class_validator_1.IsBoolean)(),
+    __metadata("design:type", Boolean)
+], CreateSellerDto.prototype, "hasIndividualCash", void 0);
 //# sourceMappingURL=create-seller.dto.js.map

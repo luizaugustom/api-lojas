@@ -1,6 +1,7 @@
 import { SellerService } from './seller.service';
 import { CreateSellerDto } from './dto/create-seller.dto';
 import { UpdateSellerDto } from './dto/update-seller.dto';
+import { UpdateSellerProfileDto } from './dto/update-seller-profile.dto';
 export declare class SellerController {
     private readonly sellerService;
     constructor(sellerService: SellerService);
@@ -13,8 +14,12 @@ export declare class SellerController {
         email: string;
         phone: string;
         cpf: string;
+        commissionRate: import("@prisma/client/runtime/library").Decimal;
     }>;
     findAll(user: any): Promise<{
+        monthlySalesValue: number | import("@prisma/client/runtime/library").Decimal;
+        monthlySalesCount: number;
+        totalRevenue: number | import("@prisma/client/runtime/library").Decimal;
         id: string;
         login: string;
         createdAt: Date;
@@ -27,6 +32,7 @@ export declare class SellerController {
             name: string;
         };
         cpf: string;
+        commissionRate: import("@prisma/client/runtime/library").Decimal;
         _count: {
             sales: number;
         };
@@ -45,6 +51,7 @@ export declare class SellerController {
         };
         cpf: string;
         birthDate: Date;
+        commissionRate: import("@prisma/client/runtime/library").Decimal;
         _count: {
             sales: number;
         };
@@ -66,10 +73,10 @@ export declare class SellerController {
             } & {
                 id: string;
                 createdAt: Date;
+                saleId: string;
                 quantity: number;
                 unitPrice: import("@prisma/client/runtime/library").Decimal;
                 totalPrice: import("@prisma/client/runtime/library").Decimal;
-                saleId: string;
                 productId: string;
             })[];
         } & {
@@ -77,13 +84,13 @@ export declare class SellerController {
             createdAt: Date;
             updatedAt: Date;
             companyId: string;
+            sellerId: string;
             total: import("@prisma/client/runtime/library").Decimal;
             change: import("@prisma/client/runtime/library").Decimal;
             clientCpfCnpj: string | null;
             clientName: string | null;
             isInstallment: boolean;
             saleDate: Date;
-            sellerId: string;
             cashClosureId: string | null;
         })[];
         total: number;
@@ -105,6 +112,7 @@ export declare class SellerController {
         };
         cpf: string;
         birthDate: Date;
+        commissionRate: import("@prisma/client/runtime/library").Decimal;
         _count: {
             sales: number;
         };
@@ -126,10 +134,10 @@ export declare class SellerController {
             } & {
                 id: string;
                 createdAt: Date;
+                saleId: string;
                 quantity: number;
                 unitPrice: import("@prisma/client/runtime/library").Decimal;
                 totalPrice: import("@prisma/client/runtime/library").Decimal;
-                saleId: string;
                 productId: string;
             })[];
         } & {
@@ -137,13 +145,13 @@ export declare class SellerController {
             createdAt: Date;
             updatedAt: Date;
             companyId: string;
+            sellerId: string;
             total: import("@prisma/client/runtime/library").Decimal;
             change: import("@prisma/client/runtime/library").Decimal;
             clientCpfCnpj: string | null;
             clientName: string | null;
             isInstallment: boolean;
             saleDate: Date;
-            sellerId: string;
             cashClosureId: string | null;
         })[];
         total: number;
@@ -151,7 +159,7 @@ export declare class SellerController {
         limit: number;
         totalPages: number;
     }>;
-    updateMyProfile(user: any, updateSellerDto: UpdateSellerDto): Promise<{
+    updateMyProfile(user: any, updateSellerProfileDto: UpdateSellerProfileDto): Promise<{
         id: string;
         login: string;
         createdAt: Date;
@@ -160,6 +168,7 @@ export declare class SellerController {
         email: string;
         phone: string;
         cpf: string;
+        commissionRate: import("@prisma/client/runtime/library").Decimal;
     }>;
     update(id: string, updateSellerDto: UpdateSellerDto, user: any): Promise<{
         id: string;
@@ -170,6 +179,7 @@ export declare class SellerController {
         email: string;
         phone: string;
         cpf: string;
+        commissionRate: import("@prisma/client/runtime/library").Decimal;
     }>;
     remove(id: string, user: any): Promise<{
         message: string;

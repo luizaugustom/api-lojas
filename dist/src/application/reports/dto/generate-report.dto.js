@@ -67,7 +67,7 @@ __decorate([
 __decorate([
     (0, swagger_1.ApiPropertyOptional)({
         description: 'ID do vendedor (opcional)',
-        example: 'cuid123',
+        example: '550e8400-e29b-41d4-a716-446655440000',
     }),
     (0, class_validator_1.IsOptional)(),
     (0, class_validator_1.IsString)(),

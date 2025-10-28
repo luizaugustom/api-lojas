@@ -13,6 +13,7 @@ import {
   UploadedFile,
   UploadedFiles,
   BadRequestException,
+  Logger,
 } from '@nestjs/common';
 import {
   ApiTags,
@@ -42,6 +43,8 @@ import { UuidValidationPipe } from '../../shared/pipes/uuid-validation.pipe';
 @UseGuards(JwtAuthGuard, RolesGuard)
 @ApiBearerAuth()
 export class ProductController {
+  private readonly logger = new Logger(ProductController.name);
+
   constructor(
     private readonly productService: ProductService,
     private readonly uploadService: UploadService,
@@ -98,7 +101,7 @@ export class ProductController {
   @ApiResponse({ status: 200, description: 'Lista de produtos com estoque baixo' })
   getLowStock(
     @CurrentUser() user: any,
-    @Query('threshold', new ParseIntPipe({ optional: true })) threshold = 10,
+    @Query('threshold', new ParseIntPipe({ optional: true })) threshold = 3,
   ) {
     if (user.role === UserRole.ADMIN) {
       return this.productService.getLowStockProducts(undefined, threshold);
@@ -344,9 +347,12 @@ export class ProductController {
   }
 
   @Post('upload-and-create')
-  @Roles(UserRole.ADMIN, UserRole.COMPANY)
-  @UseInterceptors(FilesInterceptor('photos', 10), SanitizeProductDataInterceptor)
-  @ApiOperation({ summary: 'Fazer upload de fotos e criar produto' })
+  @Roles(UserRole.COMPANY)
+  @UseInterceptors(FilesInterceptor('photos', 3), SanitizeProductDataInterceptor) // Max 3 fotos
+  @ApiOperation({ 
+    summary: 'Criar produto com upload de fotos',
+    description: 'Cria um produto e faz upload de até 3 fotos simultaneamente'
+  })
   @ApiConsumes('multipart/form-data')
   @ApiBody({
     description: 'Fotos e dados do produto',
@@ -359,6 +365,8 @@ export class ProductController {
             type: 'string',
             format: 'binary',
           },
+          maxItems: 3,
+          description: 'Máximo de 3 fotos'
         },
         name: { type: 'string' },
         barcode: { type: 'string' },
@@ -367,34 +375,24 @@ export class ProductController {
         size: { type: 'string' },
         category: { type: 'string' },
         expirationDate: { type: 'string' },
+        ncm: { type: 'string' },
+        cfop: { type: 'string' },
       },
     },
   })
   @ApiResponse({ status: 201, description: 'Produto criado com fotos com sucesso' })
-  @ApiResponse({ status: 400, description: 'Dados inválidos' })
+  @ApiResponse({ status: 400, description: 'Dados inválidos ou limite de fotos excedido' })
   async uploadPhotosAndCreate(
     @UploadedFiles() photos: Express.Multer.File[],
     @Body() productData: any,
     @CurrentUser() user: any,
   ) {
-    console.log(`🚀 [ProductController] Upload and create started for company: ${user.companyId}`);
-    console.log(`📸 [ProductController] Photos received: ${photos ? photos.length : 0}`);
-    console.log(`📋 [ProductController] Product data: ${JSON.stringify(productData)}`);
+    this.logger.log(`🚀 Upload and create product for company: ${user.companyId}`);
+    this.logger.log(`📸 Photos received: ${photos?.length || 0}`);
     
-    let photoUrls: string[] = [];
-
-    if (photos && photos.length > 0) {
-      // Validate all files are images
-      const allowedMimeTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/gif', 'image/webp'];
-      for (const photo of photos) {
-        if (!allowedMimeTypes.includes(photo.mimetype)) {
-          throw new BadRequestException('Tipo de arquivo não permitido. Apenas imagens são aceitas.');
-        }
-      }
-
-      const subfolder = `products/${user.companyId}`;
-      photoUrls = await this.uploadService.uploadMultipleFiles(photos, subfolder);
-      console.log(`📁 [ProductController] Photo URLs generated: ${JSON.stringify(photoUrls)}`);
+    // Validar limite de fotos
+    if (photos && photos.length > 3) {
+      throw new BadRequestException('Máximo de 3 fotos por produto');
     }
 
     const createProductDto: CreateProductDto = {
@@ -405,10 +403,55 @@ export class ProductController {
       size: productData.size,
       category: productData.category,
       expirationDate: productData.expirationDate,
-      photos: photoUrls,
+      ncm: productData.ncm,
+      cfop: productData.cfop,
     };
 
-    console.log(`📦 [ProductController] CreateProductDto prepared: ${JSON.stringify(createProductDto)}`);
-    return this.productService.create(user.companyId, createProductDto);
+    return this.productService.createWithPhotos(user.companyId, createProductDto, photos || []);
+  }
+
+  @Patch(':id/photos')
+  @Roles(UserRole.COMPANY)
+  @UseInterceptors(FilesInterceptor('photos', 3))
+  @ApiOperation({ 
+    summary: 'Atualizar fotos de um produto',
+    description: 'Adiciona ou remove fotos de um produto existente'
+  })
+  @ApiConsumes('multipart/form-data')
+  @ApiBody({
+    schema: {
+      type: 'object',
+      properties: {
+        photos: {
+          type: 'array',
+          items: { type: 'string', format: 'binary' },
+          maxItems: 3
+        },
+        photosToDelete: {
+          type: 'array',
+          items: { type: 'string' }
+        },
+      },
+    },
+  })
+  @ApiResponse({ status: 200, description: 'Fotos atualizadas' })
+  @ApiResponse({ status: 400, description: 'Limite excedido' })
+  async updateProductPhotos(
+    @Param('id') id: string,
+    @UploadedFiles() newPhotos: Express.Multer.File[],
+    @Body('photosToDelete') photosToDelete: string | string[],
+    @CurrentUser() user: any,
+  ) {
+    const photosToDeleteArray = Array.isArray(photosToDelete) 
+      ? photosToDelete 
+      : photosToDelete ? [photosToDelete] : [];
+
+    return this.productService.updateWithPhotos(
+      id,
+      user.companyId,
+      {},
+      newPhotos,
+      photosToDeleteArray,
+    );
   }
 }

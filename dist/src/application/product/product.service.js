@@ -14,16 +14,23 @@ exports.ProductService = void 0;
 const common_1 = require("@nestjs/common");
 const prisma_service_1 = require("../../infrastructure/database/prisma.service");
 const upload_service_1 = require("../upload/upload.service");
+const plan_limits_service_1 = require("../../shared/services/plan-limits.service");
+const product_photo_service_1 = require("./services/product-photo.service");
+const product_photo_validation_service_1 = require("./services/product-photo-validation.service");
 let ProductService = ProductService_1 = class ProductService {
-    constructor(prisma, uploadService) {
+    constructor(prisma, uploadService, planLimitsService, photoService, photoValidationService) {
         this.prisma = prisma;
         this.uploadService = uploadService;
+        this.planLimitsService = planLimitsService;
+        this.photoService = photoService;
+        this.photoValidationService = photoValidationService;
         this.logger = new common_1.Logger(ProductService_1.name);
     }
     async create(companyId, createProductDto) {
         try {
             this.logger.log(`🚀 Creating product for company: ${companyId}`);
             this.logger.log(`📋 Product data: ${JSON.stringify(createProductDto)}`);
+            await this.planLimitsService.validateProductLimit(companyId);
             const product = await this.prisma.product.create({
                 data: {
                     ...createProductDto,
@@ -47,6 +54,42 @@ let ProductService = ProductService_1 = class ProductService {
                 throw new common_1.ConflictException('Código de barras já está em uso');
             }
             this.logger.error('Error creating product:', error);
+            throw error;
+        }
+    }
+    async createWithPhotos(companyId, createProductDto, photos) {
+        try {
+            this.logger.log(`🚀 Creating product with photos for company: ${companyId}`);
+            this.logger.log(`📸 Number of photos: ${photos?.length || 0}`);
+            await this.planLimitsService.validateProductLimit(companyId);
+            let photoUrls = [];
+            if (photos && photos.length > 0) {
+                photoUrls = await this.photoService.uploadProductPhotos(companyId, photos, 0);
+            }
+            const product = await this.prisma.product.create({
+                data: {
+                    ...createProductDto,
+                    photos: photoUrls,
+                    companyId,
+                },
+                include: {
+                    company: {
+                        select: {
+                            id: true,
+                            name: true,
+                        },
+                    },
+                },
+            });
+            this.logger.log(`✅ Product with photos created: ${product.id}`);
+            this.logger.log(`📸 Photos uploaded: ${photoUrls.length}`);
+            return product;
+        }
+        catch (error) {
+            if (error.code === 'P2002') {
+                throw new common_1.ConflictException('Código de barras já está em uso');
+            }
+            this.logger.error('Error creating product with photos:', error);
             throw error;
         }
     }
@@ -167,6 +210,43 @@ let ProductService = ProductService_1 = class ProductService {
             throw error;
         }
     }
+    async updateWithPhotos(id, companyId, updateProductDto, newPhotos, photosToDelete) {
+        try {
+            const existingProduct = await this.prisma.product.findUnique({
+                where: { id },
+                select: { id: true, photos: true, companyId: true }
+            });
+            if (!existingProduct) {
+                throw new common_1.NotFoundException('Produto não encontrado');
+            }
+            if (existingProduct.companyId !== companyId) {
+                throw new common_1.NotFoundException('Produto não encontrado');
+            }
+            const updatedPhotos = await this.photoService.prepareProductPhotos(companyId, newPhotos || [], existingProduct.photos || [], photosToDelete || []);
+            const product = await this.prisma.product.update({
+                where: { id },
+                data: {
+                    ...updateProductDto,
+                    photos: updatedPhotos,
+                },
+                include: {
+                    company: {
+                        select: {
+                            id: true,
+                            name: true,
+                        },
+                    },
+                },
+            });
+            this.logger.log(`✅ Product updated with photos: ${id}`);
+            this.logger.log(`📸 New photo count: ${updatedPhotos.length}`);
+            return product;
+        }
+        catch (error) {
+            this.logger.error('Error updating product with photos:', error);
+            throw error;
+        }
+    }
     async remove(id, companyId) {
         try {
             this.logger.log(`🚀 Starting product deletion process for ID: ${id}, CompanyID: ${companyId || 'null'}`);
@@ -233,7 +313,7 @@ let ProductService = ProductService_1 = class ProductService {
         this.logger.log(`Product stock updated: ${product.id} to ${updateStockDto.stockQuantity}`);
         return product;
     }
-    async getLowStockProducts(companyId, threshold = 10) {
+    async getLowStockProducts(companyId, threshold = 3) {
         const where = {
             stockQuantity: {
                 lte: threshold,
@@ -459,6 +539,9 @@ exports.ProductService = ProductService;
 exports.ProductService = ProductService = ProductService_1 = __decorate([
     (0, common_1.Injectable)(),
     __metadata("design:paramtypes", [prisma_service_1.PrismaService,
-        upload_service_1.UploadService])
+        upload_service_1.UploadService,
+        plan_limits_service_1.PlanLimitsService,
+        product_photo_service_1.ProductPhotoService,
+        product_photo_validation_service_1.ProductPhotoValidationService])
 ], ProductService);
 //# sourceMappingURL=product.service.js.map

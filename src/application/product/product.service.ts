@@ -4,6 +4,9 @@ import { CreateProductDto } from './dto/create-product.dto';
 import { UpdateProductDto } from './dto/update-product.dto';
 import { UpdateStockDto } from './dto/update-stock.dto';
 import { UploadService } from '../upload/upload.service';
+import { PlanLimitsService } from '../../shared/services/plan-limits.service';
+import { ProductPhotoService } from './services/product-photo.service';
+import { ProductPhotoValidationService } from './services/product-photo-validation.service';
 
 @Injectable()
 export class ProductService {
@@ -12,12 +15,18 @@ export class ProductService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly uploadService: UploadService,
+    private readonly planLimitsService: PlanLimitsService,
+    private readonly photoService: ProductPhotoService,
+    private readonly photoValidationService: ProductPhotoValidationService,
   ) {}
 
   async create(companyId: string, createProductDto: CreateProductDto) {
     try {
       this.logger.log(`🚀 Creating product for company: ${companyId}`);
       this.logger.log(`📋 Product data: ${JSON.stringify(createProductDto)}`);
+      
+      // Validar limite de produtos do plano
+      await this.planLimitsService.validateProductLimit(companyId);
       
       const product = await this.prisma.product.create({
         data: {
@@ -42,6 +51,52 @@ export class ProductService {
         throw new ConflictException('Código de barras já está em uso');
       }
       this.logger.error('Error creating product:', error);
+      throw error;
+    }
+  }
+
+  async createWithPhotos(
+    companyId: string, 
+    createProductDto: CreateProductDto, 
+    photos: Express.Multer.File[]
+  ) {
+    try {
+      this.logger.log(`🚀 Creating product with photos for company: ${companyId}`);
+      this.logger.log(`📸 Number of photos: ${photos?.length || 0}`);
+      
+      // Validar limite de produtos do plano
+      await this.planLimitsService.validateProductLimit(companyId);
+      
+      // Processar fotos se houver
+      let photoUrls: string[] = [];
+      if (photos && photos.length > 0) {
+        photoUrls = await this.photoService.uploadProductPhotos(companyId, photos, 0);
+      }
+      
+      const product = await this.prisma.product.create({
+        data: {
+          ...createProductDto,
+          photos: photoUrls,
+          companyId,
+        },
+        include: {
+          company: {
+            select: {
+              id: true,
+              name: true,
+            },
+          },
+        },
+      });
+
+      this.logger.log(`✅ Product with photos created: ${product.id}`);
+      this.logger.log(`📸 Photos uploaded: ${photoUrls.length}`);
+      return product;
+    } catch (error) {
+      if (error.code === 'P2002') {
+        throw new ConflictException('Código de barras já está em uso');
+      }
+      this.logger.error('Error creating product with photos:', error);
       throw error;
     }
   }
@@ -183,6 +238,61 @@ export class ProductService {
     }
   }
 
+  async updateWithPhotos(
+    id: string,
+    companyId: string,
+    updateProductDto: UpdateProductDto,
+    newPhotos?: Express.Multer.File[],
+    photosToDelete?: string[],
+  ) {
+    try {
+      // Buscar produto atual
+      const existingProduct = await this.prisma.product.findUnique({ 
+        where: { id },
+        select: { id: true, photos: true, companyId: true }
+      });
+
+      if (!existingProduct) {
+        throw new NotFoundException('Produto não encontrado');
+      }
+
+      if (existingProduct.companyId !== companyId) {
+        throw new NotFoundException('Produto não encontrado');
+      }
+
+      // Processar fotos
+      const updatedPhotos = await this.photoService.prepareProductPhotos(
+        companyId,
+        newPhotos || [],
+        existingProduct.photos || [],
+        photosToDelete || [],
+      );
+
+      const product = await this.prisma.product.update({
+        where: { id },
+        data: {
+          ...updateProductDto,
+          photos: updatedPhotos,
+        },
+        include: {
+          company: {
+            select: {
+              id: true,
+              name: true,
+            },
+          },
+        },
+      });
+
+      this.logger.log(`✅ Product updated with photos: ${id}`);
+      this.logger.log(`📸 New photo count: ${updatedPhotos.length}`);
+      return product;
+    } catch (error) {
+      this.logger.error('Error updating product with photos:', error);
+      throw error;
+    }
+  }
+
   async remove(id: string, companyId?: string) {
     try {
       this.logger.log(`🚀 Starting product deletion process for ID: ${id}, CompanyID: ${companyId || 'null'}`);
@@ -270,7 +380,7 @@ export class ProductService {
     return product;
   }
 
-  async getLowStockProducts(companyId?: string, threshold = 10) {
+  async getLowStockProducts(companyId?: string, threshold = 3) {
     const where: any = {
       stockQuantity: {
         lte: threshold,

@@ -11,13 +11,16 @@ const common_1 = require("@nestjs/common");
 const admin_service_1 = require("./admin.service");
 const admin_controller_1 = require("./admin.controller");
 const prisma_module_1 = require("../../infrastructure/database/prisma.module");
+const hash_service_1 = require("../../shared/services/hash.service");
+const encryption_service_1 = require("../../shared/services/encryption.service");
+const notification_module_1 = require("../notification/notification.module");
 let AdminModule = class AdminModule {
 };
 exports.AdminModule = AdminModule;
 exports.AdminModule = AdminModule = __decorate([
     (0, common_1.Module)({
-        imports: [prisma_module_1.PrismaModule],
-        providers: [admin_service_1.AdminService],
+        imports: [prisma_module_1.PrismaModule, notification_module_1.NotificationModule],
+        providers: [admin_service_1.AdminService, hash_service_1.HashService, encryption_service_1.EncryptionService],
         controllers: [admin_controller_1.AdminController],
         exports: [admin_service_1.AdminService],
     })

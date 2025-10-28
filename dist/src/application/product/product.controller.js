@@ -11,6 +11,7 @@ var __metadata = (this && this.__metadata) || function (k, v) {
 var __param = (this && this.__param) || function (paramIndex, decorator) {
     return function (target, key) { decorator(target, key, paramIndex); }
 };
+var ProductController_1;
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.ProductController = void 0;
 const common_1 = require("@nestjs/common");
@@ -28,10 +29,11 @@ const upload_service_1 = require("../upload/upload.service");
 const sanitize_product_data_interceptor_1 = require("./interceptors/sanitize-product-data.interceptor");
 const sanitize_update_data_interceptor_1 = require("./interceptors/sanitize-update-data.interceptor");
 const uuid_validation_pipe_1 = require("../../shared/pipes/uuid-validation.pipe");
-let ProductController = class ProductController {
+let ProductController = ProductController_1 = class ProductController {
     constructor(productService, uploadService) {
         this.productService = productService;
         this.uploadService = uploadService;
+        this.logger = new common_1.Logger(ProductController_1.name);
     }
     create(user, createProductDto) {
         return this.productService.create(user.companyId, createProductDto);
@@ -48,7 +50,7 @@ let ProductController = class ProductController {
         }
         return this.productService.getProductStats(user.companyId);
     }
-    getLowStock(user, threshold = 10) {
+    getLowStock(user, threshold = 3) {
         if (user.role === roles_decorator_1.UserRole.ADMIN) {
             return this.productService.getLowStockProducts(undefined, threshold);
         }
@@ -144,20 +146,10 @@ let ProductController = class ProductController {
         return this.productService.removeAllPhotos(id);
     }
     async uploadPhotosAndCreate(photos, productData, user) {
-        console.log(`🚀 [ProductController] Upload and create started for company: ${user.companyId}`);
-        console.log(`📸 [ProductController] Photos received: ${photos ? photos.length : 0}`);
-        console.log(`📋 [ProductController] Product data: ${JSON.stringify(productData)}`);
-        let photoUrls = [];
-        if (photos && photos.length > 0) {
-            const allowedMimeTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/gif', 'image/webp'];
-            for (const photo of photos) {
-                if (!allowedMimeTypes.includes(photo.mimetype)) {
-                    throw new common_1.BadRequestException('Tipo de arquivo não permitido. Apenas imagens são aceitas.');
-                }
-            }
-            const subfolder = `products/${user.companyId}`;
-            photoUrls = await this.uploadService.uploadMultipleFiles(photos, subfolder);
-            console.log(`📁 [ProductController] Photo URLs generated: ${JSON.stringify(photoUrls)}`);
+        this.logger.log(`🚀 Upload and create product for company: ${user.companyId}`);
+        this.logger.log(`📸 Photos received: ${photos?.length || 0}`);
+        if (photos && photos.length > 3) {
+            throw new common_1.BadRequestException('Máximo de 3 fotos por produto');
         }
         const createProductDto = {
             name: productData.name,
@@ -167,10 +159,16 @@ let ProductController = class ProductController {
             size: productData.size,
             category: productData.category,
             expirationDate: productData.expirationDate,
-            photos: photoUrls,
+            ncm: productData.ncm,
+            cfop: productData.cfop,
         };
-        console.log(`📦 [ProductController] CreateProductDto prepared: ${JSON.stringify(createProductDto)}`);
-        return this.productService.create(user.companyId, createProductDto);
+        return this.productService.createWithPhotos(user.companyId, createProductDto, photos || []);
+    }
+    async updateProductPhotos(id, newPhotos, photosToDelete, user) {
+        const photosToDeleteArray = Array.isArray(photosToDelete)
+            ? photosToDelete
+            : photosToDelete ? [photosToDelete] : [];
+        return this.productService.updateWithPhotos(id, user.companyId, {}, newPhotos, photosToDeleteArray);
     }
 };
 exports.ProductController = ProductController;
@@ -402,9 +400,12 @@ __decorate([
 ], ProductController.prototype, "removeAllPhotos", null);
 __decorate([
     (0, common_1.Post)('upload-and-create'),
-    (0, roles_decorator_1.Roles)(roles_decorator_1.UserRole.ADMIN, roles_decorator_1.UserRole.COMPANY),
-    (0, common_1.UseInterceptors)((0, platform_express_1.FilesInterceptor)('photos', 10), sanitize_product_data_interceptor_1.SanitizeProductDataInterceptor),
-    (0, swagger_1.ApiOperation)({ summary: 'Fazer upload de fotos e criar produto' }),
+    (0, roles_decorator_1.Roles)(roles_decorator_1.UserRole.COMPANY),
+    (0, common_1.UseInterceptors)((0, platform_express_1.FilesInterceptor)('photos', 3), sanitize_product_data_interceptor_1.SanitizeProductDataInterceptor),
+    (0, swagger_1.ApiOperation)({
+        summary: 'Criar produto com upload de fotos',
+        description: 'Cria um produto e faz upload de até 3 fotos simultaneamente'
+    }),
     (0, swagger_1.ApiConsumes)('multipart/form-data'),
     (0, swagger_1.ApiBody)({
         description: 'Fotos e dados do produto',
@@ -417,6 +418,8 @@ __decorate([
                         type: 'string',
                         format: 'binary',
                     },
+                    maxItems: 3,
+                    description: 'Máximo de 3 fotos'
                 },
                 name: { type: 'string' },
                 barcode: { type: 'string' },
@@ -425,11 +428,13 @@ __decorate([
                 size: { type: 'string' },
                 category: { type: 'string' },
                 expirationDate: { type: 'string' },
+                ncm: { type: 'string' },
+                cfop: { type: 'string' },
             },
         },
     }),
     (0, swagger_1.ApiResponse)({ status: 201, description: 'Produto criado com fotos com sucesso' }),
-    (0, swagger_1.ApiResponse)({ status: 400, description: 'Dados inválidos' }),
+    (0, swagger_1.ApiResponse)({ status: 400, description: 'Dados inválidos ou limite de fotos excedido' }),
     __param(0, (0, common_1.UploadedFiles)()),
     __param(1, (0, common_1.Body)()),
     __param(2, (0, current_user_decorator_1.CurrentUser)()),
@@ -437,7 +442,42 @@ __decorate([
     __metadata("design:paramtypes", [Array, Object, Object]),
     __metadata("design:returntype", Promise)
 ], ProductController.prototype, "uploadPhotosAndCreate", null);
-exports.ProductController = ProductController = __decorate([
+__decorate([
+    (0, common_1.Patch)(':id/photos'),
+    (0, roles_decorator_1.Roles)(roles_decorator_1.UserRole.COMPANY),
+    (0, common_1.UseInterceptors)((0, platform_express_1.FilesInterceptor)('photos', 3)),
+    (0, swagger_1.ApiOperation)({
+        summary: 'Atualizar fotos de um produto',
+        description: 'Adiciona ou remove fotos de um produto existente'
+    }),
+    (0, swagger_1.ApiConsumes)('multipart/form-data'),
+    (0, swagger_1.ApiBody)({
+        schema: {
+            type: 'object',
+            properties: {
+                photos: {
+                    type: 'array',
+                    items: { type: 'string', format: 'binary' },
+                    maxItems: 3
+                },
+                photosToDelete: {
+                    type: 'array',
+                    items: { type: 'string' }
+                },
+            },
+        },
+    }),
+    (0, swagger_1.ApiResponse)({ status: 200, description: 'Fotos atualizadas' }),
+    (0, swagger_1.ApiResponse)({ status: 400, description: 'Limite excedido' }),
+    __param(0, (0, common_1.Param)('id')),
+    __param(1, (0, common_1.UploadedFiles)()),
+    __param(2, (0, common_1.Body)('photosToDelete')),
+    __param(3, (0, current_user_decorator_1.CurrentUser)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String, Array, Object, Object]),
+    __metadata("design:returntype", Promise)
+], ProductController.prototype, "updateProductPhotos", null);
+exports.ProductController = ProductController = ProductController_1 = __decorate([
     (0, swagger_1.ApiTags)('product'),
     (0, common_1.Controller)('product'),
     (0, common_1.UseGuards)(jwt_auth_guard_1.JwtAuthGuard, roles_guard_1.RolesGuard),

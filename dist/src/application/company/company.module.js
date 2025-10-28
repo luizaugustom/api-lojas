@@ -12,13 +12,16 @@ const company_service_1 = require("./company.service");
 const company_controller_1 = require("./company.controller");
 const prisma_module_1 = require("../../infrastructure/database/prisma.module");
 const hash_module_1 = require("../../shared/services/hash.module");
+const plan_limits_module_1 = require("../../shared/services/plan-limits.module");
+const encryption_service_1 = require("../../shared/services/encryption.service");
+const upload_module_1 = require("../upload/upload.module");
 let CompanyModule = class CompanyModule {
 };
 exports.CompanyModule = CompanyModule;
 exports.CompanyModule = CompanyModule = __decorate([
     (0, common_1.Module)({
-        imports: [prisma_module_1.PrismaModule, hash_module_1.HashModule],
-        providers: [company_service_1.CompanyService],
+        imports: [prisma_module_1.PrismaModule, hash_module_1.HashModule, plan_limits_module_1.PlanLimitsModule, upload_module_1.UploadModule],
+        providers: [company_service_1.CompanyService, encryption_service_1.EncryptionService],
         controllers: [company_controller_1.CompanyController],
         exports: [company_service_1.CompanyService],
     })

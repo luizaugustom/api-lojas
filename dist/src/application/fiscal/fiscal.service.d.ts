@@ -3,16 +3,34 @@ import { PrismaService } from '../../infrastructure/database/prisma.service';
 import { FiscalApiService } from '../../shared/services/fiscal-api.service';
 export interface NFeData {
     companyId: string;
-    clientCpfCnpj?: string;
-    clientName?: string;
-    items: Array<{
-        productId: string;
+    saleId?: string;
+    recipient?: {
+        document: string;
+        name: string;
+        email?: string;
+        phone?: string;
+        address?: {
+            zipCode?: string;
+            street?: string;
+            number?: string;
+            complement?: string;
+            district?: string;
+            city?: string;
+            state?: string;
+        };
+    };
+    items?: Array<{
+        description: string;
         quantity: number;
         unitPrice: number;
-        totalPrice: number;
+        ncm?: string;
+        cfop: string;
+        unitOfMeasure: string;
     }>;
-    totalValue: number;
-    paymentMethod: string[];
+    payment?: {
+        method: string;
+    };
+    additionalInfo?: string;
 }
 export interface NFCeData {
     companyId: string;
@@ -65,8 +83,12 @@ export declare class FiscalService {
             status: string;
             xmlContent: string | null;
             pdfUrl: string | null;
+            qrCodeUrl: string | null;
             documentType: string;
             totalValue: import("@prisma/client/runtime/library").Decimal | null;
+            supplierName: string | null;
+            protocol: string | null;
+            serieNumber: string | null;
             emissionDate: Date;
         })[];
         total: number;
@@ -90,8 +112,12 @@ export declare class FiscalService {
         status: string;
         xmlContent: string | null;
         pdfUrl: string | null;
+        qrCodeUrl: string | null;
         documentType: string;
         totalValue: import("@prisma/client/runtime/library").Decimal | null;
+        supplierName: string | null;
+        protocol: string | null;
+        serieNumber: string | null;
         emissionDate: Date;
     }>;
     cancelFiscalDocument(id: string, reason: string, companyId?: string): Promise<{
@@ -104,8 +130,12 @@ export declare class FiscalService {
         status: string;
         xmlContent: string | null;
         pdfUrl: string | null;
+        qrCodeUrl: string | null;
         documentType: string;
         totalValue: import("@prisma/client/runtime/library").Decimal | null;
+        supplierName: string | null;
+        protocol: string | null;
+        serieNumber: string | null;
         emissionDate: Date;
     }>;
     downloadFiscalDocument(id: string, format: 'xml' | 'pdf', companyId?: string): Promise<{
@@ -160,8 +190,12 @@ export declare class FiscalService {
         status: string;
         xmlContent: string | null;
         pdfUrl: string | null;
+        qrCodeUrl: string | null;
         documentType: string;
         totalValue: import("@prisma/client/runtime/library").Decimal | null;
+        supplierName: string | null;
+        protocol: string | null;
+        serieNumber: string | null;
         emissionDate: Date;
     }>;
     getFiscalApiStatus(): Promise<any>;
@@ -181,4 +215,26 @@ export declare class FiscalService {
         message: string;
     }>;
     private extractDocumentInfo;
+    createInboundInvoice(companyId: string, data: {
+        accessKey: string;
+        supplierName: string;
+        totalValue: number;
+        documentNumber?: string;
+    }): Promise<{
+        id: string;
+        documentNumber: string;
+        documentType: string;
+        accessKey: string;
+        status: string;
+        totalValue: import("@prisma/client/runtime/library").Decimal;
+        supplierName: string;
+        emissionDate: Date;
+        message: string;
+    }>;
+    deleteInboundInvoice(id: string, companyId: string): Promise<{
+        message: string;
+        deletedId: string;
+        documentNumber: string;
+        accessKey: string;
+    }>;
 }

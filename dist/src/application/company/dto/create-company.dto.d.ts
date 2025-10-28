@@ -1,3 +1,4 @@
+import { PlanType } from '@prisma/client';
 export declare class CreateCompanyDto {
     name: string;
     login: string;
@@ -9,6 +10,7 @@ export declare class CreateCompanyDto {
     email: string;
     logoUrl?: string;
     brandColor?: string;
+    plan?: PlanType;
     isActive?: boolean;
     zipCode?: string;
     state?: string;

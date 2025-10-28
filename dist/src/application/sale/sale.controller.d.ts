@@ -13,7 +13,9 @@ export declare class SaleController {
             cnpj: string;
             email: string;
             phone: string;
+            stateRegistration: string;
             customFooter: string;
+            state: string;
             district: string;
             street: string;
         };
@@ -27,22 +29,24 @@ export declare class SaleController {
                 name: string;
                 barcode: string;
                 price: import("@prisma/client/runtime/library").Decimal;
+                ncm: string;
+                cfop: string;
             };
         } & {
             id: string;
             createdAt: Date;
+            saleId: string;
             quantity: number;
             unitPrice: import("@prisma/client/runtime/library").Decimal;
             totalPrice: import("@prisma/client/runtime/library").Decimal;
-            saleId: string;
             productId: string;
         })[];
         paymentMethods: {
             id: string;
             createdAt: Date;
             amount: import("@prisma/client/runtime/library").Decimal;
-            method: string;
             saleId: string;
+            method: string;
             additionalInfo: string | null;
         }[];
     } & {
@@ -50,13 +54,13 @@ export declare class SaleController {
         createdAt: Date;
         updatedAt: Date;
         companyId: string;
+        sellerId: string;
         total: import("@prisma/client/runtime/library").Decimal;
         change: import("@prisma/client/runtime/library").Decimal;
         clientCpfCnpj: string | null;
         clientName: string | null;
         isInstallment: boolean;
         saleDate: Date;
-        sellerId: string;
         cashClosureId: string | null;
     }>;
     findAll(user: any, page?: number, limit?: number, sellerId?: string, startDate?: string, endDate?: string): Promise<{
@@ -74,18 +78,18 @@ export declare class SaleController {
             } & {
                 id: string;
                 createdAt: Date;
+                saleId: string;
                 quantity: number;
                 unitPrice: import("@prisma/client/runtime/library").Decimal;
                 totalPrice: import("@prisma/client/runtime/library").Decimal;
-                saleId: string;
                 productId: string;
             })[];
             paymentMethods: {
                 id: string;
                 createdAt: Date;
                 amount: import("@prisma/client/runtime/library").Decimal;
-                method: string;
                 saleId: string;
+                method: string;
                 additionalInfo: string | null;
             }[];
         } & {
@@ -93,13 +97,13 @@ export declare class SaleController {
             createdAt: Date;
             updatedAt: Date;
             companyId: string;
+            sellerId: string;
             total: import("@prisma/client/runtime/library").Decimal;
             change: import("@prisma/client/runtime/library").Decimal;
             clientCpfCnpj: string | null;
             clientName: string | null;
             isInstallment: boolean;
             saleDate: Date;
-            sellerId: string;
             cashClosureId: string | null;
         })[];
         total: number;
@@ -128,18 +132,18 @@ export declare class SaleController {
             } & {
                 id: string;
                 createdAt: Date;
+                saleId: string;
                 quantity: number;
                 unitPrice: import("@prisma/client/runtime/library").Decimal;
                 totalPrice: import("@prisma/client/runtime/library").Decimal;
-                saleId: string;
                 productId: string;
             })[];
             paymentMethods: {
                 id: string;
                 createdAt: Date;
                 amount: import("@prisma/client/runtime/library").Decimal;
-                method: string;
                 saleId: string;
+                method: string;
                 additionalInfo: string | null;
             }[];
         } & {
@@ -147,13 +151,13 @@ export declare class SaleController {
             createdAt: Date;
             updatedAt: Date;
             companyId: string;
+            sellerId: string;
             total: import("@prisma/client/runtime/library").Decimal;
             change: import("@prisma/client/runtime/library").Decimal;
             clientCpfCnpj: string | null;
             clientName: string | null;
             isInstallment: boolean;
             saleDate: Date;
-            sellerId: string;
             cashClosureId: string | null;
         })[];
         total: number;
@@ -187,18 +191,18 @@ export declare class SaleController {
         } & {
             id: string;
             createdAt: Date;
+            saleId: string;
             quantity: number;
             unitPrice: import("@prisma/client/runtime/library").Decimal;
             totalPrice: import("@prisma/client/runtime/library").Decimal;
-            saleId: string;
             productId: string;
         })[];
         paymentMethods: {
             id: string;
             createdAt: Date;
             amount: import("@prisma/client/runtime/library").Decimal;
-            method: string;
             saleId: string;
+            method: string;
             additionalInfo: string | null;
         }[];
         exchanges: ({
@@ -222,13 +226,13 @@ export declare class SaleController {
         createdAt: Date;
         updatedAt: Date;
         companyId: string;
+        sellerId: string;
         total: import("@prisma/client/runtime/library").Decimal;
         change: import("@prisma/client/runtime/library").Decimal;
         clientCpfCnpj: string | null;
         clientName: string | null;
         isInstallment: boolean;
         saleDate: Date;
-        sellerId: string;
         cashClosureId: string | null;
     }>;
     processExchange(user: any, processExchangeDto: ProcessExchangeDto): Promise<{
@@ -259,10 +263,10 @@ export declare class SaleController {
         } & {
             id: string;
             createdAt: Date;
+            saleId: string;
             quantity: number;
             unitPrice: import("@prisma/client/runtime/library").Decimal;
             totalPrice: import("@prisma/client/runtime/library").Decimal;
-            saleId: string;
             productId: string;
         })[];
     } & {
@@ -270,13 +274,13 @@ export declare class SaleController {
         createdAt: Date;
         updatedAt: Date;
         companyId: string;
+        sellerId: string;
         total: import("@prisma/client/runtime/library").Decimal;
         change: import("@prisma/client/runtime/library").Decimal;
         clientCpfCnpj: string | null;
         clientName: string | null;
         isInstallment: boolean;
         saleDate: Date;
-        sellerId: string;
         cashClosureId: string | null;
     }>;
     remove(id: string, user: any): Promise<{

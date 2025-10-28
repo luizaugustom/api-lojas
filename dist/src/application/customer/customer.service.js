@@ -218,18 +218,27 @@ let CustomerService = CustomerService_1 = class CustomerService {
     }
     async getCustomerInstallments(customerId, companyId) {
         const where = {
-            clientCpfCnpj: customerId,
-            isInstallment: true,
+            customerId: customerId,
         };
         if (companyId) {
             where.companyId = companyId;
         }
-        const sales = await this.prisma.sale.findMany({
+        const installments = await this.prisma.installment.findMany({
             where,
             include: {
-                items: {
+                sale: {
                     include: {
-                        product: {
+                        items: {
+                            include: {
+                                product: {
+                                    select: {
+                                        id: true,
+                                        name: true,
+                                    },
+                                },
+                            },
+                        },
+                        seller: {
                             select: {
                                 id: true,
                                 name: true,
@@ -237,18 +246,17 @@ let CustomerService = CustomerService_1 = class CustomerService {
                         },
                     },
                 },
-                seller: {
-                    select: {
-                        id: true,
-                        name: true,
+                payments: {
+                    orderBy: {
+                        paymentDate: 'desc',
                     },
                 },
             },
             orderBy: {
-                saleDate: 'desc',
+                dueDate: 'asc',
             },
         });
-        return sales;
+        return { data: installments };
     }
     async sendPromotionalEmail(customerId, promotionData) {
         try {

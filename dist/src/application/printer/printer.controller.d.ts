@@ -1,10 +1,11 @@
 import { PrinterService, PrinterConfig } from './printer.service';
+import { AddPrinterDto } from './dto/add-printer.dto';
 import { UpdateCustomFooterDto } from './dto/update-custom-footer.dto';
 export declare class PrinterController {
     private readonly printerService;
     constructor(printerService: PrinterService);
     discoverPrinters(): Promise<PrinterConfig[]>;
-    addPrinter(user: any, printerConfig: PrinterConfig): Promise<{
+    addPrinter(user: any, printerConfig: AddPrinterDto): Promise<{
         id: string;
         createdAt: Date;
         updatedAt: Date;
@@ -51,4 +52,25 @@ export declare class PrinterController {
     getCustomFooter(user: any): Promise<{
         customFooter: string;
     }>;
+    getAvailablePrinters(): Promise<import("../../shared/services/printer-driver.service").SystemPrinter[]>;
+    checkDrivers(): Promise<{
+        allInstalled: boolean;
+        drivers: any[];
+        message: string;
+    }>;
+    installDrivers(): Promise<{
+        success: boolean;
+        message: string;
+        errors: string[];
+    }>;
+    checkAndInstallDrivers(): Promise<{
+        driversInstalled: boolean;
+        message: string;
+        errors: string[];
+    }>;
+    openCashDrawer(id: string): Promise<{
+        success: boolean;
+        message: string;
+    }>;
+    getPrintQueue(id: string): Promise<any[]>;
 }

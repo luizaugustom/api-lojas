@@ -16,12 +16,24 @@ async function bootstrap() {
   const configService = app.get(ConfigService);
 
   // Serve static files from uploads directory
-  app.useStaticAssets(join(__dirname, '..', 'uploads'), {
+  app.useStaticAssets(join(process.cwd(), 'uploads'), {
     prefix: '/uploads/',
   });
 
-  // Security
-  app.use(helmet());
+  // Security - Configure helmet to allow images
+  app.use(
+    helmet({
+      crossOriginResourcePolicy: { policy: 'cross-origin' },
+      contentSecurityPolicy: {
+        directives: {
+          defaultSrc: ["'self'"],
+          imgSrc: ["'self'", 'data:', 'blob:', 'https:', 'http:'],
+          styleSrc: ["'self'", "'unsafe-inline'"],
+          scriptSrc: ["'self'", "'unsafe-inline'", "'unsafe-eval'"],
+        },
+      },
+    })
+  );
   app.use(compression());
 
   // CORS (credentials-compatible): when CORS_ORIGIN='*', reflect the request origin instead of '*'

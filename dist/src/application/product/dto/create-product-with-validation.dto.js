@@ -113,6 +113,15 @@ __decorate([
     }),
     (0, class_validator_1.IsOptional)(),
     (0, class_validator_1.IsDateString)(),
+    (0, class_transformer_1.Transform)(({ value }) => {
+        if (!value || value === null || value === '' || (typeof value === 'string' && value.trim() === '')) {
+            return undefined;
+        }
+        if (typeof value === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(value)) {
+            return new Date(value + 'T00:00:00.000Z').toISOString();
+        }
+        return value;
+    }),
     __metadata("design:type", String)
 ], CreateProductWithValidationDto.prototype, "expirationDate", void 0);
 __decorate([

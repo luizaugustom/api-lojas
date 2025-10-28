@@ -10,4 +10,5 @@ export declare class CreateSaleDto {
     clientName?: string;
     paymentMethods: PaymentMethodDto[];
     totalPaid?: number;
+    skipPrint?: boolean;
 }

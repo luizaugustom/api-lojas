@@ -282,11 +282,227 @@ export class AuthService {
   }
 
   async hashPassword(password: string): Promise<string> {
-    const saltRounds = this.configService.get('BCRYPT_ROUNDS', 12);
+    const saltRounds = parseInt(this.configService.get('BCRYPT_ROUNDS', '10'), 10) || 10;
     return bcrypt.hash(password, saltRounds);
   }
 
   async verifyPassword(password: string, hashedPassword: string): Promise<boolean> {
     return bcrypt.compare(password, hashedPassword);
+  }
+
+  async getProfile(userId: string, role: string) {
+    try {
+      let user = null;
+
+      switch (role) {
+        case 'admin':
+          user = await this.prisma.admin.findUnique({
+            where: { id: userId },
+            select: {
+              id: true,
+              login: true,
+              createdAt: true,
+              updatedAt: true,
+            },
+          });
+          break;
+        case 'company':
+          user = await this.prisma.company.findUnique({
+            where: { id: userId },
+            select: {
+              id: true,
+              login: true,
+              name: true,
+              email: true,
+              phone: true,
+              cnpj: true,
+              plan: true,
+              isActive: true,
+              createdAt: true,
+              updatedAt: true,
+            },
+          });
+          break;
+        case 'seller':
+          user = await this.prisma.seller.findUnique({
+            where: { id: userId },
+            select: {
+              id: true,
+              login: true,
+              name: true,
+              email: true,
+              phone: true,
+              cpf: true,
+              commissionRate: true,
+              companyId: true,
+              createdAt: true,
+              updatedAt: true,
+              company: {
+                select: {
+                  id: true,
+                  name: true,
+                },
+              },
+            },
+          });
+          break;
+      }
+
+      if (!user) {
+        throw new UnauthorizedException('Usuário não encontrado');
+      }
+
+      return { ...user, role };
+    } catch (error) {
+      this.logger.error('Error getting profile:', error);
+      throw error;
+    }
+  }
+
+  async updateProfile(userId: string, role: string, updateData: any) {
+    try {
+      let user = null;
+
+      // Remove campos não permitidos
+      const { password, ...safeData } = updateData;
+
+      switch (role) {
+        case 'admin':
+          user = await this.prisma.admin.update({
+            where: { id: userId },
+            data: safeData,
+            select: {
+              id: true,
+              login: true,
+              createdAt: true,
+              updatedAt: true,
+            },
+          });
+          break;
+        case 'company':
+          user = await this.prisma.company.update({
+            where: { id: userId },
+            data: safeData,
+            select: {
+              id: true,
+              login: true,
+              name: true,
+              email: true,
+              phone: true,
+              cnpj: true,
+              plan: true,
+              isActive: true,
+              createdAt: true,
+              updatedAt: true,
+            },
+          });
+          break;
+        case 'seller':
+          user = await this.prisma.seller.update({
+            where: { id: userId },
+            data: safeData,
+            select: {
+              id: true,
+              login: true,
+              name: true,
+              email: true,
+              phone: true,
+              cpf: true,
+              commissionRate: true,
+              companyId: true,
+              createdAt: true,
+              updatedAt: true,
+            },
+          });
+          break;
+      }
+
+      this.logger.log(`Profile updated for user: ${userId} (${role})`);
+      return { ...user, role };
+    } catch (error) {
+      if (error.code === 'P2002') {
+        throw new BadRequestException('Login ou email já está em uso');
+      }
+      this.logger.error('Error updating profile:', error);
+      throw error;
+    }
+  }
+
+  async changePassword(userId: string, role: string, currentPassword: string, newPassword: string) {
+    try {
+      // Buscar usuário atual com senha
+      let user = null;
+
+      switch (role) {
+        case 'admin':
+          user = await this.prisma.admin.findUnique({
+            where: { id: userId },
+          });
+          break;
+        case 'company':
+          user = await this.prisma.company.findUnique({
+            where: { id: userId },
+          });
+          break;
+        case 'seller':
+          user = await this.prisma.seller.findUnique({
+            where: { id: userId },
+          });
+          break;
+      }
+
+      if (!user) {
+        throw new UnauthorizedException('Usuário não encontrado');
+      }
+
+      // Validar senha atual
+      const isPasswordValid = await bcrypt.compare(currentPassword, user.password);
+      if (!isPasswordValid) {
+        throw new BadRequestException('Senha atual incorreta');
+      }
+
+      // Hash da nova senha
+      const hashedPassword = await this.hashPassword(newPassword);
+
+      // Atualizar senha
+      switch (role) {
+        case 'admin':
+          await this.prisma.admin.update({
+            where: { id: userId },
+            data: { password: hashedPassword },
+          });
+          break;
+        case 'company':
+          await this.prisma.company.update({
+            where: { id: userId },
+            data: { password: hashedPassword },
+          });
+          break;
+        case 'seller':
+          await this.prisma.seller.update({
+            where: { id: userId },
+            data: { password: hashedPassword },
+          });
+          break;
+      }
+
+      // Revogar todos os refresh tokens do usuário para forçar novo login
+      await this.prisma.refreshToken.updateMany({
+        where: {
+          userId,
+          role,
+          revoked: false,
+        },
+        data: {
+          revoked: true,
+        },
+      });
+
+      this.logger.log(`Password changed for user: ${userId} (${role})`);
+      return { message: 'Senha alterada com sucesso. Por favor, faça login novamente.' };
+    } catch (error) {
+      this.logger.error('Error changing password:', error);
+      throw error;
+    }
   }
 }

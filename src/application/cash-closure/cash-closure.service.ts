@@ -13,24 +13,43 @@ export class CashClosureService {
     private readonly printerService: PrinterService,
   ) {}
 
-  async create(companyId: string, createCashClosureDto: CreateCashClosureDto) {
+  async create(companyId: string, createCashClosureDto: CreateCashClosureDto, sellerId?: string) {
     try {
-      // Check if there's an open cash closure for this company
+      // Se vendedor foi passado, verificar se tem caixa individual
+      let targetSellerId: string | null = null;
+      
+      if (sellerId) {
+        const seller = await this.prisma.seller.findUnique({
+          where: { id: sellerId },
+          select: { hasIndividualCash: true },
+        });
+
+        if (seller?.hasIndividualCash) {
+          targetSellerId = sellerId;
+        }
+      }
+
+      // Check if there's an open cash closure
       const existingOpenClosure = await this.prisma.cashClosure.findFirst({
         where: {
           companyId,
           isClosed: false,
+          sellerId: targetSellerId, // Busca caixa do vendedor específico ou compartilhado (null)
         },
       });
 
       if (existingOpenClosure) {
-        throw new BadRequestException('Já existe um fechamento de caixa aberto');
+        const msg = targetSellerId 
+          ? 'Você já tem um fechamento de caixa aberto'
+          : 'Já existe um fechamento de caixa compartilhado aberto';
+        throw new BadRequestException(msg);
       }
 
       const cashClosure = await this.prisma.cashClosure.create({
         data: {
           ...createCashClosureDto,
           companyId,
+          sellerId: targetSellerId,
         },
         include: {
           company: {
@@ -39,10 +58,20 @@ export class CashClosureService {
               name: true,
             },
           },
+          seller: targetSellerId ? {
+            select: {
+              id: true,
+              name: true,
+            },
+          } : undefined,
         },
       });
 
-      this.logger.log(`Cash closure created: ${cashClosure.id} for company: ${companyId}`);
+      const logMsg = targetSellerId 
+        ? `Individual cash closure created: ${cashClosure.id} for seller: ${targetSellerId}`
+        : `Shared cash closure created: ${cashClosure.id} for company: ${companyId}`;
+      this.logger.log(logMsg);
+      
       return cashClosure;
     } catch (error) {
       this.logger.error('Error creating cash closure:', error);
@@ -145,14 +174,35 @@ export class CashClosureService {
     return closure;
   }
 
-  async getCurrentClosure(companyId: string) {
+  async getCurrentClosure(companyId: string, sellerId?: string) {
+    // Se vendedor foi passado, verificar se tem caixa individual
+    let targetSellerId: string | null = null;
+    
+    if (sellerId) {
+      const seller = await this.prisma.seller.findUnique({
+        where: { id: sellerId },
+        select: { hasIndividualCash: true },
+      });
+
+      if (seller?.hasIndividualCash) {
+        targetSellerId = sellerId;
+      }
+    }
+
     const closure = await this.prisma.cashClosure.findFirst({
       where: {
         companyId,
         isClosed: false,
+        sellerId: targetSellerId, // Busca caixa do vendedor específico ou compartilhado (null)
       },
       include: {
         company: {
+          select: {
+            id: true,
+            name: true,
+          },
+        },
+        seller: {
           select: {
             id: true,
             name: true,
@@ -183,12 +233,27 @@ export class CashClosureService {
     return closure;
   }
 
-  async close(companyId: string, closeCashClosureDto: CloseCashClosureDto) {
+  async close(companyId: string, closeCashClosureDto: CloseCashClosureDto, sellerId?: string) {
     try {
+      // Se vendedor foi passado, verificar se tem caixa individual
+      let targetSellerId: string | null = null;
+      
+      if (sellerId) {
+        const seller = await this.prisma.seller.findUnique({
+          where: { id: sellerId },
+          select: { hasIndividualCash: true },
+        });
+
+        if (seller?.hasIndividualCash) {
+          targetSellerId = sellerId;
+        }
+      }
+
       const existingClosure = await this.prisma.cashClosure.findFirst({
         where: {
           companyId,
           isClosed: false,
+          sellerId: targetSellerId,
         },
         include: {
           sales: true,
@@ -215,6 +280,12 @@ export class CashClosureService {
         },
         include: {
           company: {
+            select: {
+              id: true,
+              name: true,
+            },
+          },
+          seller: {
             select: {
               id: true,
               name: true,
@@ -249,11 +320,26 @@ export class CashClosureService {
     }
   }
 
-  async getCashClosureStats(companyId: string) {
+  async getCashClosureStats(companyId: string, sellerId?: string) {
+    // Se vendedor foi passado, verificar se tem caixa individual
+    let targetSellerId: string | null = null;
+    
+    if (sellerId) {
+      const seller = await this.prisma.seller.findUnique({
+        where: { id: sellerId },
+        select: { hasIndividualCash: true },
+      });
+
+      if (seller?.hasIndividualCash) {
+        targetSellerId = sellerId;
+      }
+    }
+
     const currentClosure = await this.prisma.cashClosure.findFirst({
       where: {
         companyId,
         isClosed: false,
+        sellerId: targetSellerId,
       },
     });
 
@@ -265,13 +351,13 @@ export class CashClosureService {
     }
 
     // Get sales for current closure
+    const salesWhere: any = {
+      companyId,
+      cashClosureId: currentClosure.id,
+    };
+
     const sales = await this.prisma.sale.findMany({
-      where: {
-        companyId,
-        saleDate: {
-          gte: currentClosure.openingDate,
-        },
-      },
+      where: salesWhere,
       include: {
         paymentMethods: true,
         seller: {
@@ -284,6 +370,8 @@ export class CashClosureService {
     });
 
     const totalSales = sales.reduce((sum, sale) => sum + Number(sale.total), 0);
+    
+    // Calcular vendas por método de pagamento
     const salesByPaymentMethod = sales.reduce((acc, sale) => {
       sale.paymentMethods.forEach(paymentMethod => {
         const method = paymentMethod.method;
@@ -291,6 +379,9 @@ export class CashClosureService {
       });
       return acc;
     }, {});
+
+    // Calcular total apenas de vendas em dinheiro
+    const totalCashSales = salesByPaymentMethod['cash'] || 0;
 
     const salesBySeller = sales.reduce((acc, sale) => {
       const sellerName = sale.seller.name;
@@ -303,9 +394,11 @@ export class CashClosureService {
       openingDate: currentClosure.openingDate,
       openingAmount: Number(currentClosure.openingAmount),
       totalSales,
+      totalCashSales, // Apenas vendas em dinheiro para cálculo do caixa
       salesCount: sales.length,
       salesByPaymentMethod,
       salesBySeller,
+      isIndividualCash: !!targetSellerId,
     };
   }
 

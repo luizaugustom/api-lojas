@@ -33,20 +33,7 @@ export declare class UploadController {
     getFileInfo(fileUrl: string): Promise<{
         exists: boolean;
         size?: number;
-        path?: string;
+        contentType?: string;
         fileUrl: string;
-    }>;
-    resizeImage(file: Express.Multer.File, maxWidth?: string, maxHeight?: string): Promise<{
-        success: boolean;
-        message: string;
-        originalSize: number;
-        resizedSize: number;
-    }>;
-    optimizeImage(file: Express.Multer.File): Promise<{
-        success: boolean;
-        message: string;
-        originalSize: number;
-        optimizedSize: number;
-        savings: number;
     }>;
 }

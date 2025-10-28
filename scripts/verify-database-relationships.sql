@@ -284,3 +284,6 @@ FROM customers;
 \echo 'a integração está 100% funcional!'
 \echo ''
 
+
+
+

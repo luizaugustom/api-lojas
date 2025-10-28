@@ -14,17 +14,22 @@ var __param = (this && this.__param) || function (paramIndex, decorator) {
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.CompanyController = void 0;
 const common_1 = require("@nestjs/common");
+const platform_express_1 = require("@nestjs/platform-express");
 const swagger_1 = require("@nestjs/swagger");
 const company_service_1 = require("./company.service");
 const create_company_dto_1 = require("./dto/create-company.dto");
 const update_company_dto_1 = require("./dto/update-company.dto");
+const update_fiscal_config_dto_1 = require("./dto/update-fiscal-config.dto");
 const jwt_auth_guard_1 = require("../../shared/guards/jwt-auth.guard");
 const roles_guard_1 = require("../../shared/guards/roles.guard");
 const roles_decorator_1 = require("../../shared/decorators/roles.decorator");
 const current_user_decorator_1 = require("../../shared/decorators/current-user.decorator");
+const uuid_validation_pipe_1 = require("../../shared/pipes/uuid-validation.pipe");
+const plan_limits_service_1 = require("../../shared/services/plan-limits.service");
 let CompanyController = class CompanyController {
-    constructor(companyService) {
+    constructor(companyService, planLimitsService) {
         this.companyService = companyService;
+        this.planLimitsService = planLimitsService;
     }
     create(user, createCompanyDto) {
         return this.companyService.create(user.id, createCompanyDto);
@@ -40,6 +45,12 @@ let CompanyController = class CompanyController {
     }
     getStats(user) {
         return this.companyService.getCompanyStats(user.companyId);
+    }
+    getPlanUsage(user) {
+        return this.planLimitsService.getCompanyUsageStats(user.companyId);
+    }
+    getPlanWarnings(user) {
+        return this.planLimitsService.checkNearLimits(user.companyId);
     }
     findOne(id) {
         return this.companyService.findOne(id);
@@ -58,6 +69,30 @@ let CompanyController = class CompanyController {
     }
     remove(id) {
         return this.companyService.remove(id);
+    }
+    updateFiscalConfig(user, updateFiscalConfigDto) {
+        return this.companyService.updateFiscalConfig(user.companyId, updateFiscalConfigDto);
+    }
+    getFiscalConfig(user) {
+        return this.companyService.getFiscalConfig(user.companyId);
+    }
+    uploadCertificate(user, file) {
+        return this.companyService.uploadCertificateToFocusNfe(user.companyId, file);
+    }
+    uploadLogo(user, file) {
+        return this.companyService.uploadLogo(user.companyId, file);
+    }
+    removeLogo(user) {
+        return this.companyService.removeLogo(user.companyId);
+    }
+    enableAutoMessages(user) {
+        return this.companyService.toggleAutoMessages(user.companyId, true);
+    }
+    disableAutoMessages(user) {
+        return this.companyService.toggleAutoMessages(user.companyId, false);
+    }
+    getAutoMessageStatus(user) {
+        return this.companyService.getAutoMessageStatus(user.companyId);
     }
 };
 exports.CompanyController = CompanyController;
@@ -104,12 +139,33 @@ __decorate([
     __metadata("design:returntype", void 0)
 ], CompanyController.prototype, "getStats", null);
 __decorate([
+    (0, common_1.Get)('plan-usage'),
+    (0, roles_decorator_1.Roles)(roles_decorator_1.UserRole.COMPANY),
+    (0, swagger_1.ApiOperation)({ summary: 'Obter estatísticas de uso do plano' }),
+    (0, swagger_1.ApiResponse)({ status: 200, description: 'Estatísticas de uso do plano da empresa' }),
+    __param(0, (0, current_user_decorator_1.CurrentUser)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [Object]),
+    __metadata("design:returntype", void 0)
+], CompanyController.prototype, "getPlanUsage", null);
+__decorate([
+    (0, common_1.Get)('plan-warnings'),
+    (0, roles_decorator_1.Roles)(roles_decorator_1.UserRole.COMPANY),
+    (0, swagger_1.ApiOperation)({ summary: 'Verificar alertas de limites próximos' }),
+    (0, swagger_1.ApiResponse)({ status: 200, description: 'Alertas sobre limites próximos de serem atingidos' }),
+    __param(0, (0, current_user_decorator_1.CurrentUser)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [Object]),
+    __metadata("design:returntype", void 0)
+], CompanyController.prototype, "getPlanWarnings", null);
+__decorate([
     (0, common_1.Get)(':id'),
     (0, roles_decorator_1.Roles)(roles_decorator_1.UserRole.ADMIN),
     (0, swagger_1.ApiOperation)({ summary: 'Buscar empresa por ID' }),
     (0, swagger_1.ApiResponse)({ status: 200, description: 'Empresa encontrada' }),
     (0, swagger_1.ApiResponse)({ status: 404, description: 'Empresa não encontrada' }),
-    __param(0, (0, common_1.Param)('id')),
+    (0, swagger_1.ApiResponse)({ status: 400, description: 'ID inválido' }),
+    __param(0, (0, common_1.Param)('id', uuid_validation_pipe_1.UuidValidationPipe)),
     __metadata("design:type", Function),
     __metadata("design:paramtypes", [String]),
     __metadata("design:returntype", void 0)
@@ -133,7 +189,8 @@ __decorate([
     (0, swagger_1.ApiOperation)({ summary: 'Ativar empresa' }),
     (0, swagger_1.ApiResponse)({ status: 200, description: 'Empresa ativada com sucesso' }),
     (0, swagger_1.ApiResponse)({ status: 404, description: 'Empresa não encontrada' }),
-    __param(0, (0, common_1.Param)('id')),
+    (0, swagger_1.ApiResponse)({ status: 400, description: 'ID inválido' }),
+    __param(0, (0, common_1.Param)('id', uuid_validation_pipe_1.UuidValidationPipe)),
     __metadata("design:type", Function),
     __metadata("design:paramtypes", [String]),
     __metadata("design:returntype", void 0)
@@ -144,7 +201,8 @@ __decorate([
     (0, swagger_1.ApiOperation)({ summary: 'Desativar empresa' }),
     (0, swagger_1.ApiResponse)({ status: 200, description: 'Empresa desativada com sucesso' }),
     (0, swagger_1.ApiResponse)({ status: 404, description: 'Empresa não encontrada' }),
-    __param(0, (0, common_1.Param)('id')),
+    (0, swagger_1.ApiResponse)({ status: 400, description: 'ID inválido' }),
+    __param(0, (0, common_1.Param)('id', uuid_validation_pipe_1.UuidValidationPipe)),
     __metadata("design:type", Function),
     __metadata("design:paramtypes", [String]),
     __metadata("design:returntype", void 0)
@@ -156,7 +214,8 @@ __decorate([
     (0, swagger_1.ApiResponse)({ status: 200, description: 'Empresa atualizada com sucesso' }),
     (0, swagger_1.ApiResponse)({ status: 404, description: 'Empresa não encontrada' }),
     (0, swagger_1.ApiResponse)({ status: 409, description: 'Dados já estão em uso' }),
-    __param(0, (0, common_1.Param)('id')),
+    (0, swagger_1.ApiResponse)({ status: 400, description: 'ID inválido' }),
+    __param(0, (0, common_1.Param)('id', uuid_validation_pipe_1.UuidValidationPipe)),
     __param(1, (0, common_1.Body)()),
     __metadata("design:type", Function),
     __metadata("design:paramtypes", [String, update_company_dto_1.UpdateCompanyDto]),
@@ -168,16 +227,124 @@ __decorate([
     (0, swagger_1.ApiOperation)({ summary: 'Remover empresa' }),
     (0, swagger_1.ApiResponse)({ status: 200, description: 'Empresa removida com sucesso' }),
     (0, swagger_1.ApiResponse)({ status: 404, description: 'Empresa não encontrada' }),
-    __param(0, (0, common_1.Param)('id')),
+    (0, swagger_1.ApiResponse)({ status: 400, description: 'ID inválido' }),
+    __param(0, (0, common_1.Param)('id', uuid_validation_pipe_1.UuidValidationPipe)),
     __metadata("design:type", Function),
     __metadata("design:paramtypes", [String]),
     __metadata("design:returntype", void 0)
 ], CompanyController.prototype, "remove", null);
+__decorate([
+    (0, common_1.Patch)('my-company/fiscal-config'),
+    (0, roles_decorator_1.Roles)(roles_decorator_1.UserRole.COMPANY),
+    (0, swagger_1.ApiOperation)({ summary: 'Atualizar configurações fiscais (Focus NFe)' }),
+    (0, swagger_1.ApiResponse)({ status: 200, description: 'Configurações fiscais atualizadas com sucesso' }),
+    (0, swagger_1.ApiResponse)({ status: 404, description: 'Empresa não encontrada' }),
+    __param(0, (0, current_user_decorator_1.CurrentUser)()),
+    __param(1, (0, common_1.Body)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [Object, update_fiscal_config_dto_1.UpdateFiscalConfigDto]),
+    __metadata("design:returntype", void 0)
+], CompanyController.prototype, "updateFiscalConfig", null);
+__decorate([
+    (0, common_1.Get)('my-company/fiscal-config'),
+    (0, roles_decorator_1.Roles)(roles_decorator_1.UserRole.COMPANY),
+    (0, swagger_1.ApiOperation)({ summary: 'Obter configurações fiscais (dados sensíveis mascarados)' }),
+    (0, swagger_1.ApiResponse)({ status: 200, description: 'Configurações fiscais' }),
+    (0, swagger_1.ApiResponse)({ status: 404, description: 'Empresa não encontrada' }),
+    __param(0, (0, current_user_decorator_1.CurrentUser)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [Object]),
+    __metadata("design:returntype", void 0)
+], CompanyController.prototype, "getFiscalConfig", null);
+__decorate([
+    (0, common_1.Post)('my-company/upload-certificate'),
+    (0, roles_decorator_1.Roles)(roles_decorator_1.UserRole.COMPANY),
+    (0, common_1.UseInterceptors)((0, platform_express_1.FileInterceptor)('certificate')),
+    (0, swagger_1.ApiOperation)({ summary: 'Upload do certificado digital para Focus NFe' }),
+    (0, swagger_1.ApiResponse)({ status: 200, description: 'Certificado enviado com sucesso ao Focus NFe' }),
+    (0, swagger_1.ApiResponse)({ status: 400, description: 'Erro no upload ou certificado inválido' }),
+    __param(0, (0, current_user_decorator_1.CurrentUser)()),
+    __param(1, (0, common_1.UploadedFile)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [Object, Object]),
+    __metadata("design:returntype", void 0)
+], CompanyController.prototype, "uploadCertificate", null);
+__decorate([
+    (0, common_1.Post)('my-company/upload-logo'),
+    (0, roles_decorator_1.Roles)(roles_decorator_1.UserRole.COMPANY),
+    (0, common_1.UseInterceptors)((0, platform_express_1.FileInterceptor)('logo')),
+    (0, swagger_1.ApiOperation)({ summary: 'Upload do logo da empresa' }),
+    (0, swagger_1.ApiConsumes)('multipart/form-data'),
+    (0, swagger_1.ApiBody)({
+        description: 'Logo da empresa',
+        schema: {
+            type: 'object',
+            properties: {
+                logo: {
+                    type: 'string',
+                    format: 'binary',
+                },
+            },
+        },
+    }),
+    (0, swagger_1.ApiResponse)({ status: 200, description: 'Logo enviado com sucesso' }),
+    (0, swagger_1.ApiResponse)({ status: 400, description: 'Erro no upload ou arquivo inválido' }),
+    __param(0, (0, current_user_decorator_1.CurrentUser)()),
+    __param(1, (0, common_1.UploadedFile)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [Object, Object]),
+    __metadata("design:returntype", void 0)
+], CompanyController.prototype, "uploadLogo", null);
+__decorate([
+    (0, common_1.Delete)('my-company/logo'),
+    (0, roles_decorator_1.Roles)(roles_decorator_1.UserRole.COMPANY),
+    (0, swagger_1.ApiOperation)({ summary: 'Remover logo da empresa' }),
+    (0, swagger_1.ApiResponse)({ status: 200, description: 'Logo removido com sucesso' }),
+    (0, swagger_1.ApiResponse)({ status: 404, description: 'Empresa não encontrada' }),
+    __param(0, (0, current_user_decorator_1.CurrentUser)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [Object]),
+    __metadata("design:returntype", void 0)
+], CompanyController.prototype, "removeLogo", null);
+__decorate([
+    (0, common_1.Patch)('my-company/auto-message/enable'),
+    (0, roles_decorator_1.Roles)(roles_decorator_1.UserRole.COMPANY),
+    (0, swagger_1.ApiOperation)({ summary: 'Ativar envio automático de mensagens de cobrança' }),
+    (0, swagger_1.ApiResponse)({ status: 200, description: 'Envio automático de mensagens ativado com sucesso' }),
+    (0, swagger_1.ApiResponse)({ status: 404, description: 'Empresa não encontrada' }),
+    __param(0, (0, current_user_decorator_1.CurrentUser)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [Object]),
+    __metadata("design:returntype", void 0)
+], CompanyController.prototype, "enableAutoMessages", null);
+__decorate([
+    (0, common_1.Patch)('my-company/auto-message/disable'),
+    (0, roles_decorator_1.Roles)(roles_decorator_1.UserRole.COMPANY),
+    (0, swagger_1.ApiOperation)({ summary: 'Desativar envio automático de mensagens de cobrança' }),
+    (0, swagger_1.ApiResponse)({ status: 200, description: 'Envio automático de mensagens desativado com sucesso' }),
+    (0, swagger_1.ApiResponse)({ status: 404, description: 'Empresa não encontrada' }),
+    __param(0, (0, current_user_decorator_1.CurrentUser)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [Object]),
+    __metadata("design:returntype", void 0)
+], CompanyController.prototype, "disableAutoMessages", null);
+__decorate([
+    (0, common_1.Get)('my-company/auto-message/status'),
+    (0, roles_decorator_1.Roles)(roles_decorator_1.UserRole.COMPANY),
+    (0, swagger_1.ApiOperation)({ summary: 'Verificar status do envio automático de mensagens' }),
+    (0, swagger_1.ApiResponse)({ status: 200, description: 'Status do envio automático de mensagens' }),
+    (0, swagger_1.ApiResponse)({ status: 404, description: 'Empresa não encontrada' }),
+    __param(0, (0, current_user_decorator_1.CurrentUser)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [Object]),
+    __metadata("design:returntype", void 0)
+], CompanyController.prototype, "getAutoMessageStatus", null);
 exports.CompanyController = CompanyController = __decorate([
     (0, swagger_1.ApiTags)('company'),
     (0, common_1.Controller)('company'),
     (0, common_1.UseGuards)(jwt_auth_guard_1.JwtAuthGuard, roles_guard_1.RolesGuard),
     (0, swagger_1.ApiBearerAuth)(),
-    __metadata("design:paramtypes", [company_service_1.CompanyService])
+    __metadata("design:paramtypes", [company_service_1.CompanyService,
+        plan_limits_service_1.PlanLimitsService])
 ], CompanyController);
 //# sourceMappingURL=company.controller.js.map

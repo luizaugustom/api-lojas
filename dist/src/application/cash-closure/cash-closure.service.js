@@ -20,21 +20,36 @@ let CashClosureService = CashClosureService_1 = class CashClosureService {
         this.printerService = printerService;
         this.logger = new common_1.Logger(CashClosureService_1.name);
     }
-    async create(companyId, createCashClosureDto) {
+    async create(companyId, createCashClosureDto, sellerId) {
         try {
+            let targetSellerId = null;
+            if (sellerId) {
+                const seller = await this.prisma.seller.findUnique({
+                    where: { id: sellerId },
+                    select: { hasIndividualCash: true },
+                });
+                if (seller?.hasIndividualCash) {
+                    targetSellerId = sellerId;
+                }
+            }
             const existingOpenClosure = await this.prisma.cashClosure.findFirst({
                 where: {
                     companyId,
                     isClosed: false,
+                    sellerId: targetSellerId,
                 },
             });
             if (existingOpenClosure) {
-                throw new common_1.BadRequestException('Já existe um fechamento de caixa aberto');
+                const msg = targetSellerId
+                    ? 'Você já tem um fechamento de caixa aberto'
+                    : 'Já existe um fechamento de caixa compartilhado aberto';
+                throw new common_1.BadRequestException(msg);
             }
             const cashClosure = await this.prisma.cashClosure.create({
                 data: {
                     ...createCashClosureDto,
                     companyId,
+                    sellerId: targetSellerId,
                 },
                 include: {
                     company: {
@@ -43,9 +58,18 @@ let CashClosureService = CashClosureService_1 = class CashClosureService {
                             name: true,
                         },
                     },
+                    seller: targetSellerId ? {
+                        select: {
+                            id: true,
+                            name: true,
+                        },
+                    } : undefined,
                 },
             });
-            this.logger.log(`Cash closure created: ${cashClosure.id} for company: ${companyId}`);
+            const logMsg = targetSellerId
+                ? `Individual cash closure created: ${cashClosure.id} for seller: ${targetSellerId}`
+                : `Shared cash closure created: ${cashClosure.id} for company: ${companyId}`;
+            this.logger.log(logMsg);
             return cashClosure;
         }
         catch (error) {
@@ -139,14 +163,31 @@ let CashClosureService = CashClosureService_1 = class CashClosureService {
         }
         return closure;
     }
-    async getCurrentClosure(companyId) {
+    async getCurrentClosure(companyId, sellerId) {
+        let targetSellerId = null;
+        if (sellerId) {
+            const seller = await this.prisma.seller.findUnique({
+                where: { id: sellerId },
+                select: { hasIndividualCash: true },
+            });
+            if (seller?.hasIndividualCash) {
+                targetSellerId = sellerId;
+            }
+        }
         const closure = await this.prisma.cashClosure.findFirst({
             where: {
                 companyId,
                 isClosed: false,
+                sellerId: targetSellerId,
             },
             include: {
                 company: {
+                    select: {
+                        id: true,
+                        name: true,
+                    },
+                },
+                seller: {
                     select: {
                         id: true,
                         name: true,
@@ -174,12 +215,23 @@ let CashClosureService = CashClosureService_1 = class CashClosureService {
         }
         return closure;
     }
-    async close(companyId, closeCashClosureDto) {
+    async close(companyId, closeCashClosureDto, sellerId) {
         try {
+            let targetSellerId = null;
+            if (sellerId) {
+                const seller = await this.prisma.seller.findUnique({
+                    where: { id: sellerId },
+                    select: { hasIndividualCash: true },
+                });
+                if (seller?.hasIndividualCash) {
+                    targetSellerId = sellerId;
+                }
+            }
             const existingClosure = await this.prisma.cashClosure.findFirst({
                 where: {
                     companyId,
                     isClosed: false,
+                    sellerId: targetSellerId,
                 },
                 include: {
                     sales: true,
@@ -202,6 +254,12 @@ let CashClosureService = CashClosureService_1 = class CashClosureService {
                 },
                 include: {
                     company: {
+                        select: {
+                            id: true,
+                            name: true,
+                        },
+                    },
+                    seller: {
                         select: {
                             id: true,
                             name: true,
@@ -232,11 +290,22 @@ let CashClosureService = CashClosureService_1 = class CashClosureService {
             throw error;
         }
     }
-    async getCashClosureStats(companyId) {
+    async getCashClosureStats(companyId, sellerId) {
+        let targetSellerId = null;
+        if (sellerId) {
+            const seller = await this.prisma.seller.findUnique({
+                where: { id: sellerId },
+                select: { hasIndividualCash: true },
+            });
+            if (seller?.hasIndividualCash) {
+                targetSellerId = sellerId;
+            }
+        }
         const currentClosure = await this.prisma.cashClosure.findFirst({
             where: {
                 companyId,
                 isClosed: false,
+                sellerId: targetSellerId,
             },
         });
         if (!currentClosure) {
@@ -245,13 +314,12 @@ let CashClosureService = CashClosureService_1 = class CashClosureService {
                 message: 'Não há fechamento de caixa aberto',
             };
         }
+        const salesWhere = {
+            companyId,
+            cashClosureId: currentClosure.id,
+        };
         const sales = await this.prisma.sale.findMany({
-            where: {
-                companyId,
-                saleDate: {
-                    gte: currentClosure.openingDate,
-                },
-            },
+            where: salesWhere,
             include: {
                 paymentMethods: true,
                 seller: {
@@ -270,6 +338,7 @@ let CashClosureService = CashClosureService_1 = class CashClosureService {
             });
             return acc;
         }, {});
+        const totalCashSales = salesByPaymentMethod['cash'] || 0;
         const salesBySeller = sales.reduce((acc, sale) => {
             const sellerName = sale.seller.name;
             acc[sellerName] = (acc[sellerName] || 0) + Number(sale.total);
@@ -280,9 +349,11 @@ let CashClosureService = CashClosureService_1 = class CashClosureService {
             openingDate: currentClosure.openingDate,
             openingAmount: Number(currentClosure.openingAmount),
             totalSales,
+            totalCashSales,
             salesCount: sales.length,
             salesByPaymentMethod,
             salesBySeller,
+            isIndividualCash: !!targetSellerId,
         };
     }
     async getClosureHistory(companyId, page = 1, limit = 10) {

@@ -28,6 +28,9 @@ let UploadController = class UploadController {
         if (!file) {
             throw new common_1.BadRequestException('Nenhum arquivo foi enviado');
         }
+        if (subfolder && subfolder.startsWith('products')) {
+            throw new common_1.BadRequestException('Use o endpoint /product/upload-and-create para fazer upload de fotos de produtos');
+        }
         const fileUrl = await this.uploadService.uploadFile(file, subfolder);
         return {
             success: true,
@@ -40,6 +43,9 @@ let UploadController = class UploadController {
     async uploadMultiple(files, subfolder) {
         if (!files || files.length === 0) {
             throw new common_1.BadRequestException('Nenhum arquivo foi enviado');
+        }
+        if (subfolder && subfolder.startsWith('products')) {
+            throw new common_1.BadRequestException('Use o endpoint /product/upload-and-create para fazer upload de fotos de produtos');
         }
         const fileUrls = await this.uploadService.uploadMultipleFiles(files, subfolder);
         const results = files.map((file, index) => ({
@@ -84,33 +90,6 @@ let UploadController = class UploadController {
         return {
             fileUrl,
             ...info,
-        };
-    }
-    async resizeImage(file, maxWidth, maxHeight) {
-        if (!file) {
-            throw new common_1.BadRequestException('Nenhum arquivo foi enviado');
-        }
-        const maxW = maxWidth ? parseInt(maxWidth) : 800;
-        const maxH = maxHeight ? parseInt(maxHeight) : 600;
-        const resizedBuffer = await this.uploadService.resizeImage(file, maxW, maxH);
-        return {
-            success: true,
-            message: 'Imagem redimensionada com sucesso',
-            originalSize: file.buffer.length,
-            resizedSize: resizedBuffer.length,
-        };
-    }
-    async optimizeImage(file) {
-        if (!file) {
-            throw new common_1.BadRequestException('Nenhum arquivo foi enviado');
-        }
-        const optimizedBuffer = await this.uploadService.optimizeImage(file);
-        return {
-            success: true,
-            message: 'Imagem otimizada com sucesso',
-            originalSize: file.buffer.length,
-            optimizedSize: optimizedBuffer.length,
-            savings: file.buffer.length - optimizedBuffer.length,
         };
     }
 };
@@ -209,32 +188,6 @@ __decorate([
     __metadata("design:paramtypes", [String]),
     __metadata("design:returntype", Promise)
 ], UploadController.prototype, "getFileInfo", null);
-__decorate([
-    (0, common_1.Post)('resize'),
-    (0, roles_decorator_1.Roles)(roles_decorator_1.UserRole.ADMIN, roles_decorator_1.UserRole.COMPANY),
-    (0, common_1.UseInterceptors)((0, platform_express_1.FileInterceptor)('file')),
-    (0, swagger_1.ApiOperation)({ summary: 'Redimensionar imagem' }),
-    (0, swagger_1.ApiConsumes)('multipart/form-data'),
-    (0, swagger_1.ApiResponse)({ status: 201, description: 'Imagem redimensionada com sucesso' }),
-    __param(0, (0, common_1.UploadedFile)()),
-    __param(1, (0, common_1.Query)('maxWidth')),
-    __param(2, (0, common_1.Query)('maxHeight')),
-    __metadata("design:type", Function),
-    __metadata("design:paramtypes", [Object, String, String]),
-    __metadata("design:returntype", Promise)
-], UploadController.prototype, "resizeImage", null);
-__decorate([
-    (0, common_1.Post)('optimize'),
-    (0, roles_decorator_1.Roles)(roles_decorator_1.UserRole.ADMIN, roles_decorator_1.UserRole.COMPANY),
-    (0, common_1.UseInterceptors)((0, platform_express_1.FileInterceptor)('file')),
-    (0, swagger_1.ApiOperation)({ summary: 'Otimizar imagem' }),
-    (0, swagger_1.ApiConsumes)('multipart/form-data'),
-    (0, swagger_1.ApiResponse)({ status: 201, description: 'Imagem otimizada com sucesso' }),
-    __param(0, (0, common_1.UploadedFile)()),
-    __metadata("design:type", Function),
-    __metadata("design:paramtypes", [Object]),
-    __metadata("design:returntype", Promise)
-], UploadController.prototype, "optimizeImage", null);
 exports.UploadController = UploadController = __decorate([
     (0, swagger_1.ApiTags)('upload'),
     (0, common_1.Controller)('upload'),

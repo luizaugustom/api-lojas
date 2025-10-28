@@ -10,6 +10,7 @@ exports.AppModule = void 0;
 const common_1 = require("@nestjs/common");
 const config_1 = require("@nestjs/config");
 const throttler_1 = require("@nestjs/throttler");
+const schedule_1 = require("@nestjs/schedule");
 const prisma_module_1 = require("./infrastructure/database/prisma.module");
 const hash_module_1 = require("./shared/services/hash.module");
 const email_module_1 = require("./shared/services/email.module");
@@ -30,6 +31,9 @@ const n8n_module_1 = require("./application/n8n/n8n.module");
 const health_module_1 = require("./application/health/health.module");
 const reports_module_1 = require("./application/reports/reports.module");
 const dashboard_module_1 = require("./application/dashboard/dashboard.module");
+const installment_module_1 = require("./application/installment/installment.module");
+const notification_module_1 = require("./application/notification/notification.module");
+const budget_module_1 = require("./application/budget/budget.module");
 let AppModule = class AppModule {
 };
 exports.AppModule = AppModule;
@@ -40,6 +44,7 @@ exports.AppModule = AppModule = __decorate([
                 isGlobal: true,
                 envFilePath: '.env',
             }),
+            schedule_1.ScheduleModule.forRoot(),
             throttler_1.ThrottlerModule.forRootAsync({
                 imports: [config_1.ConfigModule],
                 inject: [config_1.ConfigService],
@@ -69,6 +74,9 @@ exports.AppModule = AppModule = __decorate([
             n8n_module_1.N8nModule,
             reports_module_1.ReportsModule,
             dashboard_module_1.DashboardModule,
+            installment_module_1.InstallmentModule,
+            notification_module_1.NotificationModule,
+            budget_module_1.BudgetModule,
             health_module_1.HealthModule,
         ],
     })

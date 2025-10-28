@@ -7,8 +7,12 @@ export declare class CashClosureService {
     private readonly printerService;
     private readonly logger;
     constructor(prisma: PrismaService, printerService: PrinterService);
-    create(companyId: string, createCashClosureDto: CreateCashClosureDto): Promise<{
+    create(companyId: string, createCashClosureDto: CreateCashClosureDto, sellerId?: string): Promise<{
         company: {
+            id: string;
+            name: string;
+        };
+        seller: {
             id: string;
             name: string;
         };
@@ -24,6 +28,7 @@ export declare class CashClosureService {
         totalSales: import("@prisma/client/runtime/library").Decimal;
         totalWithdrawals: import("@prisma/client/runtime/library").Decimal;
         isClosed: boolean;
+        sellerId: string | null;
     }>;
     findAll(companyId?: string, page?: number, limit?: number, isClosed?: boolean): Promise<{
         closures: ({
@@ -46,6 +51,7 @@ export declare class CashClosureService {
             totalSales: import("@prisma/client/runtime/library").Decimal;
             totalWithdrawals: import("@prisma/client/runtime/library").Decimal;
             isClosed: boolean;
+            sellerId: string | null;
         })[];
         total: number;
         page: number;
@@ -66,10 +72,10 @@ export declare class CashClosureService {
             } & {
                 id: string;
                 createdAt: Date;
+                saleId: string;
                 quantity: number;
                 unitPrice: import("@prisma/client/runtime/library").Decimal;
                 totalPrice: import("@prisma/client/runtime/library").Decimal;
-                saleId: string;
                 productId: string;
             })[];
         } & {
@@ -77,13 +83,13 @@ export declare class CashClosureService {
             createdAt: Date;
             updatedAt: Date;
             companyId: string;
+            sellerId: string;
             total: import("@prisma/client/runtime/library").Decimal;
             change: import("@prisma/client/runtime/library").Decimal;
             clientCpfCnpj: string | null;
             clientName: string | null;
             isInstallment: boolean;
             saleDate: Date;
-            sellerId: string;
             cashClosureId: string | null;
         })[];
         company: {
@@ -105,8 +111,9 @@ export declare class CashClosureService {
         totalSales: import("@prisma/client/runtime/library").Decimal;
         totalWithdrawals: import("@prisma/client/runtime/library").Decimal;
         isClosed: boolean;
+        sellerId: string | null;
     }>;
-    getCurrentClosure(companyId: string): Promise<{
+    getCurrentClosure(companyId: string, sellerId?: string): Promise<{
         sales: ({
             seller: {
                 id: string;
@@ -117,16 +124,20 @@ export declare class CashClosureService {
             createdAt: Date;
             updatedAt: Date;
             companyId: string;
+            sellerId: string;
             total: import("@prisma/client/runtime/library").Decimal;
             change: import("@prisma/client/runtime/library").Decimal;
             clientCpfCnpj: string | null;
             clientName: string | null;
             isInstallment: boolean;
             saleDate: Date;
-            sellerId: string;
             cashClosureId: string | null;
         })[];
         company: {
+            id: string;
+            name: string;
+        };
+        seller: {
             id: string;
             name: string;
         };
@@ -145,8 +156,9 @@ export declare class CashClosureService {
         totalSales: import("@prisma/client/runtime/library").Decimal;
         totalWithdrawals: import("@prisma/client/runtime/library").Decimal;
         isClosed: boolean;
+        sellerId: string | null;
     }>;
-    close(companyId: string, closeCashClosureDto: CloseCashClosureDto): Promise<{
+    close(companyId: string, closeCashClosureDto: CloseCashClosureDto, sellerId?: string): Promise<{
         sales: ({
             seller: {
                 id: string;
@@ -157,16 +169,20 @@ export declare class CashClosureService {
             createdAt: Date;
             updatedAt: Date;
             companyId: string;
+            sellerId: string;
             total: import("@prisma/client/runtime/library").Decimal;
             change: import("@prisma/client/runtime/library").Decimal;
             clientCpfCnpj: string | null;
             clientName: string | null;
             isInstallment: boolean;
             saleDate: Date;
-            sellerId: string;
             cashClosureId: string | null;
         })[];
         company: {
+            id: string;
+            name: string;
+        };
+        seller: {
             id: string;
             name: string;
         };
@@ -182,24 +198,29 @@ export declare class CashClosureService {
         totalSales: import("@prisma/client/runtime/library").Decimal;
         totalWithdrawals: import("@prisma/client/runtime/library").Decimal;
         isClosed: boolean;
+        sellerId: string | null;
     }>;
-    getCashClosureStats(companyId: string): Promise<{
+    getCashClosureStats(companyId: string, sellerId?: string): Promise<{
         hasOpenClosure: boolean;
         message: string;
         openingDate?: undefined;
         openingAmount?: undefined;
         totalSales?: undefined;
+        totalCashSales?: undefined;
         salesCount?: undefined;
         salesByPaymentMethod?: undefined;
         salesBySeller?: undefined;
+        isIndividualCash?: undefined;
     } | {
         hasOpenClosure: boolean;
         openingDate: Date;
         openingAmount: number;
         totalSales: number;
+        totalCashSales: any;
         salesCount: number;
         salesByPaymentMethod: {};
         salesBySeller: {};
+        isIndividualCash: boolean;
         message?: undefined;
     }>;
     getClosureHistory(companyId: string, page?: number, limit?: number): Promise<{
@@ -219,6 +240,7 @@ export declare class CashClosureService {
             totalSales: import("@prisma/client/runtime/library").Decimal;
             totalWithdrawals: import("@prisma/client/runtime/library").Decimal;
             isClosed: boolean;
+            sellerId: string | null;
         })[];
         total: number;
         page: number;

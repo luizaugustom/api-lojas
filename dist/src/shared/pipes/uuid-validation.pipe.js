@@ -13,10 +13,9 @@ let UuidValidationPipe = class UuidValidationPipe {
         if (!value) {
             throw new common_1.BadRequestException('ID é obrigatório');
         }
-        const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
-        const cuidRegex = /^c[a-z0-9]{24,25}$/i;
-        if (!uuidRegex.test(value) && !cuidRegex.test(value)) {
-            throw new common_1.BadRequestException(`ID inválido: ${value}. Esperado formato UUID ou CUID válido (ex: 123e4567-e89b-12d3-a456-426614174000 ou cmgtzxtsd0001goxmzmitp7s4)`);
+        const uuidV4Regex = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+        if (!uuidV4Regex.test(value)) {
+            throw new common_1.BadRequestException(`ID inválido: ${value}. Esperado formato UUID v4 válido (ex: 550e8400-e29b-41d4-a716-446655440000)`);
         }
         return value;
     }

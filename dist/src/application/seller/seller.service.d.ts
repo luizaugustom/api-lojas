@@ -2,11 +2,13 @@ import { PrismaService } from '../../infrastructure/database/prisma.service';
 import { HashService } from '../../shared/services/hash.service';
 import { CreateSellerDto } from './dto/create-seller.dto';
 import { UpdateSellerDto } from './dto/update-seller.dto';
+import { PlanLimitsService } from '../../shared/services/plan-limits.service';
 export declare class SellerService {
     private readonly prisma;
     private readonly hashService;
+    private readonly planLimitsService;
     private readonly logger;
-    constructor(prisma: PrismaService, hashService: HashService);
+    constructor(prisma: PrismaService, hashService: HashService, planLimitsService: PlanLimitsService);
     create(companyId: string, createSellerDto: CreateSellerDto): Promise<{
         id: string;
         login: string;
@@ -16,8 +18,12 @@ export declare class SellerService {
         email: string;
         phone: string;
         cpf: string;
+        commissionRate: import("@prisma/client/runtime/library").Decimal;
     }>;
     findAll(companyId?: string): Promise<{
+        monthlySalesValue: number | import("@prisma/client/runtime/library").Decimal;
+        monthlySalesCount: number;
+        totalRevenue: number | import("@prisma/client/runtime/library").Decimal;
         id: string;
         login: string;
         createdAt: Date;
@@ -30,6 +36,7 @@ export declare class SellerService {
             name: string;
         };
         cpf: string;
+        commissionRate: import("@prisma/client/runtime/library").Decimal;
         _count: {
             sales: number;
         };
@@ -48,6 +55,7 @@ export declare class SellerService {
         };
         cpf: string;
         birthDate: Date;
+        commissionRate: import("@prisma/client/runtime/library").Decimal;
         _count: {
             sales: number;
         };
@@ -61,6 +69,7 @@ export declare class SellerService {
         email: string;
         phone: string;
         cpf: string;
+        commissionRate: import("@prisma/client/runtime/library").Decimal;
     }>;
     remove(id: string, companyId?: string): Promise<{
         message: string;
@@ -82,10 +91,10 @@ export declare class SellerService {
             } & {
                 id: string;
                 createdAt: Date;
+                saleId: string;
                 quantity: number;
                 unitPrice: import("@prisma/client/runtime/library").Decimal;
                 totalPrice: import("@prisma/client/runtime/library").Decimal;
-                saleId: string;
                 productId: string;
             })[];
         } & {
@@ -93,13 +102,13 @@ export declare class SellerService {
             createdAt: Date;
             updatedAt: Date;
             companyId: string;
+            sellerId: string;
             total: import("@prisma/client/runtime/library").Decimal;
             change: import("@prisma/client/runtime/library").Decimal;
             clientCpfCnpj: string | null;
             clientName: string | null;
             isInstallment: boolean;
             saleDate: Date;
-            sellerId: string;
             cashClosureId: string | null;
         })[];
         total: number;

@@ -1,192 +1,163 @@
 import { Injectable, Logger, BadRequestException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import * as fs from 'fs';
-import * as path from 'path';
-import { v4 as uuidv4 } from 'uuid';
+import { FirebaseStorageService } from '../../shared/services/firebase-storage.service';
 
 @Injectable()
 export class UploadService {
   private readonly logger = new Logger(UploadService.name);
-  private readonly uploadPath: string;
   private readonly maxFileSize: number;
+  private readonly useFirebase: boolean;
 
-  constructor(private readonly configService: ConfigService) {
-    this.uploadPath = this.configService.get('UPLOAD_PATH', './uploads');
+  constructor(
+    private readonly configService: ConfigService,
+    private readonly firebaseStorage: FirebaseStorageService,
+  ) {
     this.maxFileSize = this.configService.get('MAX_FILE_SIZE', 10485760); // 10MB
+    this.useFirebase = this.configService.get('USE_FIREBASE_STORAGE', 'true') === 'true';
     
-    // Ensure upload directory exists
-    this.ensureUploadDirectory();
-  }
-
-  private ensureUploadDirectory() {
-    if (!fs.existsSync(this.uploadPath)) {
-      fs.mkdirSync(this.uploadPath, { recursive: true });
-      this.logger.log(`Created upload directory: ${this.uploadPath}`);
+    if (this.useFirebase) {
+      this.logger.log('📦 Using Firebase Storage for file uploads');
+    } else {
+      this.logger.warn('⚠️ Firebase Storage disabled, using local storage');
     }
   }
 
+  /**
+   * Upload de arquivo único
+   * Usa Firebase Storage com otimização automática de imagens
+   */
   async uploadFile(file: Express.Multer.File, subfolder?: string): Promise<string> {
     try {
-      // Validate file
       this.validateFile(file);
 
-      // Generate unique filename
-      const fileExtension = path.extname(file.originalname);
-      const fileName = `${uuidv4()}${fileExtension}`;
-      
-      // Create subfolder path if specified
-      const uploadDir = subfolder ? path.join(this.uploadPath, subfolder) : this.uploadPath;
-      
-      // Ensure subfolder exists
-      if (subfolder && !fs.existsSync(uploadDir)) {
-        fs.mkdirSync(uploadDir, { recursive: true });
-      }
+      // Determinar preset de otimização baseado na subfolder
+      const optimizationPreset = this.getOptimizationPreset(subfolder);
 
-      const filePath = path.join(uploadDir, fileName);
+      // Upload para Firebase
+      const result = await this.firebaseStorage.uploadFile(
+        file,
+        subfolder,
+        optimizationPreset,
+      );
 
-      // Write file
-      fs.writeFileSync(filePath, file.buffer);
+      this.logger.log(
+        `✅ File uploaded: ${result.url} (${(result.size / 1024).toFixed(1)}KB, ${((1 - result.compressionRatio) * 100).toFixed(1)}% compression)`,
+      );
 
-      // Return relative URL
-      const relativePath = subfolder ? `${subfolder}/${fileName}` : fileName;
-      const fileUrl = `/uploads/${relativePath}`;
-
-      this.logger.log(`File uploaded successfully: ${fileUrl}`);
-      return fileUrl;
+      return result.url;
     } catch (error) {
-      this.logger.error('Error uploading file:', error);
+      this.logger.error('❌ Error uploading file:', error);
       throw new BadRequestException('Erro ao fazer upload do arquivo');
     }
   }
 
+  /**
+   * Upload de múltiplos arquivos
+   */
   async uploadMultipleFiles(files: Express.Multer.File[], subfolder?: string): Promise<string[]> {
-    const uploadPromises = files.map(file => this.uploadFile(file, subfolder));
-    return Promise.all(uploadPromises);
+    const optimizationPreset = this.getOptimizationPreset(subfolder);
+    
+    const results = await this.firebaseStorage.uploadMultipleFiles(
+      files,
+      subfolder,
+      optimizationPreset,
+    );
+
+    return results.map(result => result.url);
   }
 
+  /**
+   * Deletar arquivo
+   */
   async deleteFile(fileUrl: string): Promise<boolean> {
     try {
-      let fileName: string;
-      
-      // Extract file path from URL - handle different URL formats
-      if (fileUrl.startsWith('/uploads/')) {
-        // Format: /uploads/filename or /uploads/subfolder/filename
-        fileName = fileUrl.substring('/uploads/'.length);
-      } else if (fileUrl.startsWith('uploads/')) {
-        // Format: uploads/filename or uploads/subfolder/filename
-        fileName = fileUrl.substring('uploads/'.length);
-      } else if (fileUrl.startsWith('./uploads/')) {
-        // Format: ./uploads/filename
-        fileName = fileUrl.substring('./uploads/'.length);
-      } else {
-        // Assume it's just the filename
-        fileName = fileUrl;
-      }
-
-      const filePath = path.join(this.uploadPath, fileName);
-
-      if (fs.existsSync(filePath)) {
-        fs.unlinkSync(filePath);
-        this.logger.log(`File deleted successfully: ${fileUrl} -> ${filePath}`);
-        return true;
-      }
-
-      this.logger.warn(`File not found: ${fileUrl} -> ${filePath}`);
-      return false;
+      return await this.firebaseStorage.deleteFile(fileUrl);
     } catch (error) {
-      this.logger.error('Error deleting file:', error);
+      this.logger.error('❌ Error deleting file:', error);
       return false;
     }
   }
 
+  /**
+   * Deletar múltiplos arquivos
+   */
   async deleteMultipleFiles(fileUrls: string[]): Promise<{ deleted: number; failed: number }> {
-    const results = await Promise.allSettled(
-      fileUrls.map(url => this.deleteFile(url))
-    );
-
-    const deleted = results.filter(result => 
-      result.status === 'fulfilled' && result.value === true
-    ).length;
-
-    const failed = results.length - deleted;
-
-    return { deleted, failed };
+    return await this.firebaseStorage.deleteMultipleFiles(fileUrls);
   }
 
+  /**
+   * Validar arquivo antes do upload
+   */
   private validateFile(file: Express.Multer.File): void {
-    // Check file size
+    if (!file) {
+      throw new BadRequestException('Nenhum arquivo foi enviado');
+    }
+
     if (file.size > this.maxFileSize) {
       throw new BadRequestException(
-        `Arquivo muito grande. Tamanho máximo permitido: ${this.maxFileSize / 1024 / 1024}MB`
+        `Arquivo muito grande. Tamanho máximo permitido: ${this.maxFileSize / 1024 / 1024}MB`,
       );
     }
 
-    // Check file type
+    // Validação de tipo de arquivo para imagens
     const allowedMimeTypes = [
       'image/jpeg',
       'image/jpg',
       'image/png',
       'image/gif',
       'image/webp',
+      'application/pdf', // Permitir PDFs para certificados
+      'application/x-pkcs12', // Certificados digitais
     ];
 
     if (!allowedMimeTypes.includes(file.mimetype)) {
       throw new BadRequestException(
-        'Tipo de arquivo não permitido. Apenas imagens (JPEG, PNG, GIF, WebP) são aceitas.'
-      );
-    }
-
-    // Check file extension
-    const allowedExtensions = ['.jpg', '.jpeg', '.png', '.gif', '.webp'];
-    const fileExtension = path.extname(file.originalname).toLowerCase();
-
-    if (!allowedExtensions.includes(fileExtension)) {
-      throw new BadRequestException(
-        'Extensão de arquivo não permitida. Apenas .jpg, .jpeg, .png, .gif, .webp são aceitas.'
+        'Tipo de arquivo não permitido. Apenas imagens (JPEG, PNG, GIF, WebP), PDFs e certificados digitais são aceitos.',
       );
     }
   }
 
-  async getFileInfo(fileUrl: string): Promise<{ exists: boolean; size?: number; path?: string }> {
-    try {
-      const fileName = fileUrl.replace('/uploads/', '');
-      const filePath = path.join(this.uploadPath, fileName);
-
-      if (fs.existsSync(filePath)) {
-        const stats = fs.statSync(filePath);
-        return {
-          exists: true,
-          size: stats.size,
-          path: filePath,
-        };
-      }
-
-      return { exists: false };
-    } catch (error) {
-      this.logger.error('Error getting file info:', error);
-      return { exists: false };
-    }
+  /**
+   * Obter informações de um arquivo
+   */
+  async getFileInfo(fileUrl: string): Promise<{ exists: boolean; size?: number; contentType?: string }> {
+    return await this.firebaseStorage.getFileInfo(fileUrl);
   }
 
-  async resizeImage(file: Express.Multer.File, maxWidth: number = 800, maxHeight: number = 600): Promise<Buffer> {
-    // This would use a library like sharp for image resizing
-    // For now, return the original buffer
-    this.logger.log(`Image resizing requested: ${file.originalname} to ${maxWidth}x${maxHeight}`);
-    return file.buffer;
+  /**
+   * Verificar se arquivo existe
+   */
+  async fileExists(fileUrl: string): Promise<boolean> {
+    return await this.firebaseStorage.fileExists(fileUrl);
   }
 
-  async optimizeImage(file: Express.Multer.File): Promise<Buffer> {
-    // This would use a library like sharp for image optimization
-    // For now, return the original buffer
-    this.logger.log(`Image optimization requested: ${file.originalname}`);
-    return file.buffer;
-  }
-
-  getUploadPath(): string {
-    return this.uploadPath;
-  }
-
+  /**
+   * Obter tamanho máximo de arquivo permitido
+   */
   getMaxFileSize(): number {
     return this.maxFileSize;
+  }
+
+  /**
+   * Determinar preset de otimização baseado no tipo de upload
+   */
+  private getOptimizationPreset(subfolder?: string) {
+    if (!subfolder) {
+      return this.firebaseStorage.getOptimizationPreset('document');
+    }
+
+    if (subfolder.includes('products')) {
+      return this.firebaseStorage.getOptimizationPreset('product');
+    }
+
+    if (subfolder.includes('logos')) {
+      return this.firebaseStorage.getOptimizationPreset('logo');
+    }
+
+    if (subfolder.includes('thumbnails')) {
+      return this.firebaseStorage.getOptimizationPreset('thumbnail');
+    }
+
+    return this.firebaseStorage.getOptimizationPreset('document');
   }
 }

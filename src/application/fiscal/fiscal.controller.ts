@@ -2,6 +2,7 @@ import {
   Controller,
   Get,
   Post,
+  Delete,
   Body,
   Param,
   Query,
@@ -27,6 +28,7 @@ import { GenerateNFeDto } from './dto/generate-nfe.dto';
 import { GenerateNFSeDto } from './dto/generate-nfse.dto';
 import { GenerateNFCeDto } from './dto/generate-nfce.dto';
 import { CancelFiscalDocumentDto } from './dto/cancel-fiscal-document.dto';
+import { CreateInboundInvoiceDto } from './dto/create-inbound-invoice.dto';
 import { JwtAuthGuard } from '../../shared/guards/jwt-auth.guard';
 import { RolesGuard } from '../../shared/guards/roles.guard';
 import { Roles, UserRole } from '../../shared/decorators/roles.decorator';
@@ -42,7 +44,7 @@ export class FiscalController {
 
   @Post('nfe')
   @Roles(UserRole.COMPANY)
-  @ApiOperation({ summary: 'Gerar NFe' })
+  @ApiOperation({ summary: 'Gerar NFe - Vinculada a venda ou manual' })
   @ApiResponse({ status: 201, description: 'NFe gerada com sucesso' })
   @ApiResponse({ status: 400, description: 'Dados inválidos para geração da NFe' })
   async generateNFe(
@@ -51,11 +53,11 @@ export class FiscalController {
   ) {
     const nfeData: NFeData = {
       companyId: user.companyId,
-      clientCpfCnpj: generateNFeDto.clientCpfCnpj,
-      clientName: generateNFeDto.clientName,
+      saleId: generateNFeDto.saleId,
+      recipient: generateNFeDto.recipient,
       items: generateNFeDto.items,
-      totalValue: generateNFeDto.totalValue,
-      paymentMethod: generateNFeDto.paymentMethod,
+      payment: generateNFeDto.payment,
+      additionalInfo: generateNFeDto.additionalInfo,
     };
 
     return this.fiscalService.generateNFe(nfeData);
@@ -202,6 +204,30 @@ export class FiscalController {
     }
 
     return this.fiscalService.processXmlFile(file, companyId);
+  }
+
+  @Post('inbound-invoice')
+  @Roles(UserRole.ADMIN, UserRole.COMPANY)
+  @ApiOperation({ 
+    summary: 'Criar nota fiscal de entrada manual',
+    description: 'Registra uma nota fiscal de entrada com informações básicas (chave de acesso, fornecedor, total)'
+  })
+  @ApiResponse({ 
+    status: 201, 
+    description: 'Nota fiscal de entrada criada com sucesso',
+  })
+  @ApiResponse({ status: 400, description: 'Dados inválidos ou chave de acesso já existe' })
+  async createInboundInvoice(
+    @Body() createInboundInvoiceDto: CreateInboundInvoiceDto,
+    @CurrentUser() user: any,
+  ) {
+    const companyId = user.role === UserRole.ADMIN ? user.companyId : user.companyId;
+    
+    if (!companyId) {
+      throw new Error('Company ID não encontrado');
+    }
+
+    return this.fiscalService.createInboundInvoice(companyId, createInboundInvoiceDto);
   }
 
   @Get('access-key/:accessKey')
@@ -411,5 +437,39 @@ export class FiscalController {
     @CurrentUser() user: any,
   ) {
     return this.fiscalService.cancelFiscalDocument(id, cancelDto.reason, user.companyId);
+  }
+
+  @Delete('inbound-invoice/:id')
+  @Roles(UserRole.ADMIN, UserRole.COMPANY)
+  @ApiOperation({ 
+    summary: 'Excluir nota fiscal de entrada',
+    description: 'Exclui uma nota fiscal de entrada da empresa. Apenas notas de entrada podem ser excluídas: NFe_INBOUND (criadas manualmente) ou NFe com XML (importadas via upload).'
+  })
+  @ApiResponse({ 
+    status: 200, 
+    description: 'Nota fiscal de entrada excluída com sucesso',
+    schema: {
+      type: 'object',
+      properties: {
+        message: { type: 'string', example: 'Nota fiscal de entrada excluída com sucesso' },
+        deletedId: { type: 'string', example: 'cmgty5s880006ww3b8bup77vb' },
+        documentNumber: { type: 'string', example: '123456' },
+        accessKey: { type: 'string', example: '35240114200166000187550010000000071123456789' }
+      }
+    }
+  })
+  @ApiResponse({ status: 404, description: 'Nota fiscal não encontrada' })
+  @ApiResponse({ status: 400, description: 'Nota fiscal não pertence à empresa ou não é uma nota de entrada' })
+  async deleteInboundInvoice(
+    @Param('id', UuidValidationPipe) id: string,
+    @CurrentUser() user: any,
+  ) {
+    const companyId = user.role === UserRole.ADMIN ? user.companyId : user.companyId;
+    
+    if (!companyId) {
+      throw new Error('Company ID não encontrado');
+    }
+
+    return this.fiscalService.deleteInboundInvoice(id, companyId);
   }
 }

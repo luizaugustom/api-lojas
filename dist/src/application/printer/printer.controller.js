@@ -16,11 +16,13 @@ exports.PrinterController = void 0;
 const common_1 = require("@nestjs/common");
 const swagger_1 = require("@nestjs/swagger");
 const printer_service_1 = require("./printer.service");
+const add_printer_dto_1 = require("./dto/add-printer.dto");
 const update_custom_footer_dto_1 = require("./dto/update-custom-footer.dto");
 const jwt_auth_guard_1 = require("../../shared/guards/jwt-auth.guard");
 const roles_guard_1 = require("../../shared/guards/roles.guard");
 const roles_decorator_1 = require("../../shared/decorators/roles.decorator");
 const current_user_decorator_1 = require("../../shared/decorators/current-user.decorator");
+const uuid_validation_pipe_1 = require("../../shared/pipes/uuid-validation.pipe");
 let PrinterController = class PrinterController {
     constructor(printerService) {
         this.printerService = printerService;
@@ -29,6 +31,9 @@ let PrinterController = class PrinterController {
         return this.printerService.discoverPrinters();
     }
     async addPrinter(user, printerConfig) {
+        if (!user.companyId) {
+            throw new common_1.BadRequestException('Usuário não possui empresa associada');
+        }
         return this.printerService.addPrinter(user.companyId, printerConfig);
     }
     async getPrinters(user) {
@@ -52,6 +57,25 @@ let PrinterController = class PrinterController {
         const customFooter = await this.printerService.getCustomFooter(user.companyId);
         return { customFooter };
     }
+    async getAvailablePrinters() {
+        return await this.printerService.getAvailablePrinters();
+    }
+    async checkDrivers() {
+        return await this.printerService.checkDrivers();
+    }
+    async installDrivers() {
+        return await this.printerService.installDrivers();
+    }
+    async checkAndInstallDrivers() {
+        return await this.printerService.checkAndInstallDrivers();
+    }
+    async openCashDrawer(id) {
+        const success = await this.printerService.openCashDrawer(id);
+        return { success, message: success ? 'Gaveta aberta com sucesso' : 'Falha ao abrir gaveta' };
+    }
+    async getPrintQueue(id) {
+        return await this.printerService.getPrintQueue(id);
+    }
 };
 exports.PrinterController = PrinterController;
 __decorate([
@@ -71,7 +95,7 @@ __decorate([
     __param(0, (0, current_user_decorator_1.CurrentUser)()),
     __param(1, (0, common_1.Body)()),
     __metadata("design:type", Function),
-    __metadata("design:paramtypes", [Object, Object]),
+    __metadata("design:paramtypes", [Object, add_printer_dto_1.AddPrinterDto]),
     __metadata("design:returntype", Promise)
 ], PrinterController.prototype, "addPrinter", null);
 __decorate([
@@ -89,7 +113,7 @@ __decorate([
     (0, roles_decorator_1.Roles)(roles_decorator_1.UserRole.ADMIN, roles_decorator_1.UserRole.COMPANY),
     (0, swagger_1.ApiOperation)({ summary: 'Obter status da impressora' }),
     (0, swagger_1.ApiResponse)({ status: 200, description: 'Status da impressora' }),
-    __param(0, (0, common_1.Param)('id')),
+    __param(0, (0, common_1.Param)('id', uuid_validation_pipe_1.UuidValidationPipe)),
     __metadata("design:type", Function),
     __metadata("design:paramtypes", [String]),
     __metadata("design:returntype", Promise)
@@ -99,7 +123,7 @@ __decorate([
     (0, roles_decorator_1.Roles)(roles_decorator_1.UserRole.ADMIN, roles_decorator_1.UserRole.COMPANY),
     (0, swagger_1.ApiOperation)({ summary: 'Testar impressora' }),
     (0, swagger_1.ApiResponse)({ status: 200, description: 'Teste realizado com sucesso' }),
-    __param(0, (0, common_1.Param)('id')),
+    __param(0, (0, common_1.Param)('id', uuid_validation_pipe_1.UuidValidationPipe)),
     __metadata("design:type", Function),
     __metadata("design:paramtypes", [String]),
     __metadata("design:returntype", Promise)
@@ -125,6 +149,62 @@ __decorate([
     __metadata("design:paramtypes", [Object]),
     __metadata("design:returntype", Promise)
 ], PrinterController.prototype, "getCustomFooter", null);
+__decorate([
+    (0, common_1.Get)('available'),
+    (0, roles_decorator_1.Roles)(roles_decorator_1.UserRole.ADMIN, roles_decorator_1.UserRole.COMPANY),
+    (0, swagger_1.ApiOperation)({ summary: 'Listar impressoras disponíveis no sistema' }),
+    (0, swagger_1.ApiResponse)({ status: 200, description: 'Lista de impressoras do sistema' }),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", []),
+    __metadata("design:returntype", Promise)
+], PrinterController.prototype, "getAvailablePrinters", null);
+__decorate([
+    (0, common_1.Get)('check-drivers'),
+    (0, roles_decorator_1.Roles)(roles_decorator_1.UserRole.ADMIN, roles_decorator_1.UserRole.COMPANY),
+    (0, swagger_1.ApiOperation)({ summary: 'Verificar drivers de impressora instalados' }),
+    (0, swagger_1.ApiResponse)({ status: 200, description: 'Status dos drivers' }),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", []),
+    __metadata("design:returntype", Promise)
+], PrinterController.prototype, "checkDrivers", null);
+__decorate([
+    (0, common_1.Post)('install-drivers'),
+    (0, roles_decorator_1.Roles)(roles_decorator_1.UserRole.ADMIN, roles_decorator_1.UserRole.COMPANY),
+    (0, swagger_1.ApiOperation)({ summary: 'Instalar drivers de impressora' }),
+    (0, swagger_1.ApiResponse)({ status: 200, description: 'Resultado da instalação' }),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", []),
+    __metadata("design:returntype", Promise)
+], PrinterController.prototype, "installDrivers", null);
+__decorate([
+    (0, common_1.Post)('check-drivers'),
+    (0, roles_decorator_1.Roles)(roles_decorator_1.UserRole.ADMIN, roles_decorator_1.UserRole.COMPANY),
+    (0, swagger_1.ApiOperation)({ summary: 'Verificar e instalar drivers de impressora (DEPRECATED)' }),
+    (0, swagger_1.ApiResponse)({ status: 200, description: 'Status dos drivers' }),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", []),
+    __metadata("design:returntype", Promise)
+], PrinterController.prototype, "checkAndInstallDrivers", null);
+__decorate([
+    (0, common_1.Post)(':id/open-drawer'),
+    (0, roles_decorator_1.Roles)(roles_decorator_1.UserRole.COMPANY),
+    (0, swagger_1.ApiOperation)({ summary: 'Abrir gaveta de dinheiro' }),
+    (0, swagger_1.ApiResponse)({ status: 200, description: 'Gaveta aberta com sucesso' }),
+    __param(0, (0, common_1.Param)('id', uuid_validation_pipe_1.UuidValidationPipe)),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String]),
+    __metadata("design:returntype", Promise)
+], PrinterController.prototype, "openCashDrawer", null);
+__decorate([
+    (0, common_1.Get)(':id/queue'),
+    (0, roles_decorator_1.Roles)(roles_decorator_1.UserRole.ADMIN, roles_decorator_1.UserRole.COMPANY),
+    (0, swagger_1.ApiOperation)({ summary: 'Obter fila de impressão' }),
+    (0, swagger_1.ApiResponse)({ status: 200, description: 'Fila de impressão' }),
+    __param(0, (0, common_1.Param)('id', uuid_validation_pipe_1.UuidValidationPipe)),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String]),
+    __metadata("design:returntype", Promise)
+], PrinterController.prototype, "getPrintQueue", null);
 exports.PrinterController = PrinterController = __decorate([
     (0, swagger_1.ApiTags)('printer'),
     (0, common_1.Controller)('printer'),

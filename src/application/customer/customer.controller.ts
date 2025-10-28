@@ -46,7 +46,7 @@ export class CustomerController {
   }
 
   @Get()
-  @Roles(UserRole.ADMIN, UserRole.COMPANY)
+  @Roles(UserRole.ADMIN, UserRole.COMPANY, UserRole.SELLER)
   @ApiOperation({ summary: 'Listar clientes' })
   @ApiQuery({ name: 'page', required: false, type: Number })
   @ApiQuery({ name: 'limit', required: false, type: Number })
@@ -65,7 +65,7 @@ export class CustomerController {
   }
 
   @Get('stats')
-  @Roles(UserRole.ADMIN, UserRole.COMPANY)
+  @Roles(UserRole.ADMIN, UserRole.COMPANY, UserRole.SELLER)
   @ApiOperation({ summary: 'Obter estatísticas dos clientes' })
   @ApiResponse({ status: 200, description: 'Estatísticas dos clientes' })
   getStats(@CurrentUser() user: any) {
@@ -91,7 +91,7 @@ export class CustomerController {
   }
 
   @Get(':id')
-  @Roles(UserRole.ADMIN, UserRole.COMPANY)
+  @Roles(UserRole.ADMIN, UserRole.COMPANY, UserRole.SELLER)
   @ApiOperation({ summary: 'Buscar cliente por ID' })
   @ApiResponse({ status: 200, description: 'Cliente encontrado' })
   @ApiResponse({ status: 404, description: 'Cliente não encontrado' })
@@ -106,7 +106,7 @@ export class CustomerController {
   }
 
   @Get(':id/installments')
-  @Roles(UserRole.ADMIN, UserRole.COMPANY)
+  @Roles(UserRole.ADMIN, UserRole.COMPANY, UserRole.SELLER)
   @ApiOperation({ summary: 'Obter vendas a prazo do cliente' })
   @ApiResponse({ status: 200, description: 'Vendas a prazo do cliente' })
   getInstallments(

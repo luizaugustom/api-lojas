@@ -18,18 +18,33 @@ const swagger_1 = require("@nestjs/swagger");
 const admin_service_1 = require("./admin.service");
 const create_admin_dto_1 = require("./dto/create-admin.dto");
 const update_admin_dto_1 = require("./dto/update-admin.dto");
+const update_focus_nfe_config_dto_1 = require("./dto/update-focus-nfe-config.dto");
 const jwt_auth_guard_1 = require("../../shared/guards/jwt-auth.guard");
 const roles_guard_1 = require("../../shared/guards/roles.guard");
 const roles_decorator_1 = require("../../shared/decorators/roles.decorator");
+const current_user_decorator_1 = require("../../shared/decorators/current-user.decorator");
+const uuid_validation_pipe_1 = require("../../shared/pipes/uuid-validation.pipe");
+const notification_service_1 = require("../notification/notification.service");
+const broadcast_notification_dto_1 = require("../notification/dto/broadcast-notification.dto");
 let AdminController = class AdminController {
-    constructor(adminService) {
+    constructor(adminService, notificationService) {
         this.adminService = adminService;
+        this.notificationService = notificationService;
     }
     create(createAdminDto) {
         return this.adminService.create(createAdminDto);
     }
     findAll(page, limit) {
         return this.adminService.findAll();
+    }
+    updateFocusNfeConfig(user, updateFocusNfeConfigDto) {
+        return this.adminService.updateFocusNfeConfig(user.id, updateFocusNfeConfigDto);
+    }
+    getFocusNfeConfig(user) {
+        return this.adminService.getFocusNfeConfig(user.id);
+    }
+    async broadcastNotification(broadcastDto) {
+        return this.notificationService.broadcastNotification(broadcastDto.title, broadcastDto.message, broadcastDto.target, broadcastDto.actionUrl, broadcastDto.actionLabel, broadcastDto.expiresAt);
     }
     findOne(id) {
         return this.adminService.findOne(id);
@@ -67,12 +82,44 @@ __decorate([
     __metadata("design:returntype", void 0)
 ], AdminController.prototype, "findAll", null);
 __decorate([
+    (0, common_1.Patch)('focus-nfe-config'),
+    (0, roles_decorator_1.Roles)(roles_decorator_1.UserRole.ADMIN),
+    (0, swagger_1.ApiOperation)({ summary: 'Atualizar configurações globais do Focus NFe' }),
+    (0, swagger_1.ApiResponse)({ status: 200, description: 'Configurações atualizadas com sucesso' }),
+    __param(0, (0, current_user_decorator_1.CurrentUser)()),
+    __param(1, (0, common_1.Body)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [Object, update_focus_nfe_config_dto_1.UpdateFocusNfeConfigDto]),
+    __metadata("design:returntype", void 0)
+], AdminController.prototype, "updateFocusNfeConfig", null);
+__decorate([
+    (0, common_1.Get)('focus-nfe-config'),
+    (0, roles_decorator_1.Roles)(roles_decorator_1.UserRole.ADMIN),
+    (0, swagger_1.ApiOperation)({ summary: 'Obter configurações globais do Focus NFe' }),
+    (0, swagger_1.ApiResponse)({ status: 200, description: 'Configurações do Focus NFe' }),
+    __param(0, (0, current_user_decorator_1.CurrentUser)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [Object]),
+    __metadata("design:returntype", void 0)
+], AdminController.prototype, "getFocusNfeConfig", null);
+__decorate([
+    (0, common_1.Post)('broadcast-notification'),
+    (0, roles_decorator_1.Roles)(roles_decorator_1.UserRole.ADMIN),
+    (0, swagger_1.ApiOperation)({ summary: 'Enviar notificação em massa para usuários' }),
+    (0, swagger_1.ApiResponse)({ status: 201, description: 'Notificação enviada com sucesso' }),
+    (0, swagger_1.ApiResponse)({ status: 400, description: 'Dados inválidos' }),
+    __param(0, (0, common_1.Body)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [broadcast_notification_dto_1.BroadcastNotificationDto]),
+    __metadata("design:returntype", Promise)
+], AdminController.prototype, "broadcastNotification", null);
+__decorate([
     (0, common_1.Get)(':id'),
     (0, roles_decorator_1.Roles)(roles_decorator_1.UserRole.ADMIN),
     (0, swagger_1.ApiOperation)({ summary: 'Buscar admin por ID' }),
     (0, swagger_1.ApiResponse)({ status: 200, description: 'Admin encontrado' }),
     (0, swagger_1.ApiResponse)({ status: 404, description: 'Admin não encontrado' }),
-    __param(0, (0, common_1.Param)('id')),
+    __param(0, (0, common_1.Param)('id', uuid_validation_pipe_1.UuidValidationPipe)),
     __metadata("design:type", Function),
     __metadata("design:paramtypes", [String]),
     __metadata("design:returntype", void 0)
@@ -84,7 +131,7 @@ __decorate([
     (0, swagger_1.ApiResponse)({ status: 200, description: 'Admin atualizado com sucesso' }),
     (0, swagger_1.ApiResponse)({ status: 404, description: 'Admin não encontrado' }),
     (0, swagger_1.ApiResponse)({ status: 409, description: 'Login já está em uso' }),
-    __param(0, (0, common_1.Param)('id')),
+    __param(0, (0, common_1.Param)('id', uuid_validation_pipe_1.UuidValidationPipe)),
     __param(1, (0, common_1.Body)()),
     __metadata("design:type", Function),
     __metadata("design:paramtypes", [String, update_admin_dto_1.UpdateAdminDto]),
@@ -96,7 +143,7 @@ __decorate([
     (0, swagger_1.ApiOperation)({ summary: 'Remover admin' }),
     (0, swagger_1.ApiResponse)({ status: 200, description: 'Admin removido com sucesso' }),
     (0, swagger_1.ApiResponse)({ status: 404, description: 'Admin não encontrado' }),
-    __param(0, (0, common_1.Param)('id')),
+    __param(0, (0, common_1.Param)('id', uuid_validation_pipe_1.UuidValidationPipe)),
     __metadata("design:type", Function),
     __metadata("design:paramtypes", [String]),
     __metadata("design:returntype", void 0)
@@ -106,6 +153,7 @@ exports.AdminController = AdminController = __decorate([
     (0, common_1.Controller)('admin'),
     (0, common_1.UseGuards)(jwt_auth_guard_1.JwtAuthGuard, roles_guard_1.RolesGuard),
     (0, swagger_1.ApiBearerAuth)(),
-    __metadata("design:paramtypes", [admin_service_1.AdminService])
+    __metadata("design:paramtypes", [admin_service_1.AdminService,
+        notification_service_1.NotificationService])
 ], AdminController);
 //# sourceMappingURL=admin.controller.js.map

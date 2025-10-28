@@ -107,4 +107,15 @@ __decorate([
     (0, class_transformer_1.Type)(() => Number),
     __metadata("design:type", Number)
 ], CreateSaleDto.prototype, "totalPaid", void 0);
+__decorate([
+    (0, swagger_1.ApiProperty)({
+        description: 'Se true, não imprime automaticamente a NFC-e (permite confirmação manual)',
+        example: false,
+        required: false,
+        default: false,
+    }),
+    (0, class_validator_1.IsOptional)(),
+    (0, class_validator_1.IsBoolean)(),
+    __metadata("design:type", Boolean)
+], CreateSaleDto.prototype, "skipPrint", void 0);
 //# sourceMappingURL=create-sale.dto.js.map

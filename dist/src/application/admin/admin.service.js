@@ -14,10 +14,12 @@ exports.AdminService = void 0;
 const common_1 = require("@nestjs/common");
 const prisma_service_1 = require("../../infrastructure/database/prisma.service");
 const hash_service_1 = require("../../shared/services/hash.service");
+const encryption_service_1 = require("../../shared/services/encryption.service");
 let AdminService = AdminService_1 = class AdminService {
-    constructor(prisma, hashService) {
+    constructor(prisma, hashService, encryptionService) {
         this.prisma = prisma;
         this.hashService = hashService;
+        this.encryptionService = encryptionService;
         this.logger = new common_1.Logger(AdminService_1.name);
     }
     async create(createAdminDto) {
@@ -96,11 +98,14 @@ let AdminService = AdminService_1 = class AdminService {
             if (!existingAdmin) {
                 throw new common_1.NotFoundException('Admin não encontrado');
             }
-            const updateData = {};
+            const updateData = { ...updateAdminDto };
             if (updateAdminDto.login) {
                 updateData.login = updateAdminDto.login;
             }
-            if (updateAdminDto.password) {
+            if (!updateAdminDto.password || updateAdminDto.password.trim() === '') {
+                delete updateData.password;
+            }
+            else {
                 updateData.password = await this.hashService.hashPassword(updateAdminDto.password);
             }
             const admin = await this.prisma.admin.update({
@@ -143,11 +148,84 @@ let AdminService = AdminService_1 = class AdminService {
             throw error;
         }
     }
+    async updateFocusNfeConfig(adminId, updateFocusNfeConfigDto) {
+        try {
+            const admin = await this.prisma.admin.findUnique({
+                where: { id: adminId },
+            });
+            if (!admin) {
+                throw new common_1.NotFoundException('Admin não encontrado');
+            }
+            const updateData = {};
+            if (updateFocusNfeConfigDto.focusNfeApiKey !== undefined) {
+                updateData.focusNfeApiKey = updateFocusNfeConfigDto.focusNfeApiKey;
+            }
+            if (updateFocusNfeConfigDto.focusNfeEnvironment !== undefined) {
+                updateData.focusNfeEnvironment = updateFocusNfeConfigDto.focusNfeEnvironment;
+            }
+            if (updateFocusNfeConfigDto.ibptToken !== undefined) {
+                updateData.ibptToken = updateFocusNfeConfigDto.ibptToken;
+            }
+            const updatedAdmin = await this.prisma.admin.update({
+                where: { id: adminId },
+                data: updateData,
+                select: {
+                    id: true,
+                    login: true,
+                    focusNfeEnvironment: true,
+                },
+            });
+            this.logger.log(`Focus NFe config updated for admin: ${adminId}`);
+            return {
+                ...updatedAdmin,
+                message: 'Configurações do Focus NFe atualizadas com sucesso',
+            };
+        }
+        catch (error) {
+            this.logger.error('Error updating Focus NFe config:', error);
+            throw error;
+        }
+    }
+    async getFocusNfeConfig(adminId) {
+        try {
+            const admin = await this.prisma.admin.findUnique({
+                where: { id: adminId },
+                select: {
+                    id: true,
+                    login: true,
+                    focusNfeApiKey: true,
+                    focusNfeEnvironment: true,
+                    ibptToken: true,
+                },
+            });
+            if (!admin) {
+                throw new common_1.NotFoundException('Admin não encontrado');
+            }
+            return {
+                id: admin.id,
+                login: admin.login,
+                focusNfeApiKey: admin.focusNfeApiKey
+                    ? this.encryptionService.mask(admin.focusNfeApiKey)
+                    : null,
+                hasFocusNfeApiKey: !!admin.focusNfeApiKey,
+                focusNfeEnvironment: admin.focusNfeEnvironment || 'sandbox',
+                ibptToken: admin.ibptToken
+                    ? this.encryptionService.mask(admin.ibptToken)
+                    : null,
+                hasIbptToken: !!admin.ibptToken,
+            };
+        }
+        catch (error) {
+            this.logger.error('Error getting Focus NFe config:', error);
+            throw error;
+        }
+    }
 };
 exports.AdminService = AdminService;
 exports.AdminService = AdminService = AdminService_1 = __decorate([
     (0, common_1.Injectable)(),
     __metadata("design:paramtypes", [prisma_service_1.PrismaService,
-        hash_service_1.HashService])
+        hash_service_1.HashService,
+        encryption_service_1.EncryptionService])
 ], AdminService);
 //# sourceMappingURL=admin.service.js.map

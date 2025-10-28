@@ -1,5 +1,6 @@
 import { Injectable, Logger, BadRequestException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import { PrismaService } from '../../infrastructure/database/prisma.service';
 import axios, { AxiosInstance, AxiosResponse } from 'axios';
 import * as FormData from 'form-data';
 import * as fs from 'fs';
@@ -46,15 +47,92 @@ export interface NFCeResponse {
   errors?: string[];
 }
 
+// Interfaces para NF-e
+export interface NFeRecipientAddress {
+  zipCode?: string;
+  street?: string;
+  number?: string;
+  complement?: string;
+  district?: string;
+  city?: string;
+  state?: string;
+}
+
+export interface NFeRecipient {
+  document: string;
+  name: string;
+  email?: string;
+  phone?: string;
+  address?: NFeRecipientAddress;
+}
+
+export interface NFeItem {
+  description: string;
+  quantity: number;
+  unitPrice: number;
+  ncm?: string;
+  cfop: string;
+  unitOfMeasure: string;
+}
+
+export interface NFeRequest {
+  companyId: string;
+  recipient: NFeRecipient;
+  items: NFeItem[];
+  paymentMethod: string;
+  additionalInfo?: string;
+  referenceId?: string; // Para referenciar venda ou outro documento
+}
+
+export interface NFeResponse {
+  success: boolean;
+  documentNumber: string;
+  accessKey: string;
+  status: string;
+  xmlContent?: string;
+  pdfUrl?: string;
+  error?: string;
+  errors?: string[];
+}
+
 @Injectable()
 export class FiscalApiService {
   private readonly logger = new Logger(FiscalApiService.name);
   private readonly httpClient: AxiosInstance;
   private readonly config: FiscalApiConfig;
 
-  constructor(private readonly configService: ConfigService) {
+  constructor(
+    private readonly configService: ConfigService,
+    private readonly prisma: PrismaService,
+  ) {
     this.config = this.loadFiscalConfig();
     this.httpClient = this.createHttpClient();
+  }
+
+  /**
+   * Buscar API Key do Focus NFe configurada pelo admin
+   */
+  private async getFocusNfeApiKey(): Promise<string> {
+    const admin = await this.prisma.admin.findFirst({
+      select: {
+        focusNfeApiKey: true,
+      },
+    });
+
+    return admin?.focusNfeApiKey || this.config.apiKey || '';
+  }
+
+  /**
+   * Buscar ambiente configurado pelo admin
+   */
+  private async getFocusNfeEnvironment(): Promise<'sandbox' | 'production'> {
+    const admin = await this.prisma.admin.findFirst({
+      select: {
+        focusNfeEnvironment: true,
+      },
+    });
+
+    return (admin?.focusNfeEnvironment as 'sandbox' | 'production') || this.config.environment;
   }
 
   private loadFiscalConfig(): FiscalApiConfig {
@@ -403,6 +481,209 @@ export class FiscalApiService {
       pdfUrl: 'https://example.com/documento.pdf',
       qrCodeUrl: 'https://example.com/qrcode.png',
     };
+  }
+
+  /**
+   * Gerar NF-e (Nota Fiscal Eletrônica)
+   */
+  async generateNFe(request: NFeRequest): Promise<NFeResponse> {
+    try {
+      this.logger.log(`Generating NFe for company: ${request.companyId}`);
+
+      // Buscar dados da empresa
+      const company = await this.prisma.company.findUnique({
+        where: { id: request.companyId },
+        include: {
+          admin: {
+            select: {
+              focusNfeApiKey: true,
+              focusNfeEnvironment: true,
+            },
+          },
+        },
+      });
+
+      if (!company || !company.admin) {
+        throw new BadRequestException('Empresa ou configurações fiscais não encontradas');
+      }
+
+      // Validar se tem configuração do Focus NFe
+      if (!company.admin.focusNfeApiKey) {
+        throw new BadRequestException('API Key do Focus NFe não configurada');
+      }
+
+      // Por enquanto, usar apenas Focus NFe para NF-e
+      return await this.generateNFeFocusNFe(request, company);
+    } catch (error) {
+      this.logger.error('Error generating NFe:', error);
+      
+      if (error instanceof BadRequestException) {
+        throw error;
+      }
+
+      return {
+        success: false,
+        documentNumber: '',
+        accessKey: '',
+        status: 'Erro',
+        error: error.message || 'Erro ao gerar NF-e',
+        errors: [error.message],
+      };
+    }
+  }
+
+  private async generateNFeFocusNFe(request: NFeRequest, company: any): Promise<NFeResponse> {
+    try {
+      // Endpoint do Focus NFe para NF-e
+      const ref = request.referenceId || `nfe_${Date.now()}`;
+      const endpoint = `/v2/nfe?ref=${ref}`;
+
+      // Determinar tipo de documento do destinatário
+      const recipientDoc = request.recipient.document.replace(/\D/g, '');
+      const isCompany = recipientDoc.length === 14;
+
+      // Preparar payload para Focus NFe (modelo 55 - NF-e)
+      const payload = {
+        natureza_operacao: 'Venda',
+        data_emissao: new Date().toISOString(),
+        data_saida_entrada: new Date().toISOString(),
+        tipo_documento: 1, // 1=Saída
+        finalidade_emissao: '1', // 1=Normal
+        cnpj_emitente: company.cnpj.replace(/\D/g, ''),
+        
+        // Dados do destinatário
+        nome_destinatario: request.recipient.name,
+        [isCompany ? 'cnpj_destinatario' : 'cpf_destinatario']: recipientDoc,
+        ...(request.recipient.email && { email_destinatario: request.recipient.email }),
+        ...(request.recipient.phone && { telefone_destinatario: request.recipient.phone.replace(/\D/g, '') }),
+        
+        // Endereço do destinatário (se fornecido)
+        ...(request.recipient.address && {
+          logradouro_destinatario: request.recipient.address.street || '',
+          numero_destinatario: request.recipient.address.number || 'S/N',
+          bairro_destinatario: request.recipient.address.district || '',
+          municipio_destinatario: request.recipient.address.city || '',
+          uf_destinatario: request.recipient.address.state || '',
+          cep_destinatario: request.recipient.address.zipCode?.replace(/\D/g, '') || '',
+          ...(request.recipient.address.complement && { complemento_destinatario: request.recipient.address.complement }),
+        }),
+
+        // Indicadores
+        indicador_inscricao_estadual_destinatario: '9', // 9=Não contribuinte
+        consumidor_final: '1', // 1=Sim
+        presenca_comprador: '9', // 9=Operação não presencial (pela internet/telefone)
+        modalidade_frete: '9', // 9=Sem frete
+        
+        // Itens
+        itens: request.items.map((item, index) => {
+          const totalItem = item.quantity * item.unitPrice;
+          return {
+            numero_item: String(index + 1),
+            codigo_produto: `ITEM${index + 1}`,
+            descricao: item.description,
+            ncm: item.ncm || '99999999',
+            cfop: item.cfop,
+            unidade_comercial: item.unitOfMeasure,
+            quantidade_comercial: item.quantity,
+            valor_unitario_comercial: item.unitPrice,
+            valor_unitario_tributavel: item.unitPrice,
+            unidade_tributavel: item.unitOfMeasure,
+            quantidade_tributavel: item.quantity,
+            valor_bruto: totalItem,
+            
+            // ICMS - Regime Simples Nacional
+            icms_situacao_tributaria: '102', // 102=Tributada sem permissão de crédito
+            icms_origem: '0', // 0=Nacional
+            
+            // PIS
+            pis_situacao_tributaria: '07', // 07=Operação isenta
+            
+            // COFINS
+            cofins_situacao_tributaria: '07', // 07=Operação isenta
+          };
+        }),
+
+        // Totais
+        valor_produtos: request.items.reduce((sum, item) => sum + (item.quantity * item.unitPrice), 0),
+        valor_total: request.items.reduce((sum, item) => sum + (item.quantity * item.unitPrice), 0),
+        
+        // Pagamento
+        forma_pagamento: '0', // 0=À vista
+        meio_pagamento: this.mapPaymentMethodCodeSefaz(request.paymentMethod),
+        
+        // Informações adicionais
+        ...(request.additionalInfo && { informacoes_complementares: request.additionalInfo }),
+      };
+
+      // Configurar client HTTP com credenciais do Focus NFe
+      const baseUrl = company.admin.focusNfeEnvironment === 'production'
+        ? 'https://api.focusnfe.com.br'
+        : 'https://homologacao.focusnfe.com.br';
+
+      const response = await axios.post(
+        `${baseUrl}${endpoint}`,
+        payload,
+        {
+          headers: {
+            'Authorization': `Basic ${Buffer.from(company.admin.focusNfeApiKey + ':').toString('base64')}`,
+            'Content-Type': 'application/json',
+          },
+          timeout: 60000, // 60 segundos (NF-e pode demorar mais que NFC-e)
+        }
+      );
+
+      this.logger.log('NFe generated successfully via Focus NFe');
+
+      return {
+        success: true,
+        documentNumber: response.data.numero || '',
+        accessKey: response.data.chave_nfe || response.data.chave_acesso || '',
+        status: response.data.status || 'processando',
+        xmlContent: response.data.caminho_xml_nota_fiscal || '',
+        pdfUrl: response.data.caminho_danfe || '',
+      };
+    } catch (error) {
+      this.logger.error('Error in generateNFeFocusNFe:', error);
+      
+      if (error.response?.data) {
+        const focusError = error.response.data;
+        throw new BadRequestException(
+          focusError.mensagem || 
+          focusError.erro || 
+          JSON.stringify(focusError)
+        );
+      }
+      
+      throw new BadRequestException(
+        error.message || 'Erro ao gerar NF-e no Focus NFe'
+      );
+    }
+  }
+
+  /**
+   * Mapear forma de pagamento para código SEFAZ
+   */
+  private mapPaymentMethodCodeSefaz(method: string): string {
+    const mapping = {
+      '01': '01', // Dinheiro
+      '02': '02', // Cheque
+      '03': '03', // Cartão de Crédito
+      '04': '04', // Cartão de Débito
+      '05': '05', // Crédito Loja
+      '10': '10', // Vale Alimentação
+      '11': '11', // Vale Refeição
+      '12': '12', // Vale Presente
+      '13': '13', // Vale Combustível
+      '15': '15', // Boleto Bancário
+      '16': '16', // Depósito Bancário
+      '17': '17', // PIX
+      '18': '18', // Transferência Bancária
+      '19': '19', // Cashback
+      '90': '90', // Sem Pagamento
+      '99': '99', // Outros
+    };
+    
+    return mapping[method] || '99'; // Default: Outros
   }
 
   private mapPaymentMethods(paymentMethods: string[]): any {

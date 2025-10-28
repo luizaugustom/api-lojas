@@ -1,6 +1,8 @@
 import { Request, Response } from 'express';
 import { AuthService } from './auth.service';
 import { LoginDto } from './dto/login.dto';
+import { ChangePasswordDto } from './dto/change-password.dto';
+import { UpdateProfileDto } from './dto/update-profile.dto';
 export declare class AuthController {
     private readonly authService;
     private readonly logger;
@@ -17,6 +19,11 @@ export declare class AuthController {
         };
     }>;
     logout(req: Request, res: Response): Promise<{
+        message: string;
+    }>;
+    getProfile(req: any): Promise<any>;
+    updateProfile(req: any, updateProfileDto: UpdateProfileDto): Promise<any>;
+    changePassword(req: any, changePasswordDto: ChangePasswordDto): Promise<{
         message: string;
     }>;
 }

@@ -13,15 +13,33 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.FiscalApiService = void 0;
 const common_1 = require("@nestjs/common");
 const config_1 = require("@nestjs/config");
+const prisma_service_1 = require("../../infrastructure/database/prisma.service");
 const axios_1 = require("axios");
 const FormData = require("form-data");
 const fs = require("fs");
 let FiscalApiService = FiscalApiService_1 = class FiscalApiService {
-    constructor(configService) {
+    constructor(configService, prisma) {
         this.configService = configService;
+        this.prisma = prisma;
         this.logger = new common_1.Logger(FiscalApiService_1.name);
         this.config = this.loadFiscalConfig();
         this.httpClient = this.createHttpClient();
+    }
+    async getFocusNfeApiKey() {
+        const admin = await this.prisma.admin.findFirst({
+            select: {
+                focusNfeApiKey: true,
+            },
+        });
+        return admin?.focusNfeApiKey || this.config.apiKey || '';
+    }
+    async getFocusNfeEnvironment() {
+        const admin = await this.prisma.admin.findFirst({
+            select: {
+                focusNfeEnvironment: true,
+            },
+        });
+        return admin?.focusNfeEnvironment || this.config.environment;
     }
     loadFiscalConfig() {
         const provider = this.configService.get('FISCAL_PROVIDER', 'mock');
@@ -335,6 +353,152 @@ let FiscalApiService = FiscalApiService_1 = class FiscalApiService {
             qrCodeUrl: 'https://example.com/qrcode.png',
         };
     }
+    async generateNFe(request) {
+        try {
+            this.logger.log(`Generating NFe for company: ${request.companyId}`);
+            const company = await this.prisma.company.findUnique({
+                where: { id: request.companyId },
+                include: {
+                    admin: {
+                        select: {
+                            focusNfeApiKey: true,
+                            focusNfeEnvironment: true,
+                        },
+                    },
+                },
+            });
+            if (!company || !company.admin) {
+                throw new common_1.BadRequestException('Empresa ou configurações fiscais não encontradas');
+            }
+            if (!company.admin.focusNfeApiKey) {
+                throw new common_1.BadRequestException('API Key do Focus NFe não configurada');
+            }
+            return await this.generateNFeFocusNFe(request, company);
+        }
+        catch (error) {
+            this.logger.error('Error generating NFe:', error);
+            if (error instanceof common_1.BadRequestException) {
+                throw error;
+            }
+            return {
+                success: false,
+                documentNumber: '',
+                accessKey: '',
+                status: 'Erro',
+                error: error.message || 'Erro ao gerar NF-e',
+                errors: [error.message],
+            };
+        }
+    }
+    async generateNFeFocusNFe(request, company) {
+        try {
+            const ref = request.referenceId || `nfe_${Date.now()}`;
+            const endpoint = `/v2/nfe?ref=${ref}`;
+            const recipientDoc = request.recipient.document.replace(/\D/g, '');
+            const isCompany = recipientDoc.length === 14;
+            const payload = {
+                natureza_operacao: 'Venda',
+                data_emissao: new Date().toISOString(),
+                data_saida_entrada: new Date().toISOString(),
+                tipo_documento: 1,
+                finalidade_emissao: '1',
+                cnpj_emitente: company.cnpj.replace(/\D/g, ''),
+                nome_destinatario: request.recipient.name,
+                [isCompany ? 'cnpj_destinatario' : 'cpf_destinatario']: recipientDoc,
+                ...(request.recipient.email && { email_destinatario: request.recipient.email }),
+                ...(request.recipient.phone && { telefone_destinatario: request.recipient.phone.replace(/\D/g, '') }),
+                ...(request.recipient.address && {
+                    logradouro_destinatario: request.recipient.address.street || '',
+                    numero_destinatario: request.recipient.address.number || 'S/N',
+                    bairro_destinatario: request.recipient.address.district || '',
+                    municipio_destinatario: request.recipient.address.city || '',
+                    uf_destinatario: request.recipient.address.state || '',
+                    cep_destinatario: request.recipient.address.zipCode?.replace(/\D/g, '') || '',
+                    ...(request.recipient.address.complement && { complemento_destinatario: request.recipient.address.complement }),
+                }),
+                indicador_inscricao_estadual_destinatario: '9',
+                consumidor_final: '1',
+                presenca_comprador: '9',
+                modalidade_frete: '9',
+                itens: request.items.map((item, index) => {
+                    const totalItem = item.quantity * item.unitPrice;
+                    return {
+                        numero_item: String(index + 1),
+                        codigo_produto: `ITEM${index + 1}`,
+                        descricao: item.description,
+                        ncm: item.ncm || '99999999',
+                        cfop: item.cfop,
+                        unidade_comercial: item.unitOfMeasure,
+                        quantidade_comercial: item.quantity,
+                        valor_unitario_comercial: item.unitPrice,
+                        valor_unitario_tributavel: item.unitPrice,
+                        unidade_tributavel: item.unitOfMeasure,
+                        quantidade_tributavel: item.quantity,
+                        valor_bruto: totalItem,
+                        icms_situacao_tributaria: '102',
+                        icms_origem: '0',
+                        pis_situacao_tributaria: '07',
+                        cofins_situacao_tributaria: '07',
+                    };
+                }),
+                valor_produtos: request.items.reduce((sum, item) => sum + (item.quantity * item.unitPrice), 0),
+                valor_total: request.items.reduce((sum, item) => sum + (item.quantity * item.unitPrice), 0),
+                forma_pagamento: '0',
+                meio_pagamento: this.mapPaymentMethodCodeSefaz(request.paymentMethod),
+                ...(request.additionalInfo && { informacoes_complementares: request.additionalInfo }),
+            };
+            const baseUrl = company.admin.focusNfeEnvironment === 'production'
+                ? 'https://api.focusnfe.com.br'
+                : 'https://homologacao.focusnfe.com.br';
+            const response = await axios_1.default.post(`${baseUrl}${endpoint}`, payload, {
+                headers: {
+                    'Authorization': `Basic ${Buffer.from(company.admin.focusNfeApiKey + ':').toString('base64')}`,
+                    'Content-Type': 'application/json',
+                },
+                timeout: 60000,
+            });
+            this.logger.log('NFe generated successfully via Focus NFe');
+            return {
+                success: true,
+                documentNumber: response.data.numero || '',
+                accessKey: response.data.chave_nfe || response.data.chave_acesso || '',
+                status: response.data.status || 'processando',
+                xmlContent: response.data.caminho_xml_nota_fiscal || '',
+                pdfUrl: response.data.caminho_danfe || '',
+            };
+        }
+        catch (error) {
+            this.logger.error('Error in generateNFeFocusNFe:', error);
+            if (error.response?.data) {
+                const focusError = error.response.data;
+                throw new common_1.BadRequestException(focusError.mensagem ||
+                    focusError.erro ||
+                    JSON.stringify(focusError));
+            }
+            throw new common_1.BadRequestException(error.message || 'Erro ao gerar NF-e no Focus NFe');
+        }
+    }
+    mapPaymentMethodCodeSefaz(method) {
+        const mapping = {
+            '01': '01',
+            '02': '02',
+            '03': '03',
+            '04': '04',
+            '05': '05',
+            '10': '10',
+            '11': '11',
+            '12': '12',
+            '13': '13',
+            '15': '15',
+            '16': '16',
+            '17': '17',
+            '18': '18',
+            '19': '19',
+            '90': '90',
+            '99': '99',
+        };
+        return mapping[method] || '99';
+    }
     mapPaymentMethods(paymentMethods) {
         const mapping = {
             'cash': { tipo: '01', valor: 0 },
@@ -386,6 +550,7 @@ let FiscalApiService = FiscalApiService_1 = class FiscalApiService {
 exports.FiscalApiService = FiscalApiService;
 exports.FiscalApiService = FiscalApiService = FiscalApiService_1 = __decorate([
     (0, common_1.Injectable)(),
-    __metadata("design:paramtypes", [config_1.ConfigService])
+    __metadata("design:paramtypes", [config_1.ConfigService,
+        prisma_service_1.PrismaService])
 ], FiscalApiService);
 //# sourceMappingURL=fiscal-api.service.js.map

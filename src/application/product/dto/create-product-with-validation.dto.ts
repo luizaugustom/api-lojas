@@ -92,6 +92,19 @@ export class CreateProductWithValidationDto {
   })
   @IsOptional()
   @IsDateString()
+  @Transform(({ value }) => {
+    // Se for null, undefined, vazio ou string vazia, retornar undefined
+    if (!value || value === null || value === '' || (typeof value === 'string' && value.trim() === '')) {
+      return undefined;
+    }
+    
+    // Se é apenas uma data (YYYY-MM-DD), converter para DateTime
+    if (typeof value === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(value)) {
+      return new Date(value + 'T00:00:00.000Z').toISOString();
+    }
+    
+    return value;
+  })
   expirationDate?: string;
 
   // Campos que devem ser rejeitados explicitamente

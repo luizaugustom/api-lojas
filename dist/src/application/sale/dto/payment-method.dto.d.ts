@@ -9,4 +9,8 @@ export declare class PaymentMethodDto {
     method: PaymentMethod;
     amount: number;
     additionalInfo?: string;
+    customerId?: string;
+    installments?: number;
+    firstDueDate?: Date;
+    description?: string;
 }

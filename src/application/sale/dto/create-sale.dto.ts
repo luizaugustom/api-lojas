@@ -84,4 +84,14 @@ export class CreateSaleDto {
   @Min(0)
   @Type(() => Number)
   totalPaid?: number;
+
+  @ApiProperty({
+    description: 'Se true, não imprime automaticamente a NFC-e (permite confirmação manual)',
+    example: false,
+    required: false,
+    default: false,
+  })
+  @IsOptional()
+  @IsBoolean()
+  skipPrint?: boolean;
 }

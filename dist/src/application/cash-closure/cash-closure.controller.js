@@ -22,12 +22,14 @@ const jwt_auth_guard_1 = require("../../shared/guards/jwt-auth.guard");
 const roles_guard_1 = require("../../shared/guards/roles.guard");
 const roles_decorator_1 = require("../../shared/decorators/roles.decorator");
 const current_user_decorator_1 = require("../../shared/decorators/current-user.decorator");
+const uuid_validation_pipe_1 = require("../../shared/pipes/uuid-validation.pipe");
 let CashClosureController = class CashClosureController {
     constructor(cashClosureService) {
         this.cashClosureService = cashClosureService;
     }
     create(user, createCashClosureDto) {
-        return this.cashClosureService.create(user.companyId, createCashClosureDto);
+        const sellerId = user.role === roles_decorator_1.UserRole.SELLER ? user.userId : undefined;
+        return this.cashClosureService.create(user.companyId, createCashClosureDto, sellerId);
     }
     findAll(user, page = 1, limit = 10, isClosed) {
         if (user.role === roles_decorator_1.UserRole.ADMIN) {
@@ -36,10 +38,12 @@ let CashClosureController = class CashClosureController {
         return this.cashClosureService.findAll(user.companyId, page, limit, isClosed);
     }
     getCurrent(user) {
-        return this.cashClosureService.getCurrentClosure(user.companyId);
+        const sellerId = user.role === roles_decorator_1.UserRole.SELLER ? user.userId : undefined;
+        return this.cashClosureService.getCurrentClosure(user.companyId, sellerId);
     }
     getStats(user) {
-        return this.cashClosureService.getCashClosureStats(user.companyId);
+        const sellerId = user.role === roles_decorator_1.UserRole.SELLER ? user.userId : undefined;
+        return this.cashClosureService.getCashClosureStats(user.companyId, sellerId);
     }
     getHistory(user, page = 1, limit = 10) {
         return this.cashClosureService.getClosureHistory(user.companyId, page, limit);
@@ -51,7 +55,8 @@ let CashClosureController = class CashClosureController {
         return this.cashClosureService.findOne(id, user.companyId);
     }
     close(user, closeCashClosureDto) {
-        return this.cashClosureService.close(user.companyId, closeCashClosureDto);
+        const sellerId = user.role === roles_decorator_1.UserRole.SELLER ? user.userId : undefined;
+        return this.cashClosureService.close(user.companyId, closeCashClosureDto, sellerId);
     }
     reprintReport(id, user) {
         if (user.role === roles_decorator_1.UserRole.ADMIN) {
@@ -63,7 +68,7 @@ let CashClosureController = class CashClosureController {
 exports.CashClosureController = CashClosureController;
 __decorate([
     (0, common_1.Post)(),
-    (0, roles_decorator_1.Roles)(roles_decorator_1.UserRole.COMPANY),
+    (0, roles_decorator_1.Roles)(roles_decorator_1.UserRole.COMPANY, roles_decorator_1.UserRole.SELLER),
     (0, swagger_1.ApiOperation)({ summary: 'Abrir novo fechamento de caixa' }),
     (0, swagger_1.ApiResponse)({ status: 201, description: 'Fechamento de caixa criado com sucesso' }),
     (0, swagger_1.ApiResponse)({ status: 400, description: 'Já existe um fechamento de caixa aberto' }),
@@ -91,7 +96,7 @@ __decorate([
 ], CashClosureController.prototype, "findAll", null);
 __decorate([
     (0, common_1.Get)('current'),
-    (0, roles_decorator_1.Roles)(roles_decorator_1.UserRole.COMPANY),
+    (0, roles_decorator_1.Roles)(roles_decorator_1.UserRole.COMPANY, roles_decorator_1.UserRole.SELLER),
     (0, swagger_1.ApiOperation)({ summary: 'Obter fechamento de caixa atual' }),
     (0, swagger_1.ApiResponse)({ status: 200, description: 'Fechamento de caixa atual' }),
     (0, swagger_1.ApiResponse)({ status: 404, description: 'Não há fechamento de caixa aberto' }),
@@ -102,7 +107,7 @@ __decorate([
 ], CashClosureController.prototype, "getCurrent", null);
 __decorate([
     (0, common_1.Get)('stats'),
-    (0, roles_decorator_1.Roles)(roles_decorator_1.UserRole.COMPANY),
+    (0, roles_decorator_1.Roles)(roles_decorator_1.UserRole.COMPANY, roles_decorator_1.UserRole.SELLER),
     (0, swagger_1.ApiOperation)({ summary: 'Obter estatísticas do fechamento de caixa' }),
     (0, swagger_1.ApiResponse)({ status: 200, description: 'Estatísticas do fechamento de caixa' }),
     __param(0, (0, current_user_decorator_1.CurrentUser)()),
@@ -130,7 +135,7 @@ __decorate([
     (0, swagger_1.ApiOperation)({ summary: 'Buscar fechamento de caixa por ID' }),
     (0, swagger_1.ApiResponse)({ status: 200, description: 'Fechamento de caixa encontrado' }),
     (0, swagger_1.ApiResponse)({ status: 404, description: 'Fechamento de caixa não encontrado' }),
-    __param(0, (0, common_1.Param)('id')),
+    __param(0, (0, common_1.Param)('id', uuid_validation_pipe_1.UuidValidationPipe)),
     __param(1, (0, current_user_decorator_1.CurrentUser)()),
     __metadata("design:type", Function),
     __metadata("design:paramtypes", [String, Object]),
@@ -138,7 +143,7 @@ __decorate([
 ], CashClosureController.prototype, "findOne", null);
 __decorate([
     (0, common_1.Patch)('close'),
-    (0, roles_decorator_1.Roles)(roles_decorator_1.UserRole.COMPANY),
+    (0, roles_decorator_1.Roles)(roles_decorator_1.UserRole.COMPANY, roles_decorator_1.UserRole.SELLER),
     (0, swagger_1.ApiOperation)({ summary: 'Fechar fechamento de caixa atual' }),
     (0, swagger_1.ApiResponse)({ status: 200, description: 'Fechamento de caixa fechado com sucesso' }),
     (0, swagger_1.ApiResponse)({ status: 404, description: 'Não há fechamento de caixa aberto' }),
@@ -154,7 +159,7 @@ __decorate([
     (0, swagger_1.ApiOperation)({ summary: 'Reimprimir relatório de fechamento de caixa' }),
     (0, swagger_1.ApiResponse)({ status: 200, description: 'Relatório reimpresso com sucesso' }),
     (0, swagger_1.ApiResponse)({ status: 400, description: 'Erro ao reimprimir relatório' }),
-    __param(0, (0, common_1.Param)('id')),
+    __param(0, (0, common_1.Param)('id', uuid_validation_pipe_1.UuidValidationPipe)),
     __param(1, (0, current_user_decorator_1.CurrentUser)()),
     __metadata("design:type", Function),
     __metadata("design:paramtypes", [String, Object]),

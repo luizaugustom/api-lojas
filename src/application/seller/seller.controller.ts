@@ -20,6 +20,7 @@ import {
 import { SellerService } from './seller.service';
 import { CreateSellerDto } from './dto/create-seller.dto';
 import { UpdateSellerDto } from './dto/update-seller.dto';
+import { UpdateSellerProfileDto } from './dto/update-seller-profile.dto';
 import { JwtAuthGuard } from '../../shared/guards/jwt-auth.guard';
 import { RolesGuard } from '../../shared/guards/roles.guard';
 import { Roles, UserRole } from '../../shared/decorators/roles.decorator';
@@ -139,9 +140,10 @@ export class SellerController {
   @ApiResponse({ status: 200, description: 'Perfil atualizado com sucesso' })
   updateMyProfile(
     @CurrentUser() user: any,
-    @Body() updateSellerDto: UpdateSellerDto,
+    @Body() updateSellerProfileDto: UpdateSellerProfileDto,
   ) {
-    return this.sellerService.update(user.id, updateSellerDto);
+    // Vendedor só pode atualizar campos limitados (sem hasIndividualCash)
+    return this.sellerService.update(user.userId, updateSellerProfileDto);
   }
 
   @Patch(':id')

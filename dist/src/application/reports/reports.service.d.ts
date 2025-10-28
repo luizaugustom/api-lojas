@@ -39,6 +39,7 @@ export declare class ReportsService {
     private generateCompleteReport;
     private getBillsToPay;
     private getCashClosures;
+    private getCommissionsReport;
     private convertToXML;
     private convertToExcel;
     private addCompanyInfo;
@@ -47,4 +48,5 @@ export declare class ReportsService {
     private addInvoicesSheet;
     private addBillsSheet;
     private addCashClosuresSheet;
+    private addCommissionsSheet;
 }

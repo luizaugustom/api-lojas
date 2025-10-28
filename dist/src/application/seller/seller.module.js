@@ -11,12 +11,14 @@ const common_1 = require("@nestjs/common");
 const seller_service_1 = require("./seller.service");
 const seller_controller_1 = require("./seller.controller");
 const prisma_module_1 = require("../../infrastructure/database/prisma.module");
+const hash_module_1 = require("../../shared/services/hash.module");
+const plan_limits_module_1 = require("../../shared/services/plan-limits.module");
 let SellerModule = class SellerModule {
 };
 exports.SellerModule = SellerModule;
 exports.SellerModule = SellerModule = __decorate([
     (0, common_1.Module)({
-        imports: [prisma_module_1.PrismaModule],
+        imports: [prisma_module_1.PrismaModule, hash_module_1.HashModule, plan_limits_module_1.PlanLimitsModule],
         providers: [seller_service_1.SellerService],
         controllers: [seller_controller_1.SellerController],
         exports: [seller_service_1.SellerService],

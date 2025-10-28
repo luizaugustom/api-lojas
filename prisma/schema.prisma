@@ -10,12 +10,30 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
+enum PlanType {
+  BASIC
+  PLUS
+  PRO
+}
+
+enum TaxRegime {
+  SIMPLES_NACIONAL
+  LUCRO_PRESUMIDO
+  LUCRO_REAL
+  MEI
+}
+
 model Admin {
   id        String   @id @default(uuid())
   login     String   @unique
   password  String
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+
+  // Focus NFe Configuration (Global for all companies)
+  focusNfeApiKey      String? // API Key global do Focus NFe
+  focusNfeEnvironment String? @default("sandbox") // sandbox ou production
+  ibptToken           String? // Token da API IBPT (opcional)
 
   // Relations
   companies Company[]
@@ -36,6 +54,7 @@ model Company {
   logoUrl         String?
   brandColor      String?
   customFooter    String?  // Footer personalizado para NFCe
+  plan            PlanType @default(BASIC)
   isActive        Boolean  @default(true)
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
@@ -58,6 +77,18 @@ model Company {
   accountNumber   String?
   accountType     String?
 
+  // Fiscal Configuration (Company-specific)
+  taxRegime           TaxRegime? @default(SIMPLES_NACIONAL) // Regime tributário
+  cnae                String? // CNAE - Classificação Nacional de Atividades Econômicas (7 dígitos)
+  certificatePassword String? // Senha do certificado digital (criptografada)
+  nfceSerie           String? @default("1") // Série da NFC-e
+  municipioIbge       String? // Código IBGE do município (ex: 4205407)
+  csc                 String? // Código de Segurança do Contribuinte (criptografado)
+  idTokenCsc          String? @default("000001") // ID do Token CSC
+
+  // Automatic Message Configuration
+  autoMessageEnabled  Boolean  @default(false) // Ativa/desativa envio automático de mensagens de cobrança
+
   // Relations
   adminId         String
   admin           Admin           @relation(fields: [adminId], references: [id], onDelete: Cascade)
@@ -69,26 +100,32 @@ model Company {
   cashClosures    CashClosure[]
   fiscalDocuments FiscalDocument[]
   printers        Printer[]
+  installments    Installment[]
+  budgets         Budget[]
 
   @@map("companies")
 }
 
 model Seller {
-  id          String   @id @default(uuid())
-  login       String   @unique
-  password    String
-  name        String
-  cpf         String?
-  birthDate   DateTime?
-  email       String?
-  phone       String?
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  id             String   @id @default(uuid())
+  login          String   @unique
+  password       String
+  name           String
+  cpf            String?
+  birthDate      DateTime?
+  email          String?
+  phone          String?
+  commissionRate Decimal  @default(0) @db.Decimal(5, 2) // Porcentagem de comissão (0-100)
+  hasIndividualCash Boolean @default(false) // Se true, vendedor tem caixa individual; se false, usa caixa compartilhado
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
 
   // Relations
   companyId   String
   company     Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
   sales       Sale[]
+  budgets     Budget[]
+  cashClosures CashClosure[] // Caixas individuais do vendedor
 
   @@map("sellers")
 }
@@ -103,6 +140,8 @@ model Product {
   price           Decimal  @db.Decimal(10, 2)
   category        String?
   expirationDate  DateTime?
+  ncm             String?  @default("99999999") // Nomenclatura Comum do Mercosul (8 dígitos)
+  cfop            String?  @default("5102") // Código Fiscal de Operações (4 dígitos)
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
 
@@ -111,6 +150,7 @@ model Product {
   company         Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
   saleItems       SaleItem[]
   productExchanges ProductExchange[]
+  budgetItems     BudgetItem[]
 
   @@map("products")
 }
@@ -136,6 +176,7 @@ model Sale {
   exchanges       ProductExchange[]
   cashClosureId   String?
   cashClosure     CashClosure? @relation(fields: [cashClosureId], references: [id])
+  installments    Installment[]
 
   @@map("sales")
 }
@@ -191,6 +232,7 @@ model Customer {
   // Relations
   companyId   String
   company     Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  installments Installment[]
 
   @@map("customers")
 }
@@ -229,6 +271,8 @@ model CashClosure {
   // Relations
   companyId       String
   company         Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  sellerId        String? // Se preenchido, é um caixa individual deste vendedor; se null, é caixa compartilhado da empresa
+  seller          Seller? @relation(fields: [sellerId], references: [id], onDelete: Cascade)
   sales           Sale[]
 
   @@map("cash_closures")
@@ -258,8 +302,12 @@ model FiscalDocument {
   accessKey       String   @unique
   status          String   // Emitida, Cancelada, etc.
   totalValue      Decimal? @db.Decimal(10, 2) // Valor total do documento
+  supplierName    String?  // Nome do fornecedor (para notas de entrada)
   xmlContent      String?  // XML content
   pdfUrl          String?  // PDF URL
+  qrCodeUrl       String?  // URL do QR Code
+  protocol        String?  // Protocolo de autorização SEFAZ
+  serieNumber     String?  // Série do documento
   emissionDate    DateTime @default(now())
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
@@ -299,4 +347,141 @@ model RefreshToken {
   revoked    Boolean  @default(false)
 
   @@map("refresh_tokens")
+}
+
+model Installment {
+  id              String   @id @default(uuid())
+  installmentNumber Int    // Número da parcela (1, 2, 3, etc.)
+  totalInstallments Int    // Total de parcelas
+  amount          Decimal  @db.Decimal(10, 2) // Valor da parcela
+  remainingAmount Decimal  @db.Decimal(10, 2) // Valor restante da parcela
+  dueDate         DateTime // Data de vencimento
+  isPaid          Boolean  @default(false)
+  paidAt          DateTime? // Data do pagamento
+  description     String?  // Descrição opcional
+  lastMessageSentAt DateTime? // Data do último envio de mensagem automática
+  messageCount    Int      @default(0) // Contador de mensagens enviadas
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  // Relations
+  saleId          String
+  sale            Sale @relation(fields: [saleId], references: [id], onDelete: Cascade)
+  customerId      String
+  customer        Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  companyId       String
+  company         Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  payments        InstallmentPayment[]
+
+  @@map("installments")
+}
+
+model InstallmentPayment {
+  id              String   @id @default(uuid())
+  amount          Decimal  @db.Decimal(10, 2) // Valor pago
+  paymentDate     DateTime @default(now())
+  paymentMethod   String   // Método de pagamento usado
+  notes           String?  // Notas/observações
+  createdAt       DateTime @default(now())
+
+  // Relations
+  installmentId   String
+  installment     Installment @relation(fields: [installmentId], references: [id], onDelete: Cascade)
+
+  @@map("installment_payments")
+}
+
+model NotificationPreference {
+  id              String   @id @default(uuid())
+  userId          String   // ID do usuário (Admin, Company ou Seller)
+  userRole        String   // Tipo de usuário (admin, company, seller)
+  
+  // Preferências de notificação
+  stockAlerts     Boolean  @default(false)  // Alertas de estoque baixo
+  billReminders   Boolean  @default(false)  // Lembretes de contas a vencer
+  weeklyReports   Boolean  @default(false)  // Relatórios semanais
+  salesAlerts     Boolean  @default(false)  // Alertas de vendas
+  systemUpdates   Boolean  @default(false)  // Atualizações do sistema
+  
+  // Canais de notificação
+  emailEnabled    Boolean  @default(false)  // Receber por email
+  inAppEnabled    Boolean  @default(false)  // Notificações in-app
+  
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@unique([userId, userRole])
+  @@map("notification_preferences")
+}
+
+model Notification {
+  id              String   @id @default(uuid())
+  userId          String   // ID do usuário destinatário
+  userRole        String   // Tipo de usuário (admin, company, seller)
+  
+  // Conteúdo da notificação
+  type            String   // stock_alert, bill_reminder, sale_alert, system_update, etc.
+  title           String   // Título da notificação
+  message         String   // Mensagem completa
+  
+  // Metadados
+  priority        String   @default("normal") // low, normal, high, urgent
+  category        String?  // Categoria para filtragem (vendas, estoque, financeiro, etc.)
+  actionUrl       String?  // URL para ação relacionada
+  actionLabel     String?  // Label do botão de ação
+  
+  // Dados adicionais (JSON)
+  metadata        String?  // JSON com dados extras
+  
+  // Status
+  isRead          Boolean  @default(false)
+  readAt          DateTime?
+  
+  createdAt       DateTime @default(now())
+  expiresAt       DateTime? // Data de expiração da notificação
+
+  @@index([userId, userRole, isRead])
+  @@index([createdAt])
+  @@map("notifications")
+}
+
+model Budget {
+  id              String   @id @default(uuid())
+  budgetNumber    Int      // Número sequencial do orçamento
+  total           Decimal  @db.Decimal(10, 2)
+  clientName      String?
+  clientPhone     String?
+  clientEmail     String?
+  clientCpfCnpj   String?
+  notes           String?  // Observações do orçamento
+  validUntil      DateTime // Data de validade do orçamento
+  status          String   @default("pending") // pending, approved, rejected, expired
+  budgetDate      DateTime @default(now())
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  // Relations
+  companyId       String
+  company         Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  sellerId        String?
+  seller          Seller? @relation(fields: [sellerId], references: [id])
+  items           BudgetItem[]
+
+  @@map("budgets")
+}
+
+model BudgetItem {
+  id          String  @id @default(uuid())
+  quantity    Int
+  unitPrice   Decimal @db.Decimal(10, 2)
+  totalPrice  Decimal @db.Decimal(10, 2)
+  createdAt   DateTime @default(now())
+
+  // Relations
+  budgetId    String
+  budget      Budget @relation(fields: [budgetId], references: [id], onDelete: Cascade)
+  productId   String
+  product     Product @relation(fields: [productId], references: [id])
+
+  @@map("budget_items")
 }

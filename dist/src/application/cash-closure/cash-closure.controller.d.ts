@@ -9,6 +9,10 @@ export declare class CashClosureController {
             id: string;
             name: string;
         };
+        seller: {
+            id: string;
+            name: string;
+        };
     } & {
         id: string;
         createdAt: Date;
@@ -21,6 +25,7 @@ export declare class CashClosureController {
         totalSales: import("@prisma/client/runtime/library").Decimal;
         totalWithdrawals: import("@prisma/client/runtime/library").Decimal;
         isClosed: boolean;
+        sellerId: string | null;
     }>;
     findAll(user: any, page?: number, limit?: number, isClosed?: boolean): Promise<{
         closures: ({
@@ -43,6 +48,7 @@ export declare class CashClosureController {
             totalSales: import("@prisma/client/runtime/library").Decimal;
             totalWithdrawals: import("@prisma/client/runtime/library").Decimal;
             isClosed: boolean;
+            sellerId: string | null;
         })[];
         total: number;
         page: number;
@@ -60,16 +66,20 @@ export declare class CashClosureController {
             createdAt: Date;
             updatedAt: Date;
             companyId: string;
+            sellerId: string;
             total: import("@prisma/client/runtime/library").Decimal;
             change: import("@prisma/client/runtime/library").Decimal;
             clientCpfCnpj: string | null;
             clientName: string | null;
             isInstallment: boolean;
             saleDate: Date;
-            sellerId: string;
             cashClosureId: string | null;
         })[];
         company: {
+            id: string;
+            name: string;
+        };
+        seller: {
             id: string;
             name: string;
         };
@@ -88,6 +98,7 @@ export declare class CashClosureController {
         totalSales: import("@prisma/client/runtime/library").Decimal;
         totalWithdrawals: import("@prisma/client/runtime/library").Decimal;
         isClosed: boolean;
+        sellerId: string | null;
     }>;
     getStats(user: any): Promise<{
         hasOpenClosure: boolean;
@@ -95,17 +106,21 @@ export declare class CashClosureController {
         openingDate?: undefined;
         openingAmount?: undefined;
         totalSales?: undefined;
+        totalCashSales?: undefined;
         salesCount?: undefined;
         salesByPaymentMethod?: undefined;
         salesBySeller?: undefined;
+        isIndividualCash?: undefined;
     } | {
         hasOpenClosure: boolean;
         openingDate: Date;
         openingAmount: number;
         totalSales: number;
+        totalCashSales: any;
         salesCount: number;
         salesByPaymentMethod: {};
         salesBySeller: {};
+        isIndividualCash: boolean;
         message?: undefined;
     }>;
     getHistory(user: any, page?: number, limit?: number): Promise<{
@@ -125,6 +140,7 @@ export declare class CashClosureController {
             totalSales: import("@prisma/client/runtime/library").Decimal;
             totalWithdrawals: import("@prisma/client/runtime/library").Decimal;
             isClosed: boolean;
+            sellerId: string | null;
         })[];
         total: number;
         page: number;
@@ -145,10 +161,10 @@ export declare class CashClosureController {
             } & {
                 id: string;
                 createdAt: Date;
+                saleId: string;
                 quantity: number;
                 unitPrice: import("@prisma/client/runtime/library").Decimal;
                 totalPrice: import("@prisma/client/runtime/library").Decimal;
-                saleId: string;
                 productId: string;
             })[];
         } & {
@@ -156,13 +172,13 @@ export declare class CashClosureController {
             createdAt: Date;
             updatedAt: Date;
             companyId: string;
+            sellerId: string;
             total: import("@prisma/client/runtime/library").Decimal;
             change: import("@prisma/client/runtime/library").Decimal;
             clientCpfCnpj: string | null;
             clientName: string | null;
             isInstallment: boolean;
             saleDate: Date;
-            sellerId: string;
             cashClosureId: string | null;
         })[];
         company: {
@@ -184,6 +200,7 @@ export declare class CashClosureController {
         totalSales: import("@prisma/client/runtime/library").Decimal;
         totalWithdrawals: import("@prisma/client/runtime/library").Decimal;
         isClosed: boolean;
+        sellerId: string | null;
     }>;
     close(user: any, closeCashClosureDto: CloseCashClosureDto): Promise<{
         sales: ({
@@ -196,16 +213,20 @@ export declare class CashClosureController {
             createdAt: Date;
             updatedAt: Date;
             companyId: string;
+            sellerId: string;
             total: import("@prisma/client/runtime/library").Decimal;
             change: import("@prisma/client/runtime/library").Decimal;
             clientCpfCnpj: string | null;
             clientName: string | null;
             isInstallment: boolean;
             saleDate: Date;
-            sellerId: string;
             cashClosureId: string | null;
         })[];
         company: {
+            id: string;
+            name: string;
+        };
+        seller: {
             id: string;
             name: string;
         };
@@ -221,6 +242,7 @@ export declare class CashClosureController {
         totalSales: import("@prisma/client/runtime/library").Decimal;
         totalWithdrawals: import("@prisma/client/runtime/library").Decimal;
         isClosed: boolean;
+        sellerId: string | null;
     }>;
     reprintReport(id: string, user: any): Promise<{
         message: string;

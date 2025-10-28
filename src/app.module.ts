@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { ThrottlerModule } from '@nestjs/throttler';
+import { ScheduleModule } from '@nestjs/schedule';
 import { PrismaModule } from './infrastructure/database/prisma.module';
 import { HashModule } from './shared/services/hash.module';
 import { EmailModule } from './shared/services/email.module';
@@ -21,6 +22,9 @@ import { N8nModule } from './application/n8n/n8n.module';
 import { HealthModule } from './application/health/health.module';
 import { ReportsModule } from './application/reports/reports.module';
 import { DashboardModule } from './application/dashboard/dashboard.module';
+import { InstallmentModule } from './application/installment/installment.module';
+import { NotificationModule } from './application/notification/notification.module';
+import { BudgetModule } from './application/budget/budget.module';
 
 @Module({
   imports: [
@@ -28,6 +32,7 @@ import { DashboardModule } from './application/dashboard/dashboard.module';
       isGlobal: true,
       envFilePath: '.env',
     }),
+    ScheduleModule.forRoot(),
     ThrottlerModule.forRootAsync({
       imports: [ConfigModule],
       inject: [ConfigService],
@@ -57,6 +62,9 @@ import { DashboardModule } from './application/dashboard/dashboard.module';
     N8nModule,
     ReportsModule,
     DashboardModule,
+    InstallmentModule,
+    NotificationModule,
+    BudgetModule,
     HealthModule,
   ],
 })

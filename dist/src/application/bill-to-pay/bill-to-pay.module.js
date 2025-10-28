@@ -11,12 +11,13 @@ const common_1 = require("@nestjs/common");
 const bill_to_pay_service_1 = require("./bill-to-pay.service");
 const bill_to_pay_controller_1 = require("./bill-to-pay.controller");
 const prisma_module_1 = require("../../infrastructure/database/prisma.module");
+const plan_limits_module_1 = require("../../shared/services/plan-limits.module");
 let BillToPayModule = class BillToPayModule {
 };
 exports.BillToPayModule = BillToPayModule;
 exports.BillToPayModule = BillToPayModule = __decorate([
     (0, common_1.Module)({
-        imports: [prisma_module_1.PrismaModule],
+        imports: [prisma_module_1.PrismaModule, plan_limits_module_1.PlanLimitsModule],
         providers: [bill_to_pay_service_1.BillToPayService],
         controllers: [bill_to_pay_controller_1.BillToPayController],
         exports: [bill_to_pay_service_1.BillToPayService],

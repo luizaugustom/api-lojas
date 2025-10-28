@@ -34,7 +34,7 @@ export class CashClosureController {
   constructor(private readonly cashClosureService: CashClosureService) {}
 
   @Post()
-  @Roles(UserRole.COMPANY)
+  @Roles(UserRole.COMPANY, UserRole.SELLER)
   @ApiOperation({ summary: 'Abrir novo fechamento de caixa' })
   @ApiResponse({ status: 201, description: 'Fechamento de caixa criado com sucesso' })
   @ApiResponse({ status: 400, description: 'Já existe um fechamento de caixa aberto' })
@@ -42,7 +42,8 @@ export class CashClosureController {
     @CurrentUser() user: any,
     @Body() createCashClosureDto: CreateCashClosureDto,
   ) {
-    return this.cashClosureService.create(user.companyId, createCashClosureDto);
+    const sellerId = user.role === UserRole.SELLER ? user.userId : undefined;
+    return this.cashClosureService.create(user.companyId, createCashClosureDto, sellerId);
   }
 
   @Get()
@@ -65,20 +66,22 @@ export class CashClosureController {
   }
 
   @Get('current')
-  @Roles(UserRole.COMPANY)
+  @Roles(UserRole.COMPANY, UserRole.SELLER)
   @ApiOperation({ summary: 'Obter fechamento de caixa atual' })
   @ApiResponse({ status: 200, description: 'Fechamento de caixa atual' })
   @ApiResponse({ status: 404, description: 'Não há fechamento de caixa aberto' })
   getCurrent(@CurrentUser() user: any) {
-    return this.cashClosureService.getCurrentClosure(user.companyId);
+    const sellerId = user.role === UserRole.SELLER ? user.userId : undefined;
+    return this.cashClosureService.getCurrentClosure(user.companyId, sellerId);
   }
 
   @Get('stats')
-  @Roles(UserRole.COMPANY)
+  @Roles(UserRole.COMPANY, UserRole.SELLER)
   @ApiOperation({ summary: 'Obter estatísticas do fechamento de caixa' })
   @ApiResponse({ status: 200, description: 'Estatísticas do fechamento de caixa' })
   getStats(@CurrentUser() user: any) {
-    return this.cashClosureService.getCashClosureStats(user.companyId);
+    const sellerId = user.role === UserRole.SELLER ? user.userId : undefined;
+    return this.cashClosureService.getCashClosureStats(user.companyId, sellerId);
   }
 
   @Get('history')
@@ -111,7 +114,7 @@ export class CashClosureController {
   }
 
   @Patch('close')
-  @Roles(UserRole.COMPANY)
+  @Roles(UserRole.COMPANY, UserRole.SELLER)
   @ApiOperation({ summary: 'Fechar fechamento de caixa atual' })
   @ApiResponse({ status: 200, description: 'Fechamento de caixa fechado com sucesso' })
   @ApiResponse({ status: 404, description: 'Não há fechamento de caixa aberto' })
@@ -119,7 +122,8 @@ export class CashClosureController {
     @CurrentUser() user: any,
     @Body() closeCashClosureDto: CloseCashClosureDto,
   ) {
-    return this.cashClosureService.close(user.companyId, closeCashClosureDto);
+    const sellerId = user.role === UserRole.SELLER ? user.userId : undefined;
+    return this.cashClosureService.close(user.companyId, closeCashClosureDto, sellerId);
   }
 
   @Post(':id/reprint')

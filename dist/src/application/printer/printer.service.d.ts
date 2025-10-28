@@ -1,5 +1,7 @@
 import { ConfigService } from '@nestjs/config';
 import { PrismaService } from '../../infrastructure/database/prisma.service';
+import { PrinterDriverService, SystemPrinter } from '../../shared/services/printer-driver.service';
+import { ThermalPrinterService } from '../../shared/services/thermal-printer.service';
 export interface PrinterConfig {
     type: 'usb' | 'network' | 'bluetooth';
     connectionInfo: string;
@@ -39,12 +41,16 @@ export interface NFCePrintData {
         address?: string;
         phone?: string;
         email?: string;
+        inscricaoEstadual?: string;
     };
     fiscal: {
         documentNumber: string;
         accessKey: string;
         emissionDate: Date;
         status: string;
+        protocol?: string;
+        qrCodeUrl?: string;
+        serieNumber?: string;
     };
     sale: {
         id: string;
@@ -55,6 +61,7 @@ export interface NFCePrintData {
         change: number;
         saleDate: Date;
         sellerName: string;
+        totalTaxes?: number;
     };
     items: Array<{
         productName: string;
@@ -62,6 +69,8 @@ export interface NFCePrintData {
         quantity: number;
         unitPrice: number;
         totalPrice: number;
+        ncm?: string;
+        cfop?: string;
     }>;
     customFooter?: string;
 }
@@ -89,14 +98,34 @@ export interface CashClosureReportData {
 export declare class PrinterService {
     private readonly configService;
     private readonly prisma;
+    private readonly driverService;
+    private readonly thermalPrinter;
     private readonly logger;
     private readonly printerTimeout;
     private readonly printerRetryAttempts;
-    constructor(configService: ConfigService, prisma: PrismaService);
+    private lastPrinterCheck;
+    private availablePrinters;
+    constructor(configService: ConfigService, prisma: PrismaService, driverService: PrinterDriverService, thermalPrinter: ThermalPrinterService);
+    private initializePrinters;
+    private syncPrintersWithDatabase;
+    checkPrintersStatus(): Promise<void>;
     discoverPrinters(): Promise<PrinterConfig[]>;
-    private discoverUsbPrinters;
-    private discoverNetworkPrinters;
-    private discoverBluetoothPrinters;
+    getAvailablePrinters(): Promise<SystemPrinter[]>;
+    checkDrivers(): Promise<{
+        allInstalled: boolean;
+        drivers: any[];
+        message: string;
+    }>;
+    installDrivers(): Promise<{
+        success: boolean;
+        message: string;
+        errors: string[];
+    }>;
+    checkAndInstallDrivers(): Promise<{
+        driversInstalled: boolean;
+        message: string;
+        errors: string[];
+    }>;
     addPrinter(companyId: string, printerConfig: PrinterConfig): Promise<{
         id: string;
         createdAt: Date;
@@ -141,9 +170,9 @@ export declare class PrinterService {
         paperStatus: string;
         lastStatusCheck: Date | null;
     }>;
-    printReceipt(receiptData: ReceiptData): Promise<boolean>;
-    printCashClosureReport(reportData: CashClosureReportData): Promise<boolean>;
-    printNFCe(nfceData: NFCePrintData): Promise<boolean>;
+    printReceipt(receiptData: ReceiptData, companyId?: string): Promise<boolean>;
+    printCashClosureReport(reportData: CashClosureReportData, companyId?: string): Promise<boolean>;
+    printNFCe(nfceData: NFCePrintData, companyId?: string): Promise<boolean>;
     private generateReceiptContent;
     private generateCashClosureReport;
     private generateNFCeContent;
@@ -152,6 +181,11 @@ export declare class PrinterService {
     private formatDate;
     private formatCurrency;
     private getPaymentMethodName;
+    private formatCnpj;
+    private formatCpfCnpj;
+    private formatAccessKey;
+    private wrapText;
+    private generateQRCodeAscii;
     testPrinter(id: string): Promise<boolean>;
     private generateTestContent;
     getPrinterStatus(id: string): Promise<{
@@ -164,4 +198,9 @@ export declare class PrinterService {
     }>;
     updateCustomFooter(companyId: string, customFooter: string): Promise<void>;
     getCustomFooter(companyId: string): Promise<string | null>;
+    openCashDrawer(printerId: string): Promise<boolean>;
+    getPrintQueue(printerId: string): Promise<any[]>;
+    printBudget(data: any): Promise<boolean>;
+    private generateBudgetContent;
+    private getBudgetStatus;
 }

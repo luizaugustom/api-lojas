@@ -3,15 +3,22 @@ import { PrismaService } from '../../infrastructure/database/prisma.service';
 import { CreateBillToPayDto } from './dto/create-bill-to-pay.dto';
 import { UpdateBillToPayDto } from './dto/update-bill-to-pay.dto';
 import { MarkAsPaidDto } from './dto/mark-as-paid.dto';
+import { PlanLimitsService } from '../../shared/services/plan-limits.service';
 
 @Injectable()
 export class BillToPayService {
   private readonly logger = new Logger(BillToPayService.name);
 
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly planLimitsService: PlanLimitsService,
+  ) {}
 
   async create(companyId: string, createBillToPayDto: CreateBillToPayDto) {
     try {
+      // Validar limite de contas a pagar do plano
+      await this.planLimitsService.validateBillToPayLimit(companyId);
+      
       const bill = await this.prisma.billToPay.create({
         data: {
           ...createBillToPayDto,

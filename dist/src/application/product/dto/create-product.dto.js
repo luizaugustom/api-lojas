@@ -114,8 +114,9 @@ __decorate([
     (0, class_validator_1.IsOptional)(),
     (0, class_validator_1.IsDateString)(),
     (0, class_transformer_1.Transform)(({ value }) => {
-        if (!value)
-            return value;
+        if (!value || value === null || value === '' || (typeof value === 'string' && value.trim() === '')) {
+            return undefined;
+        }
         if (typeof value === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(value)) {
             return new Date(value + 'T00:00:00.000Z').toISOString();
         }
@@ -123,4 +124,46 @@ __decorate([
     }),
     __metadata("design:type", String)
 ], CreateProductDto.prototype, "expirationDate", void 0);
+__decorate([
+    (0, swagger_1.ApiProperty)({
+        description: 'NCM - Nomenclatura Comum do Mercosul (8 dígitos)',
+        example: '85171231',
+        required: false,
+        default: '99999999',
+        minLength: 8,
+        maxLength: 8,
+    }),
+    (0, class_validator_1.IsOptional)(),
+    (0, class_validator_1.IsString)(),
+    (0, class_validator_1.MinLength)(8),
+    (0, class_validator_1.MaxLength)(8),
+    (0, class_transformer_1.Transform)(({ value }) => {
+        if (!value)
+            return '99999999';
+        const cleaned = value.replace(/\D/g, '');
+        return cleaned.length === 8 ? cleaned : '99999999';
+    }),
+    __metadata("design:type", String)
+], CreateProductDto.prototype, "ncm", void 0);
+__decorate([
+    (0, swagger_1.ApiProperty)({
+        description: 'CFOP - Código Fiscal de Operações e Prestações (4 dígitos)',
+        example: '5102',
+        required: false,
+        default: '5102',
+        minLength: 4,
+        maxLength: 4,
+    }),
+    (0, class_validator_1.IsOptional)(),
+    (0, class_validator_1.IsString)(),
+    (0, class_validator_1.MinLength)(4),
+    (0, class_validator_1.MaxLength)(4),
+    (0, class_transformer_1.Transform)(({ value }) => {
+        if (!value)
+            return '5102';
+        const cleaned = value.replace(/\D/g, '');
+        return cleaned.length === 4 ? cleaned : '5102';
+    }),
+    __metadata("design:type", String)
+], CreateProductDto.prototype, "cfop", void 0);
 //# sourceMappingURL=create-product.dto.js.map

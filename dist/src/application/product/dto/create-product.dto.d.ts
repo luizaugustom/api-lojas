@@ -7,4 +7,6 @@ export declare class CreateProductDto {
     price: number;
     category?: string;
     expirationDate?: string;
+    ncm?: string;
+    cfop?: string;
 }

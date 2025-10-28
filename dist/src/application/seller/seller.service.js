@@ -14,21 +14,28 @@ exports.SellerService = void 0;
 const common_1 = require("@nestjs/common");
 const prisma_service_1 = require("../../infrastructure/database/prisma.service");
 const hash_service_1 = require("../../shared/services/hash.service");
+const plan_limits_service_1 = require("../../shared/services/plan-limits.service");
 let SellerService = SellerService_1 = class SellerService {
-    constructor(prisma, hashService) {
+    constructor(prisma, hashService, planLimitsService) {
         this.prisma = prisma;
         this.hashService = hashService;
+        this.planLimitsService = planLimitsService;
         this.logger = new common_1.Logger(SellerService_1.name);
     }
     async create(companyId, createSellerDto) {
         try {
+            await this.planLimitsService.validateSellerLimit(companyId);
             const hashedPassword = await this.hashService.hashPassword(createSellerDto.password);
+            const data = {
+                ...createSellerDto,
+                password: hashedPassword,
+                companyId,
+            };
+            if (!data.birthDate || data.birthDate === '') {
+                delete data.birthDate;
+            }
             const seller = await this.prisma.seller.create({
-                data: {
-                    ...createSellerDto,
-                    password: hashedPassword,
-                    companyId,
-                },
+                data,
                 select: {
                     id: true,
                     login: true,
@@ -36,6 +43,7 @@ let SellerService = SellerService_1 = class SellerService {
                     cpf: true,
                     email: true,
                     phone: true,
+                    commissionRate: true,
                     createdAt: true,
                     updatedAt: true,
                 },
@@ -53,7 +61,7 @@ let SellerService = SellerService_1 = class SellerService {
     }
     async findAll(companyId) {
         const where = companyId ? { companyId } : {};
-        return this.prisma.seller.findMany({
+        const sellers = await this.prisma.seller.findMany({
             where,
             select: {
                 id: true,
@@ -62,6 +70,7 @@ let SellerService = SellerService_1 = class SellerService {
                 cpf: true,
                 email: true,
                 phone: true,
+                commissionRate: true,
                 createdAt: true,
                 updatedAt: true,
                 company: {
@@ -80,6 +89,38 @@ let SellerService = SellerService_1 = class SellerService {
                 createdAt: 'desc',
             },
         });
+        const startOfMonth = new Date();
+        startOfMonth.setDate(1);
+        startOfMonth.setHours(0, 0, 0, 0);
+        const sellersWithStats = await Promise.all(sellers.map(async (seller) => {
+            const monthlySales = await this.prisma.sale.aggregate({
+                where: {
+                    sellerId: seller.id,
+                    saleDate: {
+                        gte: startOfMonth,
+                    },
+                },
+                _sum: {
+                    total: true,
+                },
+                _count: {
+                    id: true,
+                },
+            });
+            const totalSales = await this.prisma.sale.aggregate({
+                where: { sellerId: seller.id },
+                _sum: {
+                    total: true,
+                },
+            });
+            return {
+                ...seller,
+                monthlySalesValue: monthlySales._sum.total || 0,
+                monthlySalesCount: monthlySales._count.id || 0,
+                totalRevenue: totalSales._sum.total || 0,
+            };
+        }));
+        return sellersWithStats;
     }
     async findOne(id, companyId) {
         const where = { id };
@@ -96,6 +137,7 @@ let SellerService = SellerService_1 = class SellerService {
                 birthDate: true,
                 email: true,
                 phone: true,
+                commissionRate: true,
                 createdAt: true,
                 updatedAt: true,
                 company: {
@@ -129,8 +171,14 @@ let SellerService = SellerService_1 = class SellerService {
                 throw new common_1.NotFoundException('Vendedor não encontrado');
             }
             const updateData = { ...updateSellerDto };
-            if (updateSellerDto.password) {
+            if (!updateSellerDto.password || updateSellerDto.password.trim() === '') {
+                delete updateData.password;
+            }
+            else {
                 updateData.password = await this.hashService.hashPassword(updateSellerDto.password);
+            }
+            if (!updateData.birthDate || updateData.birthDate === '') {
+                delete updateData.birthDate;
             }
             const seller = await this.prisma.seller.update({
                 where: { id },
@@ -142,6 +190,7 @@ let SellerService = SellerService_1 = class SellerService {
                     cpf: true,
                     email: true,
                     phone: true,
+                    commissionRate: true,
                     createdAt: true,
                     updatedAt: true,
                 },
@@ -270,6 +319,7 @@ exports.SellerService = SellerService;
 exports.SellerService = SellerService = SellerService_1 = __decorate([
     (0, common_1.Injectable)(),
     __metadata("design:paramtypes", [prisma_service_1.PrismaService,
-        hash_service_1.HashService])
+        hash_service_1.HashService,
+        plan_limits_service_1.PlanLimitsService])
 ], SellerService);
 //# sourceMappingURL=seller.service.js.map

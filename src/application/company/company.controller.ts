@@ -8,28 +8,38 @@ import {
   Delete,
   UseGuards,
   Query,
+  UseInterceptors,
+  UploadedFile,
 } from '@nestjs/common';
+import { FileInterceptor } from '@nestjs/platform-express';
 import {
   ApiTags,
   ApiOperation,
   ApiResponse,
   ApiBearerAuth,
+  ApiConsumes,
+  ApiBody,
 } from '@nestjs/swagger';
 import { CompanyService } from './company.service';
 import { CreateCompanyDto } from './dto/create-company.dto';
 import { UpdateCompanyDto } from './dto/update-company.dto';
+import { UpdateFiscalConfigDto } from './dto/update-fiscal-config.dto';
 import { JwtAuthGuard } from '../../shared/guards/jwt-auth.guard';
 import { RolesGuard } from '../../shared/guards/roles.guard';
 import { Roles, UserRole } from '../../shared/decorators/roles.decorator';
 import { CurrentUser } from '../../shared/decorators/current-user.decorator';
 import { UuidValidationPipe } from '../../shared/pipes/uuid-validation.pipe';
+import { PlanLimitsService } from '../../shared/services/plan-limits.service';
 
 @ApiTags('company')
 @Controller('company')
 @UseGuards(JwtAuthGuard, RolesGuard)
 @ApiBearerAuth()
 export class CompanyController {
-  constructor(private readonly companyService: CompanyService) {}
+  constructor(
+    private readonly companyService: CompanyService,
+    private readonly planLimitsService: PlanLimitsService,
+  ) {}
 
   @Post()
   @Roles(UserRole.ADMIN)
@@ -68,6 +78,22 @@ export class CompanyController {
   @ApiResponse({ status: 200, description: 'Estatísticas da empresa' })
   getStats(@CurrentUser() user: any) {
     return this.companyService.getCompanyStats(user.companyId);
+  }
+
+  @Get('plan-usage')
+  @Roles(UserRole.COMPANY)
+  @ApiOperation({ summary: 'Obter estatísticas de uso do plano' })
+  @ApiResponse({ status: 200, description: 'Estatísticas de uso do plano da empresa' })
+  getPlanUsage(@CurrentUser() user: any) {
+    return this.planLimitsService.getCompanyUsageStats(user.companyId);
+  }
+
+  @Get('plan-warnings')
+  @Roles(UserRole.COMPANY)
+  @ApiOperation({ summary: 'Verificar alertas de limites próximos' })
+  @ApiResponse({ status: 200, description: 'Alertas sobre limites próximos de serem atingidos' })
+  getPlanWarnings(@CurrentUser() user: any) {
+    return this.planLimitsService.checkNearLimits(user.companyId);
   }
 
   @Get(':id')
@@ -135,5 +161,101 @@ export class CompanyController {
   @ApiResponse({ status: 400, description: 'ID inválido' })
   remove(@Param('id', UuidValidationPipe) id: string) {
     return this.companyService.remove(id);
+  }
+
+  @Patch('my-company/fiscal-config')
+  @Roles(UserRole.COMPANY)
+  @ApiOperation({ summary: 'Atualizar configurações fiscais (Focus NFe)' })
+  @ApiResponse({ status: 200, description: 'Configurações fiscais atualizadas com sucesso' })
+  @ApiResponse({ status: 404, description: 'Empresa não encontrada' })
+  updateFiscalConfig(
+    @CurrentUser() user: any,
+    @Body() updateFiscalConfigDto: UpdateFiscalConfigDto,
+  ) {
+    return this.companyService.updateFiscalConfig(user.companyId, updateFiscalConfigDto);
+  }
+
+  @Get('my-company/fiscal-config')
+  @Roles(UserRole.COMPANY)
+  @ApiOperation({ summary: 'Obter configurações fiscais (dados sensíveis mascarados)' })
+  @ApiResponse({ status: 200, description: 'Configurações fiscais' })
+  @ApiResponse({ status: 404, description: 'Empresa não encontrada' })
+  getFiscalConfig(@CurrentUser() user: any) {
+    return this.companyService.getFiscalConfig(user.companyId);
+  }
+
+  @Post('my-company/upload-certificate')
+  @Roles(UserRole.COMPANY)
+  @UseInterceptors(FileInterceptor('certificate'))
+  @ApiOperation({ summary: 'Upload do certificado digital para Focus NFe' })
+  @ApiResponse({ status: 200, description: 'Certificado enviado com sucesso ao Focus NFe' })
+  @ApiResponse({ status: 400, description: 'Erro no upload ou certificado inválido' })
+  uploadCertificate(
+    @CurrentUser() user: any,
+    @UploadedFile() file: Express.Multer.File,
+  ) {
+    return this.companyService.uploadCertificateToFocusNfe(user.companyId, file);
+  }
+
+  @Post('my-company/upload-logo')
+  @Roles(UserRole.COMPANY)
+  @UseInterceptors(FileInterceptor('logo'))
+  @ApiOperation({ summary: 'Upload do logo da empresa' })
+  @ApiConsumes('multipart/form-data')
+  @ApiBody({
+    description: 'Logo da empresa',
+    schema: {
+      type: 'object',
+      properties: {
+        logo: {
+          type: 'string',
+          format: 'binary',
+        },
+      },
+    },
+  })
+  @ApiResponse({ status: 200, description: 'Logo enviado com sucesso' })
+  @ApiResponse({ status: 400, description: 'Erro no upload ou arquivo inválido' })
+  uploadLogo(
+    @CurrentUser() user: any,
+    @UploadedFile() file: Express.Multer.File,
+  ) {
+    return this.companyService.uploadLogo(user.companyId, file);
+  }
+
+  @Delete('my-company/logo')
+  @Roles(UserRole.COMPANY)
+  @ApiOperation({ summary: 'Remover logo da empresa' })
+  @ApiResponse({ status: 200, description: 'Logo removido com sucesso' })
+  @ApiResponse({ status: 404, description: 'Empresa não encontrada' })
+  removeLogo(@CurrentUser() user: any) {
+    return this.companyService.removeLogo(user.companyId);
+  }
+
+  @Patch('my-company/auto-message/enable')
+  @Roles(UserRole.COMPANY)
+  @ApiOperation({ summary: 'Ativar envio automático de mensagens de cobrança' })
+  @ApiResponse({ status: 200, description: 'Envio automático de mensagens ativado com sucesso' })
+  @ApiResponse({ status: 404, description: 'Empresa não encontrada' })
+  enableAutoMessages(@CurrentUser() user: any) {
+    return this.companyService.toggleAutoMessages(user.companyId, true);
+  }
+
+  @Patch('my-company/auto-message/disable')
+  @Roles(UserRole.COMPANY)
+  @ApiOperation({ summary: 'Desativar envio automático de mensagens de cobrança' })
+  @ApiResponse({ status: 200, description: 'Envio automático de mensagens desativado com sucesso' })
+  @ApiResponse({ status: 404, description: 'Empresa não encontrada' })
+  disableAutoMessages(@CurrentUser() user: any) {
+    return this.companyService.toggleAutoMessages(user.companyId, false);
+  }
+
+  @Get('my-company/auto-message/status')
+  @Roles(UserRole.COMPANY)
+  @ApiOperation({ summary: 'Verificar status do envio automático de mensagens' })
+  @ApiResponse({ status: 200, description: 'Status do envio automático de mensagens' })
+  @ApiResponse({ status: 404, description: 'Empresa não encontrada' })
+  getAutoMessageStatus(@CurrentUser() user: any) {
+    return this.companyService.getAutoMessageStatus(user.companyId);
   }
 }

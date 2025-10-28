@@ -1,21 +1,46 @@
 import { Injectable, Logger, BadRequestException, NotFoundException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { PrismaService } from '../../infrastructure/database/prisma.service';
-import { FiscalApiService, NFCeRequest } from '../../shared/services/fiscal-api.service';
+import { 
+  FiscalApiService, 
+  NFCeRequest, 
+  NFeRequest, 
+  NFeRecipient, 
+  NFeItem 
+} from '../../shared/services/fiscal-api.service';
 import * as xml2js from 'xml2js';
 
+// Interface para dados de NF-e vinda do controller
 export interface NFeData {
   companyId: string;
-  clientCpfCnpj?: string;
-  clientName?: string;
-  items: Array<{
-    productId: string;
+  saleId?: string; // Opcional: vincular a uma venda
+  recipient?: { // Opcional: dados manuais
+    document: string;
+    name: string;
+    email?: string;
+    phone?: string;
+    address?: {
+      zipCode?: string;
+      street?: string;
+      number?: string;
+      complement?: string;
+      district?: string;
+      city?: string;
+      state?: string;
+    };
+  };
+  items?: Array<{
+    description: string;
     quantity: number;
     unitPrice: number;
-    totalPrice: number;
+    ncm?: string;
+    cfop: string;
+    unitOfMeasure: string;
   }>;
-  totalValue: number;
-  paymentMethod: string[];
+  payment?: {
+    method: string;
+  };
+  additionalInfo?: string;
 }
 
 export interface NFCeData {
@@ -59,71 +84,124 @@ export class FiscalService {
     try {
       this.logger.log(`Generating NFe for company: ${nfeData.companyId}`);
 
-      // Get company data
-      const company = await this.prisma.company.findUnique({
-        where: { id: nfeData.companyId },
-      });
+      // Validar modo de emissão
+      const isManualMode = !nfeData.saleId && nfeData.recipient && nfeData.items;
+      const isSaleMode = !!nfeData.saleId;
 
-      if (!company) {
-        throw new NotFoundException('Empresa não encontrada');
+      if (!isManualMode && !isSaleMode) {
+        throw new BadRequestException('Informe saleId ou dados completos para emissão manual');
       }
 
-      // Prepare NFe data for fiscal API
-      const fiscalData = {
-        emitente: {
-          cnpj: company.cnpj.replace(/[^\d]/g, ''),
-          nome: company.name,
-          endereco: {
-            logradouro: company.street,
-            numero: company.number,
-            bairro: company.district,
-            municipio: company.city,
-            uf: company.state,
-            cep: company.zipCode?.replace(/[^\d]/g, ''),
+      let nfeRequest: NFeRequest;
+      let saleReference = '';
+
+      if (isSaleMode) {
+        // Modo 1: Emissão vinculada a uma venda
+        const sale = await this.prisma.sale.findUnique({
+          where: { id: nfeData.saleId },
+          include: {
+            items: {
+              include: {
+                product: true,
+              },
+            },
+            paymentMethods: true,
           },
-        },
-        destinatario: nfeData.clientCpfCnpj ? {
-          cpf_cnpj: nfeData.clientCpfCnpj.replace(/[^\d]/g, ''),
-          nome: nfeData.clientName,
-        } : undefined,
-        itens: nfeData.items.map(item => ({
-          codigo: item.productId,
-          descricao: `Produto ${item.productId}`,
-          quantidade: item.quantity,
-          valor_unitario: item.unitPrice,
-          valor_total: item.totalPrice,
-        })),
-        total: nfeData.totalValue,
-        forma_pagamento: nfeData.paymentMethod,
-      };
+        });
 
-      // Call fiscal API (NFe not implemented yet)
-      const response = {
-        numero: Math.floor(Math.random() * 1000000).toString(),
-        chave_acesso: `NFe${Date.now()}${Math.floor(Math.random() * 1000000)}`,
-        status: 'Autorizada',
-        xml: '<?xml version="1.0" encoding="UTF-8"?><nfe></nfe>',
-        pdf_url: 'https://example.com/documento.pdf',
-      };
+        if (!sale) {
+          throw new NotFoundException('Venda não encontrada');
+        }
 
-      // Save fiscal document
+        if (!sale.clientCpfCnpj || !sale.clientName) {
+          throw new BadRequestException('Venda não possui dados de cliente (CPF/CNPJ e Nome são obrigatórios)');
+        }
+
+        // Montar request a partir da venda
+        nfeRequest = {
+          companyId: nfeData.companyId,
+          recipient: {
+            document: sale.clientCpfCnpj,
+            name: sale.clientName,
+            // Sale não tem relação com Customer, então não temos esses dados adicionais
+            email: undefined,
+            phone: undefined,
+            address: undefined,
+          },
+          items: sale.items.map(item => ({
+            description: item.product.name,
+            quantity: item.quantity,
+            unitPrice: Number(item.unitPrice),
+            ncm: item.product.ncm || undefined,
+            cfop: item.product.cfop || '5102',
+            unitOfMeasure: 'UN',
+          })),
+          paymentMethod: sale.paymentMethods[0]?.method || '99', // Usa primeiro método de pagamento
+          referenceId: sale.id,
+        };
+
+        saleReference = sale.id;
+      } else {
+        // Modo 2: Emissão manual
+        nfeRequest = {
+          companyId: nfeData.companyId,
+          recipient: {
+            document: nfeData.recipient.document,
+            name: nfeData.recipient.name,
+            email: nfeData.recipient.email,
+            phone: nfeData.recipient.phone,
+            address: nfeData.recipient.address,
+          },
+          items: nfeData.items.map(item => ({
+            description: item.description,
+            quantity: item.quantity,
+            unitPrice: item.unitPrice,
+            ncm: item.ncm,
+            cfop: item.cfop,
+            unitOfMeasure: item.unitOfMeasure,
+          })),
+          paymentMethod: nfeData.payment?.method || '99',
+          additionalInfo: nfeData.additionalInfo,
+          referenceId: `manual_${Date.now()}`,
+        };
+      }
+
+      // Chamar API fiscal real (Focus NFe)
+      const fiscalResponse = await this.fiscalApiService.generateNFe(nfeRequest);
+
+      if (!fiscalResponse.success) {
+        throw new BadRequestException(
+          fiscalResponse.error || 'Erro na geração da NF-e'
+        );
+      }
+
+      // Salvar documento fiscal
       const fiscalDocument = await this.prisma.fiscalDocument.create({
         data: {
           documentType: 'NFe',
-          documentNumber: response.numero,
-          accessKey: response.chave_acesso,
-          status: response.status,
-          xmlContent: response.xml,
-          pdfUrl: response.pdf_url,
+          documentNumber: fiscalResponse.documentNumber,
+          accessKey: fiscalResponse.accessKey,
+          status: fiscalResponse.status,
+          xmlContent: fiscalResponse.xmlContent,
+          pdfUrl: fiscalResponse.pdfUrl,
           companyId: nfeData.companyId,
         },
       });
 
       this.logger.log(`NFe generated successfully: ${fiscalDocument.id}`);
-      return fiscalDocument;
+      
+      return {
+        ...fiscalDocument,
+        saleReference,
+      };
     } catch (error) {
       this.logger.error('Error generating NFe:', error);
-      throw new BadRequestException('Erro ao gerar NFe');
+      
+      if (error instanceof BadRequestException || error instanceof NotFoundException) {
+        throw error;
+      }
+      
+      throw new BadRequestException('Erro ao gerar NF-e');
     }
   }
 
@@ -268,7 +346,43 @@ export class FiscalService {
     }
 
     if (documentType) {
-      where.documentType = documentType;
+      // Tratar filtro 'inbound' para documentos de entrada
+      if (documentType === 'inbound') {
+        // Documentos de entrada são NFe_INBOUND ou NFe com XML content (importados)
+        where.OR = [
+          { documentType: 'NFe_INBOUND' },
+          { 
+            documentType: 'NFe',
+            xmlContent: { not: null }
+          }
+        ];
+      } 
+      // Tratar filtro 'outbound' para documentos de saída
+      else if (documentType === 'outbound') {
+        // Documentos de saída são NFCe e NFe que não são de entrada
+        where.AND = [
+          {
+            OR: [
+              { documentType: 'NFCe' },
+              { documentType: 'NFe' }
+            ]
+          },
+          {
+            NOT: {
+              OR: [
+                { documentType: 'NFe_INBOUND' },
+                { 
+                  documentType: 'NFe',
+                  xmlContent: { not: null }
+                }
+              ]
+            }
+          }
+        ];
+      } 
+      else {
+        where.documentType = documentType;
+      }
     }
 
     const [documents, total] = await Promise.all([
@@ -610,6 +724,7 @@ startxref
             xmlContent: xmlContent,
             status: documentInfo.status,
             totalValue: documentInfo.totalValue,
+            supplierName: documentInfo.supplierName || existingDocument.supplierName,
             updatedAt: new Date()
           }
         });
@@ -637,6 +752,7 @@ startxref
             emissionDate: documentInfo.emissionDate,
             status: documentInfo.status,
             totalValue: documentInfo.totalValue,
+            supplierName: documentInfo.supplierName || null,
             xmlContent: xmlContent,
             pdfUrl: documentInfo.pdfUrl || null
           }
@@ -675,13 +791,18 @@ startxref
         const emit = infNFe.emit;
         const total = infNFe.total?.ICMSTot;
 
+        // Verificar se é documento de entrada ou saída baseado no CFOP
+        const cfop = infNFe.det?.[0]?.prod?.CFOP || infNFe.det?.prod?.CFOP;
+        const isInbound = cfop && (cfop.startsWith('1') || cfop.startsWith('2'));
+        
         documentInfo = {
-          documentType: 'NFe',
+          documentType: isInbound ? 'NFe_INBOUND' : 'NFe',
           documentNumber: ide.nNF,
           accessKey: infNFe['@_Id']?.replace('NFe', '') || '',
           emissionDate: new Date(ide.dhEmi || ide.dEmi),
           status: xmlData.nfeProc?.protNFe?.infProt?.cStat === '100' ? 'Autorizada' : 'Pendente',
           totalValue: total?.vNF || 0,
+          supplierName: isInbound ? (emit.xNome || emit.xFant || null) : null,
           pdfUrl: null
         };
       }
@@ -728,6 +849,120 @@ startxref
     } catch (error) {
       this.logger.error('Error extracting document info:', error);
       throw new BadRequestException('Erro ao extrair informações do XML: ' + error.message);
+    }
+  }
+
+  async createInboundInvoice(
+    companyId: string,
+    data: {
+      accessKey: string;
+      supplierName: string;
+      totalValue: number;
+      documentNumber?: string;
+    }
+  ) {
+    try {
+      this.logger.log(`Creating inbound invoice for company: ${companyId}`);
+
+      // Verificar se já existe um documento com essa chave de acesso
+      const existingDocument = await this.prisma.fiscalDocument.findFirst({
+        where: {
+          accessKey: data.accessKey,
+          companyId: companyId
+        }
+      });
+
+      if (existingDocument) {
+        throw new BadRequestException('Já existe uma nota fiscal com esta chave de acesso');
+      }
+
+      // Criar o documento fiscal de entrada
+      const fiscalDocument = await this.prisma.fiscalDocument.create({
+        data: {
+          companyId: companyId,
+          documentType: 'NFe_INBOUND',
+          documentNumber: data.documentNumber || 'MANUAL',
+          accessKey: data.accessKey,
+          status: 'Registrada',
+          totalValue: data.totalValue,
+          supplierName: data.supplierName,
+          emissionDate: new Date(),
+        }
+      });
+
+      this.logger.log(`Inbound invoice created successfully: ${fiscalDocument.id}`);
+
+      return {
+        id: fiscalDocument.id,
+        documentNumber: fiscalDocument.documentNumber,
+        documentType: fiscalDocument.documentType,
+        accessKey: fiscalDocument.accessKey,
+        status: fiscalDocument.status,
+        totalValue: fiscalDocument.totalValue,
+        supplierName: fiscalDocument.supplierName,
+        emissionDate: fiscalDocument.emissionDate,
+        message: 'Nota fiscal de entrada registrada com sucesso'
+      };
+
+    } catch (error) {
+      this.logger.error('Error creating inbound invoice:', error);
+      if (error instanceof BadRequestException) {
+        throw error;
+      }
+      throw new BadRequestException('Erro ao criar nota fiscal de entrada: ' + error.message);
+    }
+  }
+
+  async deleteInboundInvoice(id: string, companyId: string) {
+    try {
+      this.logger.log(`Deleting inbound invoice ${id} for company: ${companyId}`);
+
+      // Buscar o documento fiscal
+      const fiscalDocument = await this.prisma.fiscalDocument.findUnique({
+        where: { id }
+      });
+
+      if (!fiscalDocument) {
+        throw new NotFoundException('Nota fiscal não encontrada');
+      }
+
+      // Verificar se o documento pertence à empresa
+      if (fiscalDocument.companyId !== companyId) {
+        throw new BadRequestException('Esta nota fiscal não pertence à sua empresa');
+      }
+
+      // Verificar se é uma nota de entrada
+      // Notas de entrada podem ser:
+      // 1. NFe_INBOUND (criadas manualmente)
+      // 2. NFe com xmlContent (importadas via XML)
+      const isInboundInvoice = 
+        fiscalDocument.documentType === 'NFe_INBOUND' ||
+        (fiscalDocument.documentType === 'NFe' && fiscalDocument.xmlContent !== null);
+
+      if (!isInboundInvoice) {
+        throw new BadRequestException('Apenas notas fiscais de entrada podem ser excluídas por este método');
+      }
+
+      // Excluir o documento
+      await this.prisma.fiscalDocument.delete({
+        where: { id }
+      });
+
+      this.logger.log(`Inbound invoice deleted successfully: ${id}`);
+
+      return {
+        message: 'Nota fiscal de entrada excluída com sucesso',
+        deletedId: id,
+        documentNumber: fiscalDocument.documentNumber,
+        accessKey: fiscalDocument.accessKey
+      };
+
+    } catch (error) {
+      this.logger.error('Error deleting inbound invoice:', error);
+      if (error instanceof NotFoundException || error instanceof BadRequestException) {
+        throw error;
+      }
+      throw new BadRequestException('Erro ao excluir nota fiscal de entrada: ' + error.message);
     }
   }
 

@@ -14,10 +14,18 @@ exports.CompanyService = void 0;
 const common_1 = require("@nestjs/common");
 const prisma_service_1 = require("../../infrastructure/database/prisma.service");
 const hash_service_1 = require("../../shared/services/hash.service");
+const encryption_service_1 = require("../../shared/services/encryption.service");
+const upload_service_1 = require("../upload/upload.service");
+const axios_1 = require("axios");
+const FormData = require("form-data");
+const fs = require("fs");
+const path = require("path");
 let CompanyService = CompanyService_1 = class CompanyService {
-    constructor(prisma, hashService) {
+    constructor(prisma, hashService, encryptionService, uploadService) {
         this.prisma = prisma;
         this.hashService = hashService;
+        this.encryptionService = encryptionService;
+        this.uploadService = uploadService;
         this.logger = new common_1.Logger(CompanyService_1.name);
     }
     async create(adminId, createCompanyDto) {
@@ -36,6 +44,7 @@ let CompanyService = CompanyService_1 = class CompanyService {
                     cnpj: true,
                     email: true,
                     phone: true,
+                    plan: true,
                     isActive: true,
                     createdAt: true,
                     updatedAt: true,
@@ -72,6 +81,7 @@ let CompanyService = CompanyService_1 = class CompanyService {
                 cnpj: true,
                 email: true,
                 phone: true,
+                plan: true,
                 isActive: true,
                 createdAt: true,
                 updatedAt: true,
@@ -102,6 +112,7 @@ let CompanyService = CompanyService_1 = class CompanyService {
                 municipalRegistration: true,
                 logoUrl: true,
                 brandColor: true,
+                plan: true,
                 isActive: true,
                 zipCode: true,
                 state: true,
@@ -149,7 +160,10 @@ let CompanyService = CompanyService_1 = class CompanyService {
                 throw new common_1.NotFoundException('Empresa não encontrada');
             }
             const updateData = { ...updateCompanyDto };
-            if (updateCompanyDto.password) {
+            if (!updateCompanyDto.password || updateCompanyDto.password.trim() === '') {
+                delete updateData.password;
+            }
+            else {
                 updateData.password = await this.hashService.hashPassword(updateCompanyDto.password);
             }
             const company = await this.prisma.company.update({
@@ -162,6 +176,7 @@ let CompanyService = CompanyService_1 = class CompanyService {
                     cnpj: true,
                     email: true,
                     phone: true,
+                    plan: true,
                     isActive: true,
                     createdAt: true,
                     updatedAt: true,
@@ -263,6 +278,7 @@ let CompanyService = CompanyService_1 = class CompanyService {
                     cnpj: true,
                     email: true,
                     phone: true,
+                    plan: true,
                     isActive: true,
                     createdAt: true,
                     updatedAt: true,
@@ -294,6 +310,7 @@ let CompanyService = CompanyService_1 = class CompanyService {
                     cnpj: true,
                     email: true,
                     phone: true,
+                    plan: true,
                     isActive: true,
                     createdAt: true,
                     updatedAt: true,
@@ -307,11 +324,338 @@ let CompanyService = CompanyService_1 = class CompanyService {
             throw error;
         }
     }
+    async updateFiscalConfig(companyId, updateFiscalConfigDto) {
+        try {
+            const company = await this.prisma.company.findUnique({
+                where: { id: companyId },
+            });
+            if (!company) {
+                throw new common_1.NotFoundException('Empresa não encontrada');
+            }
+            const updateData = {};
+            if (updateFiscalConfigDto.taxRegime !== undefined) {
+                updateData.taxRegime = updateFiscalConfigDto.taxRegime;
+            }
+            if (updateFiscalConfigDto.cnae !== undefined) {
+                updateData.cnae = updateFiscalConfigDto.cnae;
+            }
+            if (updateFiscalConfigDto.nfceSerie !== undefined) {
+                updateData.nfceSerie = updateFiscalConfigDto.nfceSerie;
+            }
+            if (updateFiscalConfigDto.municipioIbge !== undefined) {
+                updateData.municipioIbge = updateFiscalConfigDto.municipioIbge;
+            }
+            if (updateFiscalConfigDto.idTokenCsc !== undefined) {
+                updateData.idTokenCsc = updateFiscalConfigDto.idTokenCsc;
+            }
+            if (updateFiscalConfigDto.certificatePassword) {
+                updateData.certificatePassword = this.encryptionService.encrypt(updateFiscalConfigDto.certificatePassword);
+            }
+            if (updateFiscalConfigDto.csc) {
+                updateData.csc = this.encryptionService.encrypt(updateFiscalConfigDto.csc);
+            }
+            const updatedCompany = await this.prisma.company.update({
+                where: { id: companyId },
+                data: updateData,
+                select: {
+                    id: true,
+                    name: true,
+                    cnpj: true,
+                    stateRegistration: true,
+                    nfceSerie: true,
+                    municipioIbge: true,
+                    idTokenCsc: true,
+                },
+            });
+            this.logger.log(`Fiscal config updated for company: ${companyId}`);
+            return {
+                ...updatedCompany,
+                message: 'Configurações fiscais atualizadas com sucesso',
+            };
+        }
+        catch (error) {
+            this.logger.error('Error updating fiscal config:', error);
+            throw error;
+        }
+    }
+    async getFiscalConfig(companyId) {
+        try {
+            const company = await this.prisma.company.findUnique({
+                where: { id: companyId },
+                select: {
+                    id: true,
+                    name: true,
+                    cnpj: true,
+                    stateRegistration: true,
+                    municipalRegistration: true,
+                    state: true,
+                    city: true,
+                    taxRegime: true,
+                    cnae: true,
+                    certificatePassword: true,
+                    nfceSerie: true,
+                    municipioIbge: true,
+                    csc: true,
+                    idTokenCsc: true,
+                },
+            });
+            if (!company) {
+                throw new common_1.NotFoundException('Empresa não encontrada');
+            }
+            return {
+                id: company.id,
+                name: company.name,
+                cnpj: company.cnpj,
+                stateRegistration: company.stateRegistration,
+                municipalRegistration: company.municipalRegistration,
+                state: company.state,
+                city: company.city,
+                taxRegime: company.taxRegime,
+                cnae: company.cnae,
+                hasCertificatePassword: !!company.certificatePassword,
+                certificatePasswordMasked: company.certificatePassword
+                    ? this.encryptionService.mask('********')
+                    : null,
+                nfceSerie: company.nfceSerie,
+                municipioIbge: company.municipioIbge,
+                hasCsc: !!company.csc,
+                cscMasked: company.csc ? this.encryptionService.mask('********') : null,
+                idTokenCsc: company.idTokenCsc,
+            };
+        }
+        catch (error) {
+            this.logger.error('Error getting fiscal config:', error);
+            throw error;
+        }
+    }
+    async uploadCertificateToFocusNfe(companyId, file) {
+        try {
+            if (!file) {
+                throw new common_1.BadRequestException('Arquivo de certificado é obrigatório');
+            }
+            if (!file.originalname.endsWith('.pfx') && !file.originalname.endsWith('.p12')) {
+                throw new common_1.BadRequestException('Arquivo deve ser .pfx ou .p12');
+            }
+            const company = await this.prisma.company.findUnique({
+                where: { id: companyId },
+                select: {
+                    cnpj: true,
+                    certificatePassword: true,
+                    admin: {
+                        select: {
+                            focusNfeApiKey: true,
+                            focusNfeEnvironment: true,
+                        },
+                    },
+                },
+            });
+            if (!company) {
+                throw new common_1.NotFoundException('Empresa não encontrada');
+            }
+            if (!company.admin.focusNfeApiKey) {
+                throw new common_1.BadRequestException('API Key do Focus NFe não configurada. Solicite ao administrador.');
+            }
+            if (!company.certificatePassword) {
+                throw new common_1.BadRequestException('Configure a senha do certificado antes de fazer upload');
+            }
+            const certificatePassword = this.encryptionService.decrypt(company.certificatePassword);
+            const formData = new FormData();
+            formData.append('certificado', file.buffer, {
+                filename: file.originalname,
+                contentType: 'application/x-pkcs12',
+            });
+            formData.append('senha', certificatePassword);
+            const baseUrl = company.admin.focusNfeEnvironment === 'production'
+                ? 'https://api.focusnfe.com.br'
+                : 'https://homologacao.focusnfe.com.br';
+            const response = await axios_1.default.post(`${baseUrl}/v2/empresas/${company.cnpj.replace(/\D/g, '')}/certificado`, formData, {
+                headers: {
+                    'Authorization': company.admin.focusNfeApiKey,
+                    ...formData.getHeaders(),
+                },
+                timeout: 30000,
+            });
+            this.logger.log(`Certificado enviado ao Focus NFe para empresa: ${companyId}`);
+            return {
+                message: 'Certificado enviado com sucesso ao Focus NFe!',
+                status: 'success',
+                focusNfeResponse: response.data,
+            };
+        }
+        catch (error) {
+            if (error instanceof common_1.BadRequestException ||
+                error instanceof common_1.NotFoundException) {
+                throw error;
+            }
+            this.logger.error('Erro ao enviar certificado ao Focus NFe:', error);
+            if (error.response?.data) {
+                const focusError = error.response.data;
+                throw new common_1.BadRequestException(focusError.mensagem ||
+                    focusError.message ||
+                    'Erro ao enviar certificado ao Focus NFe');
+            }
+            throw new common_1.BadRequestException(error.message || 'Erro ao enviar certificado ao Focus NFe');
+        }
+    }
+    async uploadLogo(companyId, file) {
+        try {
+            const company = await this.prisma.company.findUnique({
+                where: { id: companyId },
+                select: { id: true, name: true, logoUrl: true },
+            });
+            if (!company) {
+                throw new common_1.NotFoundException('Empresa não encontrada');
+            }
+            this.validateLogoFile(file);
+            if (company.logoUrl) {
+                await this.removeLogoFile(company.logoUrl);
+            }
+            const logoUrl = await this.uploadService.uploadFile(file, 'logos');
+            await this.prisma.company.update({
+                where: { id: companyId },
+                data: { logoUrl },
+            });
+            this.logger.log(`Logo uploaded for company ${companyId}: ${logoUrl}`);
+            return {
+                success: true,
+                logoUrl,
+                message: 'Logo enviado com sucesso',
+            };
+        }
+        catch (error) {
+            this.logger.error('Error uploading logo:', error);
+            throw error;
+        }
+    }
+    async removeLogo(companyId) {
+        try {
+            const company = await this.prisma.company.findUnique({
+                where: { id: companyId },
+                select: { id: true, name: true, logoUrl: true },
+            });
+            if (!company) {
+                throw new common_1.NotFoundException('Empresa não encontrada');
+            }
+            if (!company.logoUrl) {
+                throw new common_1.BadRequestException('Empresa não possui logo');
+            }
+            await this.removeLogoFile(company.logoUrl);
+            await this.prisma.company.update({
+                where: { id: companyId },
+                data: { logoUrl: null },
+            });
+            this.logger.log(`Logo removed for company ${companyId}`);
+            return {
+                success: true,
+                message: 'Logo removido com sucesso',
+            };
+        }
+        catch (error) {
+            this.logger.error('Error removing logo:', error);
+            throw error;
+        }
+    }
+    validateLogoFile(file) {
+        if (!file) {
+            throw new common_1.BadRequestException('Nenhum arquivo foi enviado');
+        }
+        const allowedMimeTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/gif', 'image/webp'];
+        if (!allowedMimeTypes.includes(file.mimetype)) {
+            throw new common_1.BadRequestException('Tipo de arquivo não permitido. Apenas imagens são aceitas.');
+        }
+        const maxSize = 5 * 1024 * 1024;
+        if (file.size > maxSize) {
+            throw new common_1.BadRequestException('Arquivo muito grande. Tamanho máximo permitido: 5MB');
+        }
+    }
+    async removeLogoFile(logoUrl) {
+        try {
+            const fileName = logoUrl.split('/').pop();
+            if (!fileName)
+                return;
+            const filePath = path.join(process.cwd(), 'uploads', 'logos', fileName);
+            if (fs.existsSync(filePath)) {
+                fs.unlinkSync(filePath);
+                this.logger.log(`Logo file removed: ${filePath}`);
+            }
+        }
+        catch (error) {
+            this.logger.warn(`Error removing logo file: ${error.message}`);
+        }
+    }
+    async toggleAutoMessages(companyId, enabled) {
+        try {
+            const company = await this.prisma.company.findUnique({
+                where: { id: companyId },
+                select: { id: true, name: true, autoMessageEnabled: true },
+            });
+            if (!company) {
+                throw new common_1.NotFoundException('Empresa não encontrada');
+            }
+            const updatedCompany = await this.prisma.company.update({
+                where: { id: companyId },
+                data: { autoMessageEnabled: enabled },
+                select: {
+                    id: true,
+                    name: true,
+                    autoMessageEnabled: true,
+                },
+            });
+            this.logger.log(`Envio automático de mensagens ${enabled ? 'ativado' : 'desativado'} para empresa ${companyId}`);
+            return {
+                success: true,
+                autoMessageEnabled: updatedCompany.autoMessageEnabled,
+                message: `Envio automático de mensagens de cobrança ${enabled ? 'ativado' : 'desativado'} com sucesso!`,
+            };
+        }
+        catch (error) {
+            this.logger.error('Error toggling auto messages:', error);
+            throw error;
+        }
+    }
+    async getAutoMessageStatus(companyId) {
+        try {
+            const company = await this.prisma.company.findUnique({
+                where: { id: companyId },
+                select: {
+                    id: true,
+                    name: true,
+                    autoMessageEnabled: true,
+                },
+            });
+            if (!company) {
+                throw new common_1.NotFoundException('Empresa não encontrada');
+            }
+            const stats = await this.prisma.installment.aggregate({
+                where: {
+                    companyId,
+                    isPaid: false,
+                },
+                _count: {
+                    id: true,
+                },
+                _sum: {
+                    messageCount: true,
+                },
+            });
+            return {
+                autoMessageEnabled: company.autoMessageEnabled,
+                totalUnpaidInstallments: stats._count.id || 0,
+                totalMessagesSent: stats._sum.messageCount || 0,
+            };
+        }
+        catch (error) {
+            this.logger.error('Error getting auto message status:', error);
+            throw error;
+        }
+    }
 };
 exports.CompanyService = CompanyService;
 exports.CompanyService = CompanyService = CompanyService_1 = __decorate([
     (0, common_1.Injectable)(),
     __metadata("design:paramtypes", [prisma_service_1.PrismaService,
-        hash_service_1.HashService])
+        hash_service_1.HashService,
+        encryption_service_1.EncryptionService,
+        upload_service_1.UploadService])
 ], CompanyService);
 //# sourceMappingURL=company.service.js.map

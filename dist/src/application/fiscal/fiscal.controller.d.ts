@@ -4,6 +4,7 @@ import { GenerateNFeDto } from './dto/generate-nfe.dto';
 import { GenerateNFSeDto } from './dto/generate-nfse.dto';
 import { GenerateNFCeDto } from './dto/generate-nfce.dto';
 import { CancelFiscalDocumentDto } from './dto/cancel-fiscal-document.dto';
+import { CreateInboundInvoiceDto } from './dto/create-inbound-invoice.dto';
 export declare class FiscalController {
     private readonly fiscalService;
     constructor(fiscalService: FiscalService);
@@ -27,8 +28,12 @@ export declare class FiscalController {
             status: string;
             xmlContent: string | null;
             pdfUrl: string | null;
+            qrCodeUrl: string | null;
             documentType: string;
             totalValue: import("@prisma/client/runtime/library").Decimal | null;
+            supplierName: string | null;
+            protocol: string | null;
+            serieNumber: string | null;
             emissionDate: Date;
         })[];
         total: number;
@@ -58,6 +63,17 @@ export declare class FiscalController {
         totalValue: import("@prisma/client/runtime/library").Decimal;
         message: string;
     }>;
+    createInboundInvoice(createInboundInvoiceDto: CreateInboundInvoiceDto, user: any): Promise<{
+        id: string;
+        documentNumber: string;
+        documentType: string;
+        accessKey: string;
+        status: string;
+        totalValue: import("@prisma/client/runtime/library").Decimal;
+        supplierName: string;
+        emissionDate: Date;
+        message: string;
+    }>;
     getFiscalDocumentByAccessKey(accessKey: string, user: any): Promise<{
         company: {
             id: string;
@@ -74,8 +90,12 @@ export declare class FiscalController {
         status: string;
         xmlContent: string | null;
         pdfUrl: string | null;
+        qrCodeUrl: string | null;
         documentType: string;
         totalValue: import("@prisma/client/runtime/library").Decimal | null;
+        supplierName: string | null;
+        protocol: string | null;
+        serieNumber: string | null;
         emissionDate: Date;
     }>;
     getFiscalDocument(id: string, user: any): Promise<{
@@ -94,8 +114,12 @@ export declare class FiscalController {
         status: string;
         xmlContent: string | null;
         pdfUrl: string | null;
+        qrCodeUrl: string | null;
         documentType: string;
         totalValue: import("@prisma/client/runtime/library").Decimal | null;
+        supplierName: string | null;
+        protocol: string | null;
+        serieNumber: string | null;
         emissionDate: Date;
     }>;
     downloadFiscalDocument(id: string, format: 'xml' | 'pdf', user: any, res: Response): Promise<void | Response<any, Record<string, any>>>;
@@ -118,8 +142,18 @@ export declare class FiscalController {
         status: string;
         xmlContent: string | null;
         pdfUrl: string | null;
+        qrCodeUrl: string | null;
         documentType: string;
         totalValue: import("@prisma/client/runtime/library").Decimal | null;
+        supplierName: string | null;
+        protocol: string | null;
+        serieNumber: string | null;
         emissionDate: Date;
+    }>;
+    deleteInboundInvoice(id: string, user: any): Promise<{
+        message: string;
+        deletedId: string;
+        documentNumber: string;
+        accessKey: string;
     }>;
 }

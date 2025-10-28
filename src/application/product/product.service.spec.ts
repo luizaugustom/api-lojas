@@ -367,14 +367,14 @@ describe('ProductService', () => {
 
       mockPrismaService.product.findMany.mockResolvedValue(mockProducts);
 
-      const result = await service.getLowStockProducts('company-1', 10);
+      const result = await service.getLowStockProducts('company-1', 3);
 
       expect(result).toEqual(mockProducts);
       expect(mockPrismaService.product.findMany).toHaveBeenCalledWith({
         where: {
           companyId: 'company-1',
           stockQuantity: {
-            lte: 10,
+            lte: 3,
           },
         },
         include: {

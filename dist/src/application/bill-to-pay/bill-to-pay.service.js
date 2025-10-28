@@ -13,13 +13,16 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.BillToPayService = void 0;
 const common_1 = require("@nestjs/common");
 const prisma_service_1 = require("../../infrastructure/database/prisma.service");
+const plan_limits_service_1 = require("../../shared/services/plan-limits.service");
 let BillToPayService = BillToPayService_1 = class BillToPayService {
-    constructor(prisma) {
+    constructor(prisma, planLimitsService) {
         this.prisma = prisma;
+        this.planLimitsService = planLimitsService;
         this.logger = new common_1.Logger(BillToPayService_1.name);
     }
     async create(companyId, createBillToPayDto) {
         try {
+            await this.planLimitsService.validateBillToPayLimit(companyId);
             const bill = await this.prisma.billToPay.create({
                 data: {
                     ...createBillToPayDto,
@@ -318,6 +321,7 @@ let BillToPayService = BillToPayService_1 = class BillToPayService {
 exports.BillToPayService = BillToPayService;
 exports.BillToPayService = BillToPayService = BillToPayService_1 = __decorate([
     (0, common_1.Injectable)(),
-    __metadata("design:paramtypes", [prisma_service_1.PrismaService])
+    __metadata("design:paramtypes", [prisma_service_1.PrismaService,
+        plan_limits_service_1.PlanLimitsService])
 ], BillToPayService);
 //# sourceMappingURL=bill-to-pay.service.js.map

@@ -1,9 +1,12 @@
 import { CompanyService } from './company.service';
 import { CreateCompanyDto } from './dto/create-company.dto';
 import { UpdateCompanyDto } from './dto/update-company.dto';
+import { UpdateFiscalConfigDto } from './dto/update-fiscal-config.dto';
+import { PlanLimitsService } from '../../shared/services/plan-limits.service';
 export declare class CompanyController {
     private readonly companyService;
-    constructor(companyService: CompanyService);
+    private readonly planLimitsService;
+    constructor(companyService: CompanyService, planLimitsService: PlanLimitsService);
     create(user: any, createCompanyDto: CreateCompanyDto): Promise<{
         id: string;
         login: string;
@@ -13,6 +16,7 @@ export declare class CompanyController {
         cnpj: string;
         email: string;
         phone: string;
+        plan: import(".prisma/client").$Enums.PlanType;
         isActive: boolean;
     }>;
     findAll(user: any): Promise<{
@@ -24,6 +28,7 @@ export declare class CompanyController {
         cnpj: string;
         email: string;
         phone: string;
+        plan: import(".prisma/client").$Enums.PlanType;
         isActive: boolean;
         _count: {
             sellers: number;
@@ -49,6 +54,7 @@ export declare class CompanyController {
         municipalRegistration: string;
         logoUrl: string;
         brandColor: string;
+        plan: import(".prisma/client").$Enums.PlanType;
         isActive: boolean;
         zipCode: string;
         state: string;
@@ -79,6 +85,34 @@ export declare class CompanyController {
         customers: number;
         billsToPay: number;
     }>;
+    getPlanUsage(user: any): Promise<{
+        plan: import(".prisma/client").$Enums.PlanType;
+        limits: import("../../shared/services/plan-limits.service").PlanLimits;
+        usage: {
+            products: {
+                current: number;
+                max: number;
+                percentage: number;
+                available: number;
+            };
+            sellers: {
+                current: number;
+                max: number;
+                percentage: number;
+                available: number;
+            };
+            billsToPay: {
+                current: number;
+                max: number;
+                percentage: number;
+                available: number;
+            };
+        };
+    }>;
+    getPlanWarnings(user: any): Promise<{
+        nearLimit: boolean;
+        warnings: string[];
+    }>;
     findOne(id: string): Promise<{
         number: string;
         id: string;
@@ -97,6 +131,7 @@ export declare class CompanyController {
         municipalRegistration: string;
         logoUrl: string;
         brandColor: string;
+        plan: import(".prisma/client").$Enums.PlanType;
         isActive: boolean;
         zipCode: string;
         state: string;
@@ -127,6 +162,7 @@ export declare class CompanyController {
         cnpj: string;
         email: string;
         phone: string;
+        plan: import(".prisma/client").$Enums.PlanType;
         isActive: boolean;
     }>;
     activate(id: string): Promise<{
@@ -138,6 +174,7 @@ export declare class CompanyController {
         cnpj: string;
         email: string;
         phone: string;
+        plan: import(".prisma/client").$Enums.PlanType;
         isActive: boolean;
     }>;
     deactivate(id: string): Promise<{
@@ -149,6 +186,7 @@ export declare class CompanyController {
         cnpj: string;
         email: string;
         phone: string;
+        plan: import(".prisma/client").$Enums.PlanType;
         isActive: boolean;
     }>;
     update(id: string, updateCompanyDto: UpdateCompanyDto): Promise<{
@@ -160,9 +198,67 @@ export declare class CompanyController {
         cnpj: string;
         email: string;
         phone: string;
+        plan: import(".prisma/client").$Enums.PlanType;
         isActive: boolean;
     }>;
     remove(id: string): Promise<{
         message: string;
+    }>;
+    updateFiscalConfig(user: any, updateFiscalConfigDto: UpdateFiscalConfigDto): Promise<{
+        message: string;
+        id: string;
+        name: string;
+        cnpj: string;
+        stateRegistration: string;
+        nfceSerie: string;
+        municipioIbge: string;
+        idTokenCsc: string;
+    }>;
+    getFiscalConfig(user: any): Promise<{
+        id: string;
+        name: string;
+        cnpj: string;
+        stateRegistration: string;
+        municipalRegistration: string;
+        state: string;
+        city: string;
+        taxRegime: import(".prisma/client").$Enums.TaxRegime;
+        cnae: string;
+        hasCertificatePassword: boolean;
+        certificatePasswordMasked: string;
+        nfceSerie: string;
+        municipioIbge: string;
+        hasCsc: boolean;
+        cscMasked: string;
+        idTokenCsc: string;
+    }>;
+    uploadCertificate(user: any, file: Express.Multer.File): Promise<{
+        message: string;
+        status: string;
+        focusNfeResponse: any;
+    }>;
+    uploadLogo(user: any, file: Express.Multer.File): Promise<{
+        success: boolean;
+        logoUrl: string;
+        message: string;
+    }>;
+    removeLogo(user: any): Promise<{
+        success: boolean;
+        message: string;
+    }>;
+    enableAutoMessages(user: any): Promise<{
+        success: boolean;
+        autoMessageEnabled: boolean;
+        message: string;
+    }>;
+    disableAutoMessages(user: any): Promise<{
+        success: boolean;
+        autoMessageEnabled: boolean;
+        message: string;
+    }>;
+    getAutoMessageStatus(user: any): Promise<{
+        autoMessageEnabled: boolean;
+        totalUnpaidInstallments: number;
+        totalMessagesSent: number;
     }>;
 }

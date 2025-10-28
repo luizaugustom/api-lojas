@@ -10,15 +10,22 @@ exports.ProductModule = void 0;
 const common_1 = require("@nestjs/common");
 const product_service_1 = require("./product.service");
 const product_controller_1 = require("./product.controller");
+const product_photo_service_1 = require("./services/product-photo.service");
+const product_photo_validation_service_1 = require("./services/product-photo-validation.service");
 const prisma_module_1 = require("../../infrastructure/database/prisma.module");
 const upload_module_1 = require("../upload/upload.module");
+const plan_limits_module_1 = require("../../shared/services/plan-limits.module");
 let ProductModule = class ProductModule {
 };
 exports.ProductModule = ProductModule;
 exports.ProductModule = ProductModule = __decorate([
     (0, common_1.Module)({
-        imports: [prisma_module_1.PrismaModule, upload_module_1.UploadModule],
-        providers: [product_service_1.ProductService],
+        imports: [prisma_module_1.PrismaModule, upload_module_1.UploadModule, plan_limits_module_1.PlanLimitsModule],
+        providers: [
+            product_service_1.ProductService,
+            product_photo_service_1.ProductPhotoService,
+            product_photo_validation_service_1.ProductPhotoValidationService,
+        ],
         controllers: [product_controller_1.ProductController],
         exports: [product_service_1.ProductService],
     })

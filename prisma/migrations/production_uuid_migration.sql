@@ -491,3 +491,6 @@ UNION ALL
 SELECT 'refresh_tokens', COUNT(*) FROM refresh_tokens
 ORDER BY tabela;
 
+
+
+

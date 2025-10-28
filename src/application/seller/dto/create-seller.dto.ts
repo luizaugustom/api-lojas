@@ -1,5 +1,5 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { IsString, IsNotEmpty, MinLength, MaxLength, IsEmail, IsOptional, IsDateString, Matches } from 'class-validator';
+import { IsString, IsNotEmpty, MinLength, MaxLength, IsEmail, IsOptional, IsDateString, Matches, IsNumber, Min, Max, IsBoolean } from 'class-validator';
 
 export class CreateSellerDto {
   @ApiProperty({
@@ -55,7 +55,7 @@ export class CreateSellerDto {
     required: false,
   })
   @IsOptional()
-  @IsDateString()
+  @IsString()
   birthDate?: string;
 
   @ApiProperty({
@@ -79,4 +79,28 @@ export class CreateSellerDto {
     message: 'Telefone deve estar no formato (XX) XXXXX-XXXX',
   })
   phone?: string;
+
+  @ApiProperty({
+    description: 'Taxa de comissão do vendedor em porcentagem',
+    example: 5.5,
+    minimum: 0,
+    maximum: 100,
+    default: 0,
+    required: false,
+  })
+  @IsOptional()
+  @IsNumber()
+  @Min(0, { message: 'Comissão não pode ser negativa' })
+  @Max(100, { message: 'Comissão não pode ser maior que 100%' })
+  commissionRate?: number;
+
+  @ApiProperty({
+    description: 'Define se o vendedor tem caixa individual (true) ou usa o caixa compartilhado da empresa (false)',
+    example: false,
+    default: false,
+    required: false,
+  })
+  @IsOptional()
+  @IsBoolean()
+  hasIndividualCash?: boolean;
 }

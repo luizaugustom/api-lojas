@@ -131,39 +131,69 @@ export declare class CustomerService {
         customersWithCpf: number;
         customersWithCnpj: number;
     }>;
-    getCustomerInstallments(customerId: string, companyId?: string): Promise<({
-        seller: {
-            id: string;
-            name: string;
-        };
-        items: ({
-            product: {
+    getCustomerInstallments(customerId: string, companyId?: string): Promise<{
+        data: ({
+            sale: {
+                seller: {
+                    id: string;
+                    name: string;
+                };
+                items: ({
+                    product: {
+                        id: string;
+                        name: string;
+                    };
+                } & {
+                    id: string;
+                    createdAt: Date;
+                    saleId: string;
+                    quantity: number;
+                    unitPrice: import("@prisma/client/runtime/library").Decimal;
+                    totalPrice: import("@prisma/client/runtime/library").Decimal;
+                    productId: string;
+                })[];
+            } & {
                 id: string;
-                name: string;
+                createdAt: Date;
+                updatedAt: Date;
+                companyId: string;
+                sellerId: string;
+                total: import("@prisma/client/runtime/library").Decimal;
+                change: import("@prisma/client/runtime/library").Decimal;
+                clientCpfCnpj: string | null;
+                clientName: string | null;
+                isInstallment: boolean;
+                saleDate: Date;
+                cashClosureId: string | null;
             };
+            payments: {
+                id: string;
+                createdAt: Date;
+                amount: import("@prisma/client/runtime/library").Decimal;
+                paymentDate: Date;
+                paymentMethod: string;
+                notes: string | null;
+                installmentId: string;
+            }[];
         } & {
             id: string;
             createdAt: Date;
-            quantity: number;
-            unitPrice: import("@prisma/client/runtime/library").Decimal;
-            totalPrice: import("@prisma/client/runtime/library").Decimal;
+            updatedAt: Date;
+            companyId: string;
+            dueDate: Date;
+            amount: import("@prisma/client/runtime/library").Decimal;
+            isPaid: boolean;
+            paidAt: Date | null;
+            description: string | null;
+            installmentNumber: number;
+            totalInstallments: number;
+            remainingAmount: import("@prisma/client/runtime/library").Decimal;
+            lastMessageSentAt: Date | null;
+            messageCount: number;
             saleId: string;
-            productId: string;
+            customerId: string;
         })[];
-    } & {
-        id: string;
-        createdAt: Date;
-        updatedAt: Date;
-        companyId: string;
-        total: import("@prisma/client/runtime/library").Decimal;
-        change: import("@prisma/client/runtime/library").Decimal;
-        clientCpfCnpj: string | null;
-        clientName: string | null;
-        isInstallment: boolean;
-        saleDate: Date;
-        sellerId: string;
-        cashClosureId: string | null;
-    })[]>;
+    }>;
     sendPromotionalEmail(customerId: string, promotionData: any): Promise<boolean>;
     sendSaleConfirmationEmail(customerId: string, saleId: string): Promise<boolean>;
     sendBulkPromotionalEmail(companyId: string, promotionData: any): Promise<{

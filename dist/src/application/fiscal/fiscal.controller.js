@@ -21,10 +21,12 @@ const generate_nfe_dto_1 = require("./dto/generate-nfe.dto");
 const generate_nfse_dto_1 = require("./dto/generate-nfse.dto");
 const generate_nfce_dto_1 = require("./dto/generate-nfce.dto");
 const cancel_fiscal_document_dto_1 = require("./dto/cancel-fiscal-document.dto");
+const create_inbound_invoice_dto_1 = require("./dto/create-inbound-invoice.dto");
 const jwt_auth_guard_1 = require("../../shared/guards/jwt-auth.guard");
 const roles_guard_1 = require("../../shared/guards/roles.guard");
 const roles_decorator_1 = require("../../shared/decorators/roles.decorator");
 const current_user_decorator_1 = require("../../shared/decorators/current-user.decorator");
+const uuid_validation_pipe_1 = require("../../shared/pipes/uuid-validation.pipe");
 let FiscalController = class FiscalController {
     constructor(fiscalService) {
         this.fiscalService = fiscalService;
@@ -32,11 +34,11 @@ let FiscalController = class FiscalController {
     async generateNFe(user, generateNFeDto) {
         const nfeData = {
             companyId: user.companyId,
-            clientCpfCnpj: generateNFeDto.clientCpfCnpj,
-            clientName: generateNFeDto.clientName,
+            saleId: generateNFeDto.saleId,
+            recipient: generateNFeDto.recipient,
             items: generateNFeDto.items,
-            totalValue: generateNFeDto.totalValue,
-            paymentMethod: generateNFeDto.paymentMethod,
+            payment: generateNFeDto.payment,
+            additionalInfo: generateNFeDto.additionalInfo,
         };
         return this.fiscalService.generateNFe(nfeData);
     }
@@ -95,6 +97,13 @@ let FiscalController = class FiscalController {
             throw new Error('Company ID não encontrado');
         }
         return this.fiscalService.processXmlFile(file, companyId);
+    }
+    async createInboundInvoice(createInboundInvoiceDto, user) {
+        const companyId = user.role === roles_decorator_1.UserRole.ADMIN ? user.companyId : user.companyId;
+        if (!companyId) {
+            throw new Error('Company ID não encontrado');
+        }
+        return this.fiscalService.createInboundInvoice(companyId, createInboundInvoiceDto);
     }
     async getFiscalDocumentByAccessKey(accessKey, user) {
         if (user.role === roles_decorator_1.UserRole.ADMIN) {
@@ -188,12 +197,19 @@ let FiscalController = class FiscalController {
     async cancelFiscalDocument(id, cancelDto, user) {
         return this.fiscalService.cancelFiscalDocument(id, cancelDto.reason, user.companyId);
     }
+    async deleteInboundInvoice(id, user) {
+        const companyId = user.role === roles_decorator_1.UserRole.ADMIN ? user.companyId : user.companyId;
+        if (!companyId) {
+            throw new Error('Company ID não encontrado');
+        }
+        return this.fiscalService.deleteInboundInvoice(id, companyId);
+    }
 };
 exports.FiscalController = FiscalController;
 __decorate([
     (0, common_1.Post)('nfe'),
     (0, roles_decorator_1.Roles)(roles_decorator_1.UserRole.COMPANY),
-    (0, swagger_1.ApiOperation)({ summary: 'Gerar NFe' }),
+    (0, swagger_1.ApiOperation)({ summary: 'Gerar NFe - Vinculada a venda ou manual' }),
     (0, swagger_1.ApiResponse)({ status: 201, description: 'NFe gerada com sucesso' }),
     (0, swagger_1.ApiResponse)({ status: 400, description: 'Dados inválidos para geração da NFe' }),
     __param(0, (0, current_user_decorator_1.CurrentUser)()),
@@ -308,6 +324,24 @@ __decorate([
     __metadata("design:returntype", Promise)
 ], FiscalController.prototype, "uploadXmlFiscal", null);
 __decorate([
+    (0, common_1.Post)('inbound-invoice'),
+    (0, roles_decorator_1.Roles)(roles_decorator_1.UserRole.ADMIN, roles_decorator_1.UserRole.COMPANY),
+    (0, swagger_1.ApiOperation)({
+        summary: 'Criar nota fiscal de entrada manual',
+        description: 'Registra uma nota fiscal de entrada com informações básicas (chave de acesso, fornecedor, total)'
+    }),
+    (0, swagger_1.ApiResponse)({
+        status: 201,
+        description: 'Nota fiscal de entrada criada com sucesso',
+    }),
+    (0, swagger_1.ApiResponse)({ status: 400, description: 'Dados inválidos ou chave de acesso já existe' }),
+    __param(0, (0, common_1.Body)()),
+    __param(1, (0, current_user_decorator_1.CurrentUser)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [create_inbound_invoice_dto_1.CreateInboundInvoiceDto, Object]),
+    __metadata("design:returntype", Promise)
+], FiscalController.prototype, "createInboundInvoice", null);
+__decorate([
     (0, common_1.Get)('access-key/:accessKey'),
     (0, roles_decorator_1.Roles)(roles_decorator_1.UserRole.ADMIN, roles_decorator_1.UserRole.COMPANY),
     (0, swagger_1.ApiOperation)({ summary: 'Buscar documento fiscal por chave de acesso' }),
@@ -325,7 +359,7 @@ __decorate([
     (0, swagger_1.ApiOperation)({ summary: 'Buscar documento fiscal por ID' }),
     (0, swagger_1.ApiResponse)({ status: 200, description: 'Documento fiscal encontrado' }),
     (0, swagger_1.ApiResponse)({ status: 404, description: 'Documento fiscal não encontrado' }),
-    __param(0, (0, common_1.Param)('id')),
+    __param(0, (0, common_1.Param)('id', uuid_validation_pipe_1.UuidValidationPipe)),
     __param(1, (0, current_user_decorator_1.CurrentUser)()),
     __metadata("design:type", Function),
     __metadata("design:paramtypes", [String, Object]),
@@ -364,7 +398,7 @@ __decorate([
     }),
     (0, swagger_1.ApiResponse)({ status: 400, description: 'Formato não suportado ou conteúdo não disponível' }),
     (0, swagger_1.ApiResponse)({ status: 404, description: 'Documento fiscal não encontrado' }),
-    __param(0, (0, common_1.Param)('id')),
+    __param(0, (0, common_1.Param)('id', uuid_validation_pipe_1.UuidValidationPipe)),
     __param(1, (0, common_1.Query)('format')),
     __param(2, (0, current_user_decorator_1.CurrentUser)()),
     __param(3, (0, common_1.Res)()),
@@ -405,7 +439,7 @@ __decorate([
         }
     }),
     (0, swagger_1.ApiResponse)({ status: 404, description: 'Documento fiscal não encontrado' }),
-    __param(0, (0, common_1.Param)('id')),
+    __param(0, (0, common_1.Param)('id', uuid_validation_pipe_1.UuidValidationPipe)),
     __param(1, (0, current_user_decorator_1.CurrentUser)()),
     __metadata("design:type", Function),
     __metadata("design:paramtypes", [String, Object]),
@@ -417,13 +451,41 @@ __decorate([
     (0, swagger_1.ApiOperation)({ summary: 'Cancelar documento fiscal' }),
     (0, swagger_1.ApiResponse)({ status: 200, description: 'Documento fiscal cancelado com sucesso' }),
     (0, swagger_1.ApiResponse)({ status: 400, description: 'Documento já está cancelado' }),
-    __param(0, (0, common_1.Param)('id')),
+    __param(0, (0, common_1.Param)('id', uuid_validation_pipe_1.UuidValidationPipe)),
     __param(1, (0, common_1.Body)()),
     __param(2, (0, current_user_decorator_1.CurrentUser)()),
     __metadata("design:type", Function),
     __metadata("design:paramtypes", [String, cancel_fiscal_document_dto_1.CancelFiscalDocumentDto, Object]),
     __metadata("design:returntype", Promise)
 ], FiscalController.prototype, "cancelFiscalDocument", null);
+__decorate([
+    (0, common_1.Delete)('inbound-invoice/:id'),
+    (0, roles_decorator_1.Roles)(roles_decorator_1.UserRole.ADMIN, roles_decorator_1.UserRole.COMPANY),
+    (0, swagger_1.ApiOperation)({
+        summary: 'Excluir nota fiscal de entrada',
+        description: 'Exclui uma nota fiscal de entrada da empresa. Apenas notas de entrada podem ser excluídas: NFe_INBOUND (criadas manualmente) ou NFe com XML (importadas via upload).'
+    }),
+    (0, swagger_1.ApiResponse)({
+        status: 200,
+        description: 'Nota fiscal de entrada excluída com sucesso',
+        schema: {
+            type: 'object',
+            properties: {
+                message: { type: 'string', example: 'Nota fiscal de entrada excluída com sucesso' },
+                deletedId: { type: 'string', example: 'cmgty5s880006ww3b8bup77vb' },
+                documentNumber: { type: 'string', example: '123456' },
+                accessKey: { type: 'string', example: '35240114200166000187550010000000071123456789' }
+            }
+        }
+    }),
+    (0, swagger_1.ApiResponse)({ status: 404, description: 'Nota fiscal não encontrada' }),
+    (0, swagger_1.ApiResponse)({ status: 400, description: 'Nota fiscal não pertence à empresa ou não é uma nota de entrada' }),
+    __param(0, (0, common_1.Param)('id', uuid_validation_pipe_1.UuidValidationPipe)),
+    __param(1, (0, current_user_decorator_1.CurrentUser)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String, Object]),
+    __metadata("design:returntype", Promise)
+], FiscalController.prototype, "deleteInboundInvoice", null);
 exports.FiscalController = FiscalController = __decorate([
     (0, swagger_1.ApiTags)('fiscal'),
     (0, common_1.Controller)('fiscal'),

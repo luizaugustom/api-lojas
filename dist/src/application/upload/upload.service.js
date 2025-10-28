@@ -13,84 +13,55 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.UploadService = void 0;
 const common_1 = require("@nestjs/common");
 const config_1 = require("@nestjs/config");
-const fs = require("fs");
-const path = require("path");
-const uuid_1 = require("uuid");
+const firebase_storage_service_1 = require("../../shared/services/firebase-storage.service");
 let UploadService = UploadService_1 = class UploadService {
-    constructor(configService) {
+    constructor(configService, firebaseStorage) {
         this.configService = configService;
+        this.firebaseStorage = firebaseStorage;
         this.logger = new common_1.Logger(UploadService_1.name);
-        this.uploadPath = this.configService.get('UPLOAD_PATH', './uploads');
         this.maxFileSize = this.configService.get('MAX_FILE_SIZE', 10485760);
-        this.ensureUploadDirectory();
-    }
-    ensureUploadDirectory() {
-        if (!fs.existsSync(this.uploadPath)) {
-            fs.mkdirSync(this.uploadPath, { recursive: true });
-            this.logger.log(`Created upload directory: ${this.uploadPath}`);
+        this.useFirebase = this.configService.get('USE_FIREBASE_STORAGE', 'true') === 'true';
+        if (this.useFirebase) {
+            this.logger.log('📦 Using Firebase Storage for file uploads');
+        }
+        else {
+            this.logger.warn('⚠️ Firebase Storage disabled, using local storage');
         }
     }
     async uploadFile(file, subfolder) {
         try {
             this.validateFile(file);
-            const fileExtension = path.extname(file.originalname);
-            const fileName = `${(0, uuid_1.v4)()}${fileExtension}`;
-            const uploadDir = subfolder ? path.join(this.uploadPath, subfolder) : this.uploadPath;
-            if (subfolder && !fs.existsSync(uploadDir)) {
-                fs.mkdirSync(uploadDir, { recursive: true });
-            }
-            const filePath = path.join(uploadDir, fileName);
-            fs.writeFileSync(filePath, file.buffer);
-            const relativePath = subfolder ? `${subfolder}/${fileName}` : fileName;
-            const fileUrl = `/uploads/${relativePath}`;
-            this.logger.log(`File uploaded successfully: ${fileUrl}`);
-            return fileUrl;
+            const optimizationPreset = this.getOptimizationPreset(subfolder);
+            const result = await this.firebaseStorage.uploadFile(file, subfolder, optimizationPreset);
+            this.logger.log(`✅ File uploaded: ${result.url} (${(result.size / 1024).toFixed(1)}KB, ${((1 - result.compressionRatio) * 100).toFixed(1)}% compression)`);
+            return result.url;
         }
         catch (error) {
-            this.logger.error('Error uploading file:', error);
+            this.logger.error('❌ Error uploading file:', error);
             throw new common_1.BadRequestException('Erro ao fazer upload do arquivo');
         }
     }
     async uploadMultipleFiles(files, subfolder) {
-        const uploadPromises = files.map(file => this.uploadFile(file, subfolder));
-        return Promise.all(uploadPromises);
+        const optimizationPreset = this.getOptimizationPreset(subfolder);
+        const results = await this.firebaseStorage.uploadMultipleFiles(files, subfolder, optimizationPreset);
+        return results.map(result => result.url);
     }
     async deleteFile(fileUrl) {
         try {
-            let fileName;
-            if (fileUrl.startsWith('/uploads/')) {
-                fileName = fileUrl.substring('/uploads/'.length);
-            }
-            else if (fileUrl.startsWith('uploads/')) {
-                fileName = fileUrl.substring('uploads/'.length);
-            }
-            else if (fileUrl.startsWith('./uploads/')) {
-                fileName = fileUrl.substring('./uploads/'.length);
-            }
-            else {
-                fileName = fileUrl;
-            }
-            const filePath = path.join(this.uploadPath, fileName);
-            if (fs.existsSync(filePath)) {
-                fs.unlinkSync(filePath);
-                this.logger.log(`File deleted successfully: ${fileUrl} -> ${filePath}`);
-                return true;
-            }
-            this.logger.warn(`File not found: ${fileUrl} -> ${filePath}`);
-            return false;
+            return await this.firebaseStorage.deleteFile(fileUrl);
         }
         catch (error) {
-            this.logger.error('Error deleting file:', error);
+            this.logger.error('❌ Error deleting file:', error);
             return false;
         }
     }
     async deleteMultipleFiles(fileUrls) {
-        const results = await Promise.allSettled(fileUrls.map(url => this.deleteFile(url)));
-        const deleted = results.filter(result => result.status === 'fulfilled' && result.value === true).length;
-        const failed = results.length - deleted;
-        return { deleted, failed };
+        return await this.firebaseStorage.deleteMultipleFiles(fileUrls);
     }
     validateFile(file) {
+        if (!file) {
+            throw new common_1.BadRequestException('Nenhum arquivo foi enviado');
+        }
         if (file.size > this.maxFileSize) {
             throw new common_1.BadRequestException(`Arquivo muito grande. Tamanho máximo permitido: ${this.maxFileSize / 1024 / 1024}MB`);
         }
@@ -100,53 +71,42 @@ let UploadService = UploadService_1 = class UploadService {
             'image/png',
             'image/gif',
             'image/webp',
+            'application/pdf',
+            'application/x-pkcs12',
         ];
         if (!allowedMimeTypes.includes(file.mimetype)) {
-            throw new common_1.BadRequestException('Tipo de arquivo não permitido. Apenas imagens (JPEG, PNG, GIF, WebP) são aceitas.');
-        }
-        const allowedExtensions = ['.jpg', '.jpeg', '.png', '.gif', '.webp'];
-        const fileExtension = path.extname(file.originalname).toLowerCase();
-        if (!allowedExtensions.includes(fileExtension)) {
-            throw new common_1.BadRequestException('Extensão de arquivo não permitida. Apenas .jpg, .jpeg, .png, .gif, .webp são aceitas.');
+            throw new common_1.BadRequestException('Tipo de arquivo não permitido. Apenas imagens (JPEG, PNG, GIF, WebP), PDFs e certificados digitais são aceitos.');
         }
     }
     async getFileInfo(fileUrl) {
-        try {
-            const fileName = fileUrl.replace('/uploads/', '');
-            const filePath = path.join(this.uploadPath, fileName);
-            if (fs.existsSync(filePath)) {
-                const stats = fs.statSync(filePath);
-                return {
-                    exists: true,
-                    size: stats.size,
-                    path: filePath,
-                };
-            }
-            return { exists: false };
-        }
-        catch (error) {
-            this.logger.error('Error getting file info:', error);
-            return { exists: false };
-        }
+        return await this.firebaseStorage.getFileInfo(fileUrl);
     }
-    async resizeImage(file, maxWidth = 800, maxHeight = 600) {
-        this.logger.log(`Image resizing requested: ${file.originalname} to ${maxWidth}x${maxHeight}`);
-        return file.buffer;
-    }
-    async optimizeImage(file) {
-        this.logger.log(`Image optimization requested: ${file.originalname}`);
-        return file.buffer;
-    }
-    getUploadPath() {
-        return this.uploadPath;
+    async fileExists(fileUrl) {
+        return await this.firebaseStorage.fileExists(fileUrl);
     }
     getMaxFileSize() {
         return this.maxFileSize;
+    }
+    getOptimizationPreset(subfolder) {
+        if (!subfolder) {
+            return this.firebaseStorage.getOptimizationPreset('document');
+        }
+        if (subfolder.includes('products')) {
+            return this.firebaseStorage.getOptimizationPreset('product');
+        }
+        if (subfolder.includes('logos')) {
+            return this.firebaseStorage.getOptimizationPreset('logo');
+        }
+        if (subfolder.includes('thumbnails')) {
+            return this.firebaseStorage.getOptimizationPreset('thumbnail');
+        }
+        return this.firebaseStorage.getOptimizationPreset('document');
     }
 };
 exports.UploadService = UploadService;
 exports.UploadService = UploadService = UploadService_1 = __decorate([
     (0, common_1.Injectable)(),
-    __metadata("design:paramtypes", [config_1.ConfigService])
+    __metadata("design:paramtypes", [config_1.ConfigService,
+        firebase_storage_service_1.FirebaseStorageService])
 ], UploadService);
 //# sourceMappingURL=upload.service.js.map

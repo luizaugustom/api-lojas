@@ -17,14 +17,16 @@ const product_service_1 = require("../product/product.service");
 const printer_service_1 = require("../printer/printer.service");
 const fiscal_service_1 = require("../fiscal/fiscal.service");
 const email_service_1 = require("../../shared/services/email.service");
+const ibpt_service_1 = require("../../shared/services/ibpt.service");
 const payment_method_dto_1 = require("./dto/payment-method.dto");
 let SaleService = SaleService_1 = class SaleService {
-    constructor(prisma, productService, printerService, fiscalService, emailService) {
+    constructor(prisma, productService, printerService, fiscalService, emailService, ibptService) {
         this.prisma = prisma;
         this.productService = productService;
         this.printerService = printerService;
         this.fiscalService = fiscalService;
         this.emailService = emailService;
+        this.ibptService = ibptService;
         this.logger = new common_1.Logger(SaleService_1.name);
     }
     async create(companyId, sellerId, createSaleDto) {
@@ -64,9 +66,30 @@ let SaleService = SaleService_1 = class SaleService {
                 }
                 totalPaid += paymentMethod.amount;
             }
-            const hasInstallment = createSaleDto.paymentMethods.some(pm => pm.method === payment_method_dto_1.PaymentMethod.INSTALLMENT);
-            if (hasInstallment && !createSaleDto.clientName) {
-                throw new common_1.BadRequestException('Nome do cliente é obrigatório para vendas a prazo');
+            const installmentPayment = createSaleDto.paymentMethods.find(pm => pm.method === payment_method_dto_1.PaymentMethod.INSTALLMENT);
+            const hasInstallment = !!installmentPayment;
+            if (hasInstallment) {
+                if (!createSaleDto.clientName) {
+                    throw new common_1.BadRequestException('Nome do cliente é obrigatório para vendas a prazo');
+                }
+                if (!installmentPayment.customerId) {
+                    throw new common_1.BadRequestException('ID do cliente é obrigatório para vendas a prazo');
+                }
+                if (!installmentPayment.installments || installmentPayment.installments < 1) {
+                    throw new common_1.BadRequestException('Número de parcelas é obrigatório e deve ser maior que 0');
+                }
+                if (!installmentPayment.firstDueDate) {
+                    throw new common_1.BadRequestException('Data do primeiro vencimento é obrigatória para vendas a prazo');
+                }
+                const customer = await this.prisma.customer.findFirst({
+                    where: {
+                        id: installmentPayment.customerId,
+                        companyId,
+                    },
+                });
+                if (!customer) {
+                    throw new common_1.NotFoundException('Cliente não encontrado');
+                }
             }
             if (Math.abs(totalPaid - total) > 0.01) {
                 throw new common_1.BadRequestException(`Total pago (${totalPaid}) não confere com o total da venda (${total})`);
@@ -95,6 +118,39 @@ let SaleService = SaleService_1 = class SaleService {
                             additionalInfo: paymentMethod.additionalInfo,
                         },
                     });
+                }
+                if (installmentPayment) {
+                    const installmentAmount = installmentPayment.amount / installmentPayment.installments;
+                    let firstDueDate;
+                    try {
+                        firstDueDate = new Date(installmentPayment.firstDueDate);
+                        if (isNaN(firstDueDate.getTime())) {
+                            throw new Error('Data inválida');
+                        }
+                    }
+                    catch (error) {
+                        this.logger.warn(`Data de vencimento inválida para venda ${sale.id}, usando data padrão`);
+                        firstDueDate = new Date();
+                        firstDueDate.setMonth(firstDueDate.getMonth() + 1);
+                    }
+                    for (let i = 0; i < installmentPayment.installments; i++) {
+                        const dueDate = new Date(firstDueDate);
+                        dueDate.setMonth(dueDate.getMonth() + i);
+                        await tx.installment.create({
+                            data: {
+                                installmentNumber: i + 1,
+                                totalInstallments: installmentPayment.installments,
+                                amount: installmentAmount,
+                                remainingAmount: installmentAmount,
+                                dueDate,
+                                description: installmentPayment.description || `Parcela ${i + 1}/${installmentPayment.installments} da venda`,
+                                saleId: sale.id,
+                                customerId: installmentPayment.customerId,
+                                companyId,
+                            },
+                        });
+                    }
+                    this.logger.log(`Created ${installmentPayment.installments} installments for sale ${sale.id}`);
                 }
                 for (const item of validatedItems) {
                     await tx.saleItem.create({
@@ -125,6 +181,8 @@ let SaleService = SaleService_1 = class SaleService {
                                     name: true,
                                     barcode: true,
                                     price: true,
+                                    ncm: true,
+                                    cfop: true,
                                 },
                             },
                         },
@@ -141,73 +199,97 @@ let SaleService = SaleService_1 = class SaleService {
                             id: true,
                             name: true,
                             cnpj: true,
+                            stateRegistration: true,
                             street: true,
                             number: true,
                             district: true,
                             phone: true,
                             email: true,
+                            state: true,
                             customFooter: true,
                         },
                     },
                 },
             });
-            try {
-                const nfceData = {
-                    companyId,
-                    clientCpfCnpj: createSaleDto.clientCpfCnpj,
-                    clientName: createSaleDto.clientName,
-                    items: completeSale.items.map(item => ({
-                        productId: item.product.id,
-                        productName: item.product.name,
-                        barcode: item.product.barcode,
-                        quantity: item.quantity,
-                        unitPrice: Number(item.unitPrice),
-                        totalPrice: Number(item.totalPrice),
-                    })),
-                    totalValue: Number(completeSale.total),
-                    paymentMethod: completeSale.paymentMethods.map(pm => pm.method),
-                    saleId: completeSale.id,
-                    sellerName: completeSale.seller.name,
-                };
-                const fiscalDocument = await this.fiscalService.generateNFCe(nfceData);
-                const nfcePrintData = {
-                    company: {
-                        name: completeSale.company.name,
-                        cnpj: completeSale.company.cnpj,
-                        address: `${completeSale.company.street || ''}, ${completeSale.company.number || ''} - ${completeSale.company.district || ''}`,
-                        phone: completeSale.company.phone,
-                        email: completeSale.company.email,
-                    },
-                    fiscal: {
-                        documentNumber: fiscalDocument.documentNumber,
-                        accessKey: fiscalDocument.accessKey,
-                        emissionDate: fiscalDocument.emissionDate,
-                        status: fiscalDocument.status,
-                    },
-                    sale: {
-                        id: completeSale.id,
-                        total: Number(completeSale.total),
-                        clientName: completeSale.clientName,
-                        clientCpfCnpj: completeSale.clientCpfCnpj,
+            if (!createSaleDto.skipPrint) {
+                try {
+                    const nfceData = {
+                        companyId,
+                        clientCpfCnpj: createSaleDto.clientCpfCnpj,
+                        clientName: createSaleDto.clientName,
+                        items: completeSale.items.map(item => ({
+                            productId: item.product.id,
+                            productName: item.product.name,
+                            barcode: item.product.barcode,
+                            quantity: item.quantity,
+                            unitPrice: Number(item.unitPrice),
+                            totalPrice: Number(item.totalPrice),
+                        })),
+                        totalValue: Number(completeSale.total),
                         paymentMethod: completeSale.paymentMethods.map(pm => pm.method),
-                        change: Number(completeSale.change),
-                        saleDate: completeSale.saleDate,
+                        saleId: completeSale.id,
                         sellerName: completeSale.seller.name,
-                    },
-                    items: completeSale.items.map(item => ({
-                        productName: item.product.name,
-                        barcode: item.product.barcode,
-                        quantity: item.quantity,
-                        unitPrice: Number(item.unitPrice),
-                        totalPrice: Number(item.totalPrice),
-                    })),
-                    customFooter: completeSale.company.customFooter || 'OBRIGADO PELA PREFERÊNCIA!\nVOLTE SEMPRE!',
-                };
-                await this.printerService.printNFCe(nfcePrintData);
-                this.logger.log(`NFCe printed successfully for sale: ${completeSale.id}`);
+                    };
+                    const fiscalDocument = await this.fiscalService.generateNFCe(nfceData);
+                    let totalTaxes = 0;
+                    try {
+                        const taxCalculations = await Promise.all(completeSale.items.map(item => this.ibptService.calculateProductTax(item.product.ncm || '99999999', Number(item.totalPrice), completeSale.company.state || 'SC')));
+                        totalTaxes = taxCalculations.reduce((sum, calc) => sum + calc.taxValue, 0);
+                        this.logger.log(`Tributos calculados via IBPT: R$ ${totalTaxes.toFixed(2)}`);
+                    }
+                    catch (error) {
+                        this.logger.warn('Erro ao calcular tributos via IBPT, usando estimativa:', error);
+                        totalTaxes = Number(completeSale.total) * 0.1665;
+                    }
+                    const nfcePrintData = {
+                        company: {
+                            name: completeSale.company.name,
+                            cnpj: completeSale.company.cnpj,
+                            inscricaoEstadual: completeSale.company.stateRegistration,
+                            address: `${completeSale.company.street || ''}, ${completeSale.company.number || ''} - ${completeSale.company.district || ''}`,
+                            phone: completeSale.company.phone,
+                            email: completeSale.company.email,
+                        },
+                        fiscal: {
+                            documentNumber: fiscalDocument.documentNumber,
+                            accessKey: fiscalDocument.accessKey,
+                            emissionDate: fiscalDocument.emissionDate,
+                            status: fiscalDocument.status,
+                            protocol: fiscalDocument.protocol || undefined,
+                            qrCodeUrl: fiscalDocument.qrCodeUrl || undefined,
+                            serieNumber: fiscalDocument.serieNumber || '1',
+                        },
+                        sale: {
+                            id: completeSale.id,
+                            total: Number(completeSale.total),
+                            clientName: completeSale.clientName,
+                            clientCpfCnpj: completeSale.clientCpfCnpj,
+                            paymentMethod: completeSale.paymentMethods.map(pm => pm.method),
+                            change: Number(completeSale.change),
+                            saleDate: completeSale.saleDate,
+                            sellerName: completeSale.seller.name,
+                            totalTaxes: totalTaxes,
+                        },
+                        items: completeSale.items.map(item => ({
+                            productName: item.product.name,
+                            barcode: item.product.barcode,
+                            quantity: item.quantity,
+                            unitPrice: Number(item.unitPrice),
+                            totalPrice: Number(item.totalPrice),
+                            ncm: item.product.ncm || '99999999',
+                            cfop: item.product.cfop || '5102',
+                        })),
+                        customFooter: completeSale.company.customFooter || 'MONT TECNOLOGIA, SEU PARCEIRO DE SUCESSO !! 🚀🚀',
+                    };
+                    await this.printerService.printNFCe(nfcePrintData, companyId);
+                    this.logger.log(`NFCe printed successfully for sale: ${completeSale.id}`);
+                }
+                catch (fiscalError) {
+                    this.logger.warn('Failed to generate or print NFCe:', fiscalError);
+                }
             }
-            catch (fiscalError) {
-                this.logger.warn('Failed to generate or print NFCe:', fiscalError);
+            else {
+                this.logger.log(`NFCe printing skipped for sale: ${completeSale.id} (skipPrint=true)`);
             }
             if (createSaleDto.clientCpfCnpj) {
                 try {
@@ -552,13 +634,145 @@ let SaleService = SaleService_1 = class SaleService {
         };
     }
     async reprintReceipt(id, companyId) {
-        const sale = await this.findOne(id, companyId);
+        const sale = await this.prisma.sale.findUnique({
+            where: { id },
+            include: {
+                items: {
+                    include: {
+                        product: true,
+                    },
+                },
+                paymentMethods: true,
+                seller: true,
+                company: true,
+            },
+        });
+        if (!sale) {
+            throw new common_1.BadRequestException('Venda não encontrada');
+        }
+        if (companyId && sale.companyId !== companyId) {
+            throw new common_1.BadRequestException('Venda não pertence à empresa');
+        }
         try {
-            return { message: 'Cupom reimpresso com sucesso' };
+            const fiscalDocument = await this.prisma.fiscalDocument.findFirst({
+                where: {
+                    companyId: sale.companyId,
+                },
+                orderBy: {
+                    createdAt: 'desc',
+                },
+            });
+            if (!fiscalDocument) {
+                this.logger.warn(`No fiscal document found for sale ${id}, attempting to generate new NFCe`);
+                const nfceData = {
+                    companyId: sale.companyId,
+                    clientCpfCnpj: sale.clientCpfCnpj,
+                    clientName: sale.clientName,
+                    items: sale.items.map(item => ({
+                        productId: item.product.id,
+                        productName: item.product.name,
+                        barcode: item.product.barcode,
+                        quantity: item.quantity,
+                        unitPrice: Number(item.unitPrice),
+                        totalPrice: Number(item.totalPrice),
+                    })),
+                    totalValue: Number(sale.total),
+                    paymentMethod: sale.paymentMethods.map(pm => pm.method),
+                    saleId: sale.id,
+                    sellerName: sale.seller.name,
+                };
+                const newFiscalDocument = await this.fiscalService.generateNFCe(nfceData);
+                const nfcePrintData = {
+                    company: {
+                        name: sale.company.name,
+                        cnpj: sale.company.cnpj,
+                        inscricaoEstadual: sale.company.stateRegistration,
+                        address: `${sale.company.street || ''}, ${sale.company.number || ''} - ${sale.company.district || ''}`,
+                        phone: sale.company.phone,
+                        email: sale.company.email,
+                    },
+                    fiscal: {
+                        documentNumber: newFiscalDocument.documentNumber,
+                        accessKey: newFiscalDocument.accessKey,
+                        emissionDate: newFiscalDocument.emissionDate || new Date(),
+                        status: newFiscalDocument.status,
+                        protocol: newFiscalDocument.protocol || undefined,
+                        qrCodeUrl: newFiscalDocument.qrCodeUrl || undefined,
+                        serieNumber: newFiscalDocument.serieNumber || '1',
+                    },
+                    sale: {
+                        id: sale.id,
+                        total: Number(sale.total),
+                        clientName: sale.clientName,
+                        clientCpfCnpj: sale.clientCpfCnpj,
+                        paymentMethod: sale.paymentMethods.map(pm => pm.method),
+                        change: Number(sale.change),
+                        saleDate: sale.saleDate,
+                        sellerName: sale.seller.name,
+                        totalTaxes: Number(sale.total) * 0.1665,
+                    },
+                    items: sale.items.map(item => ({
+                        productName: item.product.name,
+                        barcode: item.product.barcode,
+                        quantity: item.quantity,
+                        unitPrice: Number(item.unitPrice),
+                        totalPrice: Number(item.totalPrice),
+                        ncm: item.product.ncm || '99999999',
+                        cfop: item.product.cfop || '5102',
+                    })),
+                    customFooter: sale.company.customFooter || 'MONT TECNOLOGIA, SEU PARCEIRO DE SUCESSO !! 🚀🚀',
+                };
+                await this.printerService.printNFCe(nfcePrintData, sale.companyId);
+            }
+            else {
+                const nfcePrintData = {
+                    company: {
+                        name: sale.company.name,
+                        cnpj: sale.company.cnpj,
+                        inscricaoEstadual: sale.company.stateRegistration,
+                        address: `${sale.company.street || ''}, ${sale.company.number || ''} - ${sale.company.district || ''}`,
+                        phone: sale.company.phone,
+                        email: sale.company.email,
+                    },
+                    fiscal: {
+                        documentNumber: fiscalDocument.documentNumber,
+                        accessKey: fiscalDocument.accessKey,
+                        emissionDate: fiscalDocument.emissionDate || new Date(),
+                        status: fiscalDocument.status,
+                        protocol: fiscalDocument.protocol || undefined,
+                        qrCodeUrl: fiscalDocument.qrCodeUrl || undefined,
+                        serieNumber: fiscalDocument.serieNumber || '1',
+                    },
+                    sale: {
+                        id: sale.id,
+                        total: Number(sale.total),
+                        clientName: sale.clientName,
+                        clientCpfCnpj: sale.clientCpfCnpj,
+                        paymentMethod: sale.paymentMethods.map(pm => pm.method),
+                        change: Number(sale.change),
+                        saleDate: sale.saleDate,
+                        sellerName: sale.seller.name,
+                        totalTaxes: Number(sale.total) * 0.1665,
+                    },
+                    items: sale.items.map(item => ({
+                        productName: item.product.name,
+                        barcode: item.product.barcode,
+                        quantity: item.quantity,
+                        unitPrice: Number(item.unitPrice),
+                        totalPrice: Number(item.totalPrice),
+                        ncm: item.product.ncm || '99999999',
+                        cfop: item.product.cfop || '5102',
+                    })),
+                    customFooter: sale.company.customFooter || 'MONT TECNOLOGIA, SEU PARCEIRO DE SUCESSO !! 🚀🚀',
+                };
+                await this.printerService.printNFCe(nfcePrintData, sale.companyId);
+            }
+            this.logger.log(`NFCe reprinted successfully for sale: ${sale.id}`);
+            return { message: 'NFC-e reimpresso com sucesso' };
         }
         catch (error) {
-            this.logger.error('Error reprinting receipt:', error);
-            throw new common_1.BadRequestException('Erro ao reimprimir cupom');
+            this.logger.error('Error reprinting NFCe:', error);
+            throw new common_1.BadRequestException('Erro ao reimprimir NFC-e');
         }
     }
 };
@@ -569,6 +783,7 @@ exports.SaleService = SaleService = SaleService_1 = __decorate([
         product_service_1.ProductService,
         printer_service_1.PrinterService,
         fiscal_service_1.FiscalService,
-        email_service_1.EmailService])
+        email_service_1.EmailService,
+        ibpt_service_1.IBPTService])
 ], SaleService);
 //# sourceMappingURL=sale.service.js.map

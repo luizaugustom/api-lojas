@@ -2,10 +2,12 @@ import { PrismaService } from '../../infrastructure/database/prisma.service';
 import { CreateBillToPayDto } from './dto/create-bill-to-pay.dto';
 import { UpdateBillToPayDto } from './dto/update-bill-to-pay.dto';
 import { MarkAsPaidDto } from './dto/mark-as-paid.dto';
+import { PlanLimitsService } from '../../shared/services/plan-limits.service';
 export declare class BillToPayService {
     private readonly prisma;
+    private readonly planLimitsService;
     private readonly logger;
-    constructor(prisma: PrismaService);
+    constructor(prisma: PrismaService, planLimitsService: PlanLimitsService);
     create(companyId: string, createBillToPayDto: CreateBillToPayDto): Promise<{
         company: {
             id: string;

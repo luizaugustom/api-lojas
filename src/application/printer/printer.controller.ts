@@ -5,6 +5,7 @@ import {
   Body,
   Param,
   UseGuards,
+  BadRequestException,
 } from '@nestjs/common';
 import {
   ApiTags,
@@ -13,6 +14,7 @@ import {
   ApiBearerAuth,
 } from '@nestjs/swagger';
 import { PrinterService, PrinterConfig } from './printer.service';
+import { AddPrinterDto } from './dto/add-printer.dto';
 import { UpdateCustomFooterDto } from './dto/update-custom-footer.dto';
 import { JwtAuthGuard } from '../../shared/guards/jwt-auth.guard';
 import { RolesGuard } from '../../shared/guards/roles.guard';
@@ -41,8 +43,13 @@ export class PrinterController {
   @ApiResponse({ status: 201, description: 'Impressora adicionada com sucesso' })
   async addPrinter(
     @CurrentUser() user: any,
-    @Body() printerConfig: PrinterConfig,
+    @Body() printerConfig: AddPrinterDto,
   ) {
+    // Validação adicional de segurança
+    if (!user.companyId) {
+      throw new BadRequestException('Usuário não possui empresa associada');
+    }
+    
     return this.printerService.addPrinter(user.companyId, printerConfig);
   }
 
@@ -93,5 +100,54 @@ export class PrinterController {
   async getCustomFooter(@CurrentUser() user: any) {
     const customFooter = await this.printerService.getCustomFooter(user.companyId);
     return { customFooter };
+  }
+
+  @Get('available')
+  @Roles(UserRole.ADMIN, UserRole.COMPANY)
+  @ApiOperation({ summary: 'Listar impressoras disponíveis no sistema' })
+  @ApiResponse({ status: 200, description: 'Lista de impressoras do sistema' })
+  async getAvailablePrinters() {
+    return await this.printerService.getAvailablePrinters();
+  }
+
+  @Get('check-drivers')
+  @Roles(UserRole.ADMIN, UserRole.COMPANY)
+  @ApiOperation({ summary: 'Verificar drivers de impressora instalados' })
+  @ApiResponse({ status: 200, description: 'Status dos drivers' })
+  async checkDrivers() {
+    return await this.printerService.checkDrivers();
+  }
+
+  @Post('install-drivers')
+  @Roles(UserRole.ADMIN, UserRole.COMPANY)
+  @ApiOperation({ summary: 'Instalar drivers de impressora' })
+  @ApiResponse({ status: 200, description: 'Resultado da instalação' })
+  async installDrivers() {
+    return await this.printerService.installDrivers();
+  }
+
+  @Post('check-drivers')
+  @Roles(UserRole.ADMIN, UserRole.COMPANY)
+  @ApiOperation({ summary: 'Verificar e instalar drivers de impressora (DEPRECATED)' })
+  @ApiResponse({ status: 200, description: 'Status dos drivers' })
+  async checkAndInstallDrivers() {
+    return await this.printerService.checkAndInstallDrivers();
+  }
+
+  @Post(':id/open-drawer')
+  @Roles(UserRole.COMPANY)
+  @ApiOperation({ summary: 'Abrir gaveta de dinheiro' })
+  @ApiResponse({ status: 200, description: 'Gaveta aberta com sucesso' })
+  async openCashDrawer(@Param('id', UuidValidationPipe) id: string) {
+    const success = await this.printerService.openCashDrawer(id);
+    return { success, message: success ? 'Gaveta aberta com sucesso' : 'Falha ao abrir gaveta' };
+  }
+
+  @Get(':id/queue')
+  @Roles(UserRole.ADMIN, UserRole.COMPANY)
+  @ApiOperation({ summary: 'Obter fila de impressão' })
+  @ApiResponse({ status: 200, description: 'Fila de impressão' })
+  async getPrintQueue(@Param('id', UuidValidationPipe) id: string) {
+    return await this.printerService.getPrintQueue(id);
   }
 }

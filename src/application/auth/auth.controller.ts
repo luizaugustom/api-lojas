@@ -1,9 +1,12 @@
-import { Controller, Post, Body, HttpCode, HttpStatus, Logger, Req, Res } from '@nestjs/common';
+import { Controller, Post, Get, Put, Body, HttpCode, HttpStatus, Logger, Req, Res, UseGuards } from '@nestjs/common';
 import { Request, Response } from 'express';
-import { ApiTags, ApiOperation, ApiResponse, ApiBody } from '@nestjs/swagger';
+import { ApiTags, ApiOperation, ApiResponse, ApiBody, ApiBearerAuth } from '@nestjs/swagger';
 import { Public } from '../../shared/decorators/public.decorator';
+import { JwtAuthGuard } from '../../shared/guards/jwt-auth.guard';
 import { AuthService, LoginResponse } from './auth.service';
 import { LoginDto } from './dto/login.dto';
+import { ChangePasswordDto } from './dto/change-password.dto';
+import { UpdateProfileDto } from './dto/update-profile.dto';
 
 @ApiTags('auth')
 @Controller('auth')
@@ -116,5 +119,57 @@ export class AuthController {
     }
     res.clearCookie('access_token');
     return { message: 'Logged out' };
+  }
+
+  @Get('profile')
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Obter perfil do usuário autenticado' })
+  @ApiResponse({
+    status: 200,
+    description: 'Perfil retornado com sucesso',
+  })
+  @ApiResponse({ status: 401, description: 'Não autorizado' })
+  async getProfile(@Req() req: any) {
+    const user = req.user; // Injetado pelo JwtAuthGuard
+    return this.authService.getProfile(user.id, user.role);
+  }
+
+  @Put('profile')
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Atualizar perfil do usuário autenticado' })
+  @ApiBody({ type: UpdateProfileDto })
+  @ApiResponse({
+    status: 200,
+    description: 'Perfil atualizado com sucesso',
+  })
+  @ApiResponse({ status: 400, description: 'Dados inválidos' })
+  @ApiResponse({ status: 401, description: 'Não autorizado' })
+  async updateProfile(@Req() req: any, @Body() updateProfileDto: UpdateProfileDto) {
+    const user = req.user;
+    return this.authService.updateProfile(user.id, user.role, updateProfileDto);
+  }
+
+  @Post('change-password')
+  @UseGuards(JwtAuthGuard)
+  @HttpCode(HttpStatus.OK)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Alterar senha do usuário autenticado' })
+  @ApiBody({ type: ChangePasswordDto })
+  @ApiResponse({
+    status: 200,
+    description: 'Senha alterada com sucesso',
+  })
+  @ApiResponse({ status: 400, description: 'Senha atual incorreta ou nova senha inválida' })
+  @ApiResponse({ status: 401, description: 'Não autorizado' })
+  async changePassword(@Req() req: any, @Body() changePasswordDto: ChangePasswordDto) {
+    const user = req.user;
+    return this.authService.changePassword(
+      user.id,
+      user.role,
+      changePasswordDto.currentPassword,
+      changePasswordDto.newPassword,
+    );
   }
 }

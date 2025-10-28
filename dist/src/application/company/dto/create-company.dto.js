@@ -12,6 +12,7 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.CreateCompanyDto = void 0;
 const swagger_1 = require("@nestjs/swagger");
 const class_validator_1 = require("class-validator");
+const client_1 = require("@prisma/client");
 class CreateCompanyDto {
 }
 exports.CreateCompanyDto = CreateCompanyDto;
@@ -133,6 +134,20 @@ __decorate([
     }),
     __metadata("design:type", String)
 ], CreateCompanyDto.prototype, "brandColor", void 0);
+__decorate([
+    (0, swagger_1.ApiProperty)({
+        description: 'Plano da empresa',
+        enum: client_1.PlanType,
+        example: client_1.PlanType.BASIC,
+        default: client_1.PlanType.BASIC,
+        required: false,
+    }),
+    (0, class_validator_1.IsOptional)(),
+    (0, class_validator_1.IsEnum)(client_1.PlanType, {
+        message: 'Plano deve ser BASIC, PLUS ou PRO',
+    }),
+    __metadata("design:type", String)
+], CreateCompanyDto.prototype, "plan", void 0);
 __decorate([
     (0, swagger_1.ApiProperty)({
         description: 'Status ativo da empresa',

@@ -1,8 +1,10 @@
 import { Injectable, ConflictException, NotFoundException, Logger } from '@nestjs/common';
 import { PrismaService } from '../../infrastructure/database/prisma.service';
 import { HashService } from '../../shared/services/hash.service';
+import { EncryptionService } from '../../shared/services/encryption.service';
 import { CreateAdminDto } from './dto/create-admin.dto';
 import { UpdateAdminDto } from './dto/update-admin.dto';
+import { UpdateFocusNfeConfigDto } from './dto/update-focus-nfe-config.dto';
 
 @Injectable()
 export class AdminService {
@@ -11,6 +13,7 @@ export class AdminService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly hashService: HashService,
+    private readonly encryptionService: EncryptionService,
   ) {}
 
   async create(createAdminDto: CreateAdminDto) {
@@ -97,13 +100,16 @@ export class AdminService {
         throw new NotFoundException('Admin não encontrado');
       }
 
-      const updateData: any = {};
+      const updateData: any = { ...updateAdminDto };
 
       if (updateAdminDto.login) {
         updateData.login = updateAdminDto.login;
       }
 
-      if (updateAdminDto.password) {
+      // Remove password field if empty or undefined
+      if (!updateAdminDto.password || updateAdminDto.password.trim() === '') {
+        delete updateData.password;
+      } else {
         updateData.password = await this.hashService.hashPassword(updateAdminDto.password);
       }
 
@@ -147,6 +153,94 @@ export class AdminService {
       return { message: 'Admin removido com sucesso' };
     } catch (error) {
       this.logger.error('Error deleting admin:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Atualizar configurações globais do Focus NFe
+   */
+  async updateFocusNfeConfig(adminId: string, updateFocusNfeConfigDto: UpdateFocusNfeConfigDto) {
+    try {
+      const admin = await this.prisma.admin.findUnique({
+        where: { id: adminId },
+      });
+
+      if (!admin) {
+        throw new NotFoundException('Admin não encontrado');
+      }
+
+      const updateData: any = {};
+
+      if (updateFocusNfeConfigDto.focusNfeApiKey !== undefined) {
+        updateData.focusNfeApiKey = updateFocusNfeConfigDto.focusNfeApiKey;
+      }
+
+      if (updateFocusNfeConfigDto.focusNfeEnvironment !== undefined) {
+        updateData.focusNfeEnvironment = updateFocusNfeConfigDto.focusNfeEnvironment;
+      }
+
+      if (updateFocusNfeConfigDto.ibptToken !== undefined) {
+        updateData.ibptToken = updateFocusNfeConfigDto.ibptToken;
+      }
+
+      const updatedAdmin = await this.prisma.admin.update({
+        where: { id: adminId },
+        data: updateData,
+        select: {
+          id: true,
+          login: true,
+          focusNfeEnvironment: true,
+          // Não retornar API keys por segurança
+        },
+      });
+
+      this.logger.log(`Focus NFe config updated for admin: ${adminId}`);
+      return {
+        ...updatedAdmin,
+        message: 'Configurações do Focus NFe atualizadas com sucesso',
+      };
+    } catch (error) {
+      this.logger.error('Error updating Focus NFe config:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Obter configurações globais do Focus NFe (dados sensíveis mascarados)
+   */
+  async getFocusNfeConfig(adminId: string) {
+    try {
+      const admin = await this.prisma.admin.findUnique({
+        where: { id: adminId },
+        select: {
+          id: true,
+          login: true,
+          focusNfeApiKey: true,
+          focusNfeEnvironment: true,
+          ibptToken: true,
+        },
+      });
+
+      if (!admin) {
+        throw new NotFoundException('Admin não encontrado');
+      }
+
+      return {
+        id: admin.id,
+        login: admin.login,
+        focusNfeApiKey: admin.focusNfeApiKey
+          ? this.encryptionService.mask(admin.focusNfeApiKey)
+          : null,
+        hasFocusNfeApiKey: !!admin.focusNfeApiKey,
+        focusNfeEnvironment: admin.focusNfeEnvironment || 'sandbox',
+        ibptToken: admin.ibptToken
+          ? this.encryptionService.mask(admin.ibptToken)
+          : null,
+        hasIbptToken: !!admin.ibptToken,
+      };
+    } catch (error) {
+      this.logger.error('Error getting Focus NFe config:', error);
       throw error;
     }
   }

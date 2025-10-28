@@ -1,4 +1,5 @@
 import { ConfigService } from '@nestjs/config';
+import { PrismaService } from '../../infrastructure/database/prisma.service';
 export interface FiscalApiConfig {
     provider: 'nfe.io' | 'tecnospeed' | 'focusnfe' | 'enotas' | 'mock';
     baseUrl: string;
@@ -37,12 +38,57 @@ export interface NFCeResponse {
     error?: string;
     errors?: string[];
 }
+export interface NFeRecipientAddress {
+    zipCode?: string;
+    street?: string;
+    number?: string;
+    complement?: string;
+    district?: string;
+    city?: string;
+    state?: string;
+}
+export interface NFeRecipient {
+    document: string;
+    name: string;
+    email?: string;
+    phone?: string;
+    address?: NFeRecipientAddress;
+}
+export interface NFeItem {
+    description: string;
+    quantity: number;
+    unitPrice: number;
+    ncm?: string;
+    cfop: string;
+    unitOfMeasure: string;
+}
+export interface NFeRequest {
+    companyId: string;
+    recipient: NFeRecipient;
+    items: NFeItem[];
+    paymentMethod: string;
+    additionalInfo?: string;
+    referenceId?: string;
+}
+export interface NFeResponse {
+    success: boolean;
+    documentNumber: string;
+    accessKey: string;
+    status: string;
+    xmlContent?: string;
+    pdfUrl?: string;
+    error?: string;
+    errors?: string[];
+}
 export declare class FiscalApiService {
     private readonly configService;
+    private readonly prisma;
     private readonly logger;
     private readonly httpClient;
     private readonly config;
-    constructor(configService: ConfigService);
+    constructor(configService: ConfigService, prisma: PrismaService);
+    private getFocusNfeApiKey;
+    private getFocusNfeEnvironment;
     private loadFiscalConfig;
     private createHttpClient;
     generateNFCe(request: NFCeRequest): Promise<NFCeResponse>;
@@ -51,6 +97,9 @@ export declare class FiscalApiService {
     private generateNFCeFocusNFe;
     private generateNFCeEnotas;
     private generateNFCeMock;
+    generateNFe(request: NFeRequest): Promise<NFeResponse>;
+    private generateNFeFocusNFe;
+    private mapPaymentMethodCodeSefaz;
     private mapPaymentMethods;
     uploadCertificate(certificatePath: string, password: string): Promise<boolean>;
     getFiscalStatus(): Promise<{

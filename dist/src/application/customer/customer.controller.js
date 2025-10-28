@@ -23,6 +23,7 @@ const jwt_auth_guard_1 = require("../../shared/guards/jwt-auth.guard");
 const roles_guard_1 = require("../../shared/guards/roles.guard");
 const roles_decorator_1 = require("../../shared/decorators/roles.decorator");
 const current_user_decorator_1 = require("../../shared/decorators/current-user.decorator");
+const uuid_validation_pipe_1 = require("../../shared/pipes/uuid-validation.pipe");
 let CustomerController = class CustomerController {
     constructor(customerService) {
         this.customerService = customerService;
@@ -96,7 +97,7 @@ __decorate([
 ], CustomerController.prototype, "create", null);
 __decorate([
     (0, common_1.Get)(),
-    (0, roles_decorator_1.Roles)(roles_decorator_1.UserRole.ADMIN, roles_decorator_1.UserRole.COMPANY),
+    (0, roles_decorator_1.Roles)(roles_decorator_1.UserRole.ADMIN, roles_decorator_1.UserRole.COMPANY, roles_decorator_1.UserRole.SELLER),
     (0, swagger_1.ApiOperation)({ summary: 'Listar clientes' }),
     (0, swagger_1.ApiQuery)({ name: 'page', required: false, type: Number }),
     (0, swagger_1.ApiQuery)({ name: 'limit', required: false, type: Number }),
@@ -112,7 +113,7 @@ __decorate([
 ], CustomerController.prototype, "findAll", null);
 __decorate([
     (0, common_1.Get)('stats'),
-    (0, roles_decorator_1.Roles)(roles_decorator_1.UserRole.ADMIN, roles_decorator_1.UserRole.COMPANY),
+    (0, roles_decorator_1.Roles)(roles_decorator_1.UserRole.ADMIN, roles_decorator_1.UserRole.COMPANY, roles_decorator_1.UserRole.SELLER),
     (0, swagger_1.ApiOperation)({ summary: 'Obter estatísticas dos clientes' }),
     (0, swagger_1.ApiResponse)({ status: 200, description: 'Estatísticas dos clientes' }),
     __param(0, (0, current_user_decorator_1.CurrentUser)()),
@@ -134,11 +135,11 @@ __decorate([
 ], CustomerController.prototype, "findByCpfCnpj", null);
 __decorate([
     (0, common_1.Get)(':id'),
-    (0, roles_decorator_1.Roles)(roles_decorator_1.UserRole.ADMIN, roles_decorator_1.UserRole.COMPANY),
+    (0, roles_decorator_1.Roles)(roles_decorator_1.UserRole.ADMIN, roles_decorator_1.UserRole.COMPANY, roles_decorator_1.UserRole.SELLER),
     (0, swagger_1.ApiOperation)({ summary: 'Buscar cliente por ID' }),
     (0, swagger_1.ApiResponse)({ status: 200, description: 'Cliente encontrado' }),
     (0, swagger_1.ApiResponse)({ status: 404, description: 'Cliente não encontrado' }),
-    __param(0, (0, common_1.Param)('id')),
+    __param(0, (0, common_1.Param)('id', uuid_validation_pipe_1.UuidValidationPipe)),
     __param(1, (0, current_user_decorator_1.CurrentUser)()),
     __metadata("design:type", Function),
     __metadata("design:paramtypes", [String, Object]),
@@ -146,10 +147,10 @@ __decorate([
 ], CustomerController.prototype, "findOne", null);
 __decorate([
     (0, common_1.Get)(':id/installments'),
-    (0, roles_decorator_1.Roles)(roles_decorator_1.UserRole.ADMIN, roles_decorator_1.UserRole.COMPANY),
+    (0, roles_decorator_1.Roles)(roles_decorator_1.UserRole.ADMIN, roles_decorator_1.UserRole.COMPANY, roles_decorator_1.UserRole.SELLER),
     (0, swagger_1.ApiOperation)({ summary: 'Obter vendas a prazo do cliente' }),
     (0, swagger_1.ApiResponse)({ status: 200, description: 'Vendas a prazo do cliente' }),
-    __param(0, (0, common_1.Param)('id')),
+    __param(0, (0, common_1.Param)('id', uuid_validation_pipe_1.UuidValidationPipe)),
     __param(1, (0, current_user_decorator_1.CurrentUser)()),
     __metadata("design:type", Function),
     __metadata("design:paramtypes", [String, Object]),
@@ -161,7 +162,7 @@ __decorate([
     (0, swagger_1.ApiOperation)({ summary: 'Atualizar cliente' }),
     (0, swagger_1.ApiResponse)({ status: 200, description: 'Cliente atualizado com sucesso' }),
     (0, swagger_1.ApiResponse)({ status: 404, description: 'Cliente não encontrado' }),
-    __param(0, (0, common_1.Param)('id')),
+    __param(0, (0, common_1.Param)('id', uuid_validation_pipe_1.UuidValidationPipe)),
     __param(1, (0, common_1.Body)()),
     __param(2, (0, current_user_decorator_1.CurrentUser)()),
     __metadata("design:type", Function),
@@ -174,7 +175,7 @@ __decorate([
     (0, swagger_1.ApiOperation)({ summary: 'Enviar email promocional para cliente específico' }),
     (0, swagger_1.ApiResponse)({ status: 200, description: 'Email promocional enviado com sucesso' }),
     (0, swagger_1.ApiResponse)({ status: 404, description: 'Cliente não encontrado' }),
-    __param(0, (0, common_1.Param)('id')),
+    __param(0, (0, common_1.Param)('id', uuid_validation_pipe_1.UuidValidationPipe)),
     __param(1, (0, common_1.Body)()),
     __param(2, (0, current_user_decorator_1.CurrentUser)()),
     __metadata("design:type", Function),
@@ -187,7 +188,7 @@ __decorate([
     (0, swagger_1.ApiOperation)({ summary: 'Enviar confirmação de venda por email' }),
     (0, swagger_1.ApiResponse)({ status: 200, description: 'Email de confirmação enviado com sucesso' }),
     (0, swagger_1.ApiResponse)({ status: 404, description: 'Cliente ou venda não encontrado' }),
-    __param(0, (0, common_1.Param)('id')),
+    __param(0, (0, common_1.Param)('id', uuid_validation_pipe_1.UuidValidationPipe)),
     __param(1, (0, common_1.Param)('saleId')),
     __param(2, (0, current_user_decorator_1.CurrentUser)()),
     __metadata("design:type", Function),
@@ -211,7 +212,7 @@ __decorate([
     (0, swagger_1.ApiOperation)({ summary: 'Remover cliente' }),
     (0, swagger_1.ApiResponse)({ status: 200, description: 'Cliente removido com sucesso' }),
     (0, swagger_1.ApiResponse)({ status: 404, description: 'Cliente não encontrado' }),
-    __param(0, (0, common_1.Param)('id')),
+    __param(0, (0, common_1.Param)('id', uuid_validation_pipe_1.UuidValidationPipe)),
     __param(1, (0, current_user_decorator_1.CurrentUser)()),
     __metadata("design:type", Function),
     __metadata("design:paramtypes", [String, Object]),

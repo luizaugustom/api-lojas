@@ -211,12 +211,13 @@ let ReportsService = ReportsService_1 = class ReportsService {
         };
     }
     async generateCompleteReport(companyId, startDate, endDate, sellerId) {
-        const [salesReport, productsReport, invoicesReport, billsToPay, cashClosures] = await Promise.all([
+        const [salesReport, productsReport, invoicesReport, billsToPay, cashClosures, commissions] = await Promise.all([
             this.generateSalesReport(companyId, startDate, endDate, sellerId),
             this.generateProductsReport(companyId),
             this.generateInvoicesReport(companyId, startDate, endDate),
             this.getBillsToPay(companyId, startDate, endDate),
             this.getCashClosures(companyId, startDate, endDate),
+            this.getCommissionsReport(companyId, startDate, endDate),
         ]);
         return {
             sales: salesReport,
@@ -224,6 +225,7 @@ let ReportsService = ReportsService_1 = class ReportsService {
             invoices: invoicesReport,
             billsToPay,
             cashClosures,
+            commissions,
         };
     }
     async getBillsToPay(companyId, startDate, endDate) {
@@ -289,6 +291,62 @@ let ReportsService = ReportsService_1 = class ReportsService {
             })),
         };
     }
+    async getCommissionsReport(companyId, startDate, endDate) {
+        const sellers = await this.prisma.seller.findMany({
+            where: { companyId },
+            select: {
+                id: true,
+                name: true,
+                cpf: true,
+                commissionRate: true,
+            },
+        });
+        const commissionsData = await Promise.all(sellers.map(async (seller) => {
+            const where = {
+                sellerId: seller.id,
+                companyId,
+            };
+            if (startDate || endDate) {
+                where.saleDate = {};
+                if (startDate) {
+                    where.saleDate.gte = new Date(startDate);
+                }
+                if (endDate) {
+                    where.saleDate.lte = new Date(endDate);
+                }
+            }
+            const sales = await this.prisma.sale.findMany({
+                where,
+                select: {
+                    total: true,
+                    change: true,
+                },
+            });
+            const totalSales = sales.length;
+            const totalRevenue = sales.reduce((sum, sale) => {
+                return sum + (Number(sale.total) - Number(sale.change));
+            }, 0);
+            const commissionRate = Number(seller.commissionRate);
+            const commissionAmount = (totalRevenue * commissionRate) / 100;
+            return {
+                sellerId: seller.id,
+                sellerName: seller.name,
+                sellerCpf: seller.cpf,
+                commissionRate,
+                totalSales,
+                totalRevenue,
+                commissionAmount,
+            };
+        }));
+        const totalCommissions = commissionsData.reduce((sum, c) => sum + c.commissionAmount, 0);
+        return {
+            summary: {
+                totalSellers: sellers.length,
+                totalCommissions,
+            },
+            commissions: commissionsData,
+        };
+    }
     async convertToXML(data) {
         const builder = new xml2js_1.Builder({
             xmldec: { version: '1.0', encoding: 'UTF-8' },
@@ -314,6 +372,7 @@ let ReportsService = ReportsService_1 = class ReportsService {
         if (reportType === generate_report_dto_1.ReportType.COMPLETE) {
             this.addBillsSheet(workbook, data.data.billsToPay);
             this.addCashClosuresSheet(workbook, data.data.cashClosures);
+            this.addCommissionsSheet(workbook, data.data.commissions);
         }
         return (await workbook.xlsx.writeBuffer());
     }
@@ -407,6 +466,49 @@ let ReportsService = ReportsService_1 = class ReportsService {
             });
         });
         sheet.getRow(1).font = { bold: true };
+    }
+    addCommissionsSheet(workbook, commissionsData) {
+        const sheet = workbook.addWorksheet('Comissões');
+        sheet.columns = [
+            { header: 'Vendedor', key: 'sellerName', width: 30 },
+            { header: 'CPF', key: 'sellerCpf', width: 20 },
+            { header: 'Taxa de Comissão (%)', key: 'commissionRate', width: 20 },
+            { header: 'Nº de Vendas', key: 'totalSales', width: 15 },
+            { header: 'Faturamento Total', key: 'totalRevenue', width: 20 },
+            { header: 'Valor da Comissão', key: 'commissionAmount', width: 20 },
+        ];
+        commissionsData.commissions.forEach((commission) => {
+            sheet.addRow({
+                sellerName: commission.sellerName,
+                sellerCpf: commission.sellerCpf || 'N/A',
+                commissionRate: commission.commissionRate,
+                totalSales: commission.totalSales,
+                totalRevenue: commission.totalRevenue.toFixed(2),
+                commissionAmount: commission.commissionAmount.toFixed(2),
+            });
+        });
+        sheet.getRow(1).font = { bold: true };
+        sheet.getRow(1).fill = {
+            type: 'pattern',
+            pattern: 'solid',
+            fgColor: { argb: 'FFE0E0E0' },
+        };
+        const totalRow = sheet.addRow({
+            sellerName: 'TOTAL',
+            sellerCpf: '',
+            commissionRate: '',
+            totalSales: commissionsData.commissions.reduce((sum, c) => sum + c.totalSales, 0),
+            totalRevenue: commissionsData.commissions.reduce((sum, c) => sum + c.totalRevenue, 0).toFixed(2),
+            commissionAmount: commissionsData.summary.totalCommissions.toFixed(2),
+        });
+        totalRow.font = { bold: true };
+        totalRow.fill = {
+            type: 'pattern',
+            pattern: 'solid',
+            fgColor: { argb: 'FFFFEB3B' },
+        };
+        sheet.getColumn('totalRevenue').numFmt = 'R$ #,##0.00';
+        sheet.getColumn('commissionAmount').numFmt = 'R$ #,##0.00';
     }
 };
 exports.ReportsService = ReportsService;

@@ -3,6 +3,7 @@ import { PrismaService } from '../../infrastructure/database/prisma.service';
 import { HashService } from '../../shared/services/hash.service';
 import { CreateSellerDto } from './dto/create-seller.dto';
 import { UpdateSellerDto } from './dto/update-seller.dto';
+import { PlanLimitsService } from '../../shared/services/plan-limits.service';
 
 @Injectable()
 export class SellerService {
@@ -11,18 +12,30 @@ export class SellerService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly hashService: HashService,
+    private readonly planLimitsService: PlanLimitsService,
   ) {}
 
   async create(companyId: string, createSellerDto: CreateSellerDto) {
     try {
+      // Validar limite de vendedores do plano
+      await this.planLimitsService.validateSellerLimit(companyId);
+      
       const hashedPassword = await this.hashService.hashPassword(createSellerDto.password);
 
+      // Preparar dados para criação
+      const data: any = {
+        ...createSellerDto,
+        password: hashedPassword,
+        companyId,
+      };
+
+      // Se birthDate estiver vazio ou indefinido, remover do objeto
+      if (!data.birthDate || data.birthDate === '') {
+        delete data.birthDate;
+      }
+
       const seller = await this.prisma.seller.create({
-        data: {
-          ...createSellerDto,
-          password: hashedPassword,
-          companyId,
-        },
+        data,
         select: {
           id: true,
           login: true,
@@ -30,6 +43,7 @@ export class SellerService {
           cpf: true,
           email: true,
           phone: true,
+          commissionRate: true,
           createdAt: true,
           updatedAt: true,
         },
@@ -49,7 +63,7 @@ export class SellerService {
   async findAll(companyId?: string) {
     const where = companyId ? { companyId } : {};
     
-    return this.prisma.seller.findMany({
+    const sellers = await this.prisma.seller.findMany({
       where,
       select: {
         id: true,
@@ -58,6 +72,7 @@ export class SellerService {
         cpf: true,
         email: true,
         phone: true,
+        commissionRate: true,
         createdAt: true,
         updatedAt: true,
         company: {
@@ -76,6 +91,49 @@ export class SellerService {
         createdAt: 'desc',
       },
     });
+
+    // Calcular valores do mês atual para cada vendedor
+    const startOfMonth = new Date();
+    startOfMonth.setDate(1);
+    startOfMonth.setHours(0, 0, 0, 0);
+
+    // Buscar vendas do mês para todos os vendedores de uma vez
+    const sellersWithStats = await Promise.all(
+      sellers.map(async (seller) => {
+        // Vendas do mês atual
+        const monthlySales = await this.prisma.sale.aggregate({
+          where: {
+            sellerId: seller.id,
+            saleDate: {
+              gte: startOfMonth,
+            },
+          },
+          _sum: {
+            total: true,
+          },
+          _count: {
+            id: true,
+          },
+        });
+
+        // Total geral
+        const totalSales = await this.prisma.sale.aggregate({
+          where: { sellerId: seller.id },
+          _sum: {
+            total: true,
+          },
+        });
+
+        return {
+          ...seller,
+          monthlySalesValue: monthlySales._sum.total || 0,
+          monthlySalesCount: monthlySales._count.id || 0,
+          totalRevenue: totalSales._sum.total || 0,
+        };
+      })
+    );
+
+    return sellersWithStats;
   }
 
   async findOne(id: string, companyId?: string) {
@@ -94,6 +152,7 @@ export class SellerService {
         birthDate: true,
         email: true,
         phone: true,
+        commissionRate: true,
         createdAt: true,
         updatedAt: true,
         company: {
@@ -134,8 +193,16 @@ export class SellerService {
 
       const updateData: any = { ...updateSellerDto };
 
-      if (updateSellerDto.password) {
+      // Remove password field if empty or undefined
+      if (!updateSellerDto.password || updateSellerDto.password.trim() === '') {
+        delete updateData.password;
+      } else {
         updateData.password = await this.hashService.hashPassword(updateSellerDto.password);
+      }
+
+      // Remove birthDate field if empty or undefined
+      if (!updateData.birthDate || updateData.birthDate === '') {
+        delete updateData.birthDate;
       }
 
       const seller = await this.prisma.seller.update({
@@ -148,6 +215,7 @@ export class SellerService {
           cpf: true,
           email: true,
           phone: true,
+          commissionRate: true,
           createdAt: true,
           updatedAt: true,
         },
