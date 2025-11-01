@@ -73,4 +73,11 @@ export declare class PrinterController {
         message: string;
     }>;
     getPrintQueue(id: string): Promise<any[]>;
+    getPrinterLogs(id: string): Promise<{
+        logs: string[];
+    }>;
+    deletePrinter(user: any, id: string): Promise<{
+        success: boolean;
+        deletedId: string;
+    }>;
 }

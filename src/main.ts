@@ -15,8 +15,9 @@ async function bootstrap() {
   const app = await NestFactory.create<NestExpressApplication>(AppModule);
   const configService = app.get(ConfigService);
 
-  // Serve static files from uploads directory
-  app.useStaticAssets(join(process.cwd(), 'uploads'), {
+  // Serve static files from uploads directory (override via env)
+  const uploadsDir = process.env.UPLOADS_DIR || join(process.cwd(), 'uploads')
+  app.useStaticAssets(uploadsDir, {
     prefix: '/uploads/',
   });
 

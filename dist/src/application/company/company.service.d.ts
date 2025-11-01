@@ -5,6 +5,7 @@ import { UploadService } from '../upload/upload.service';
 import { CreateCompanyDto } from './dto/create-company.dto';
 import { UpdateCompanyDto } from './dto/update-company.dto';
 import { UpdateFiscalConfigDto } from './dto/update-fiscal-config.dto';
+import { UpdateCatalogPageDto } from './dto/update-catalog-page.dto';
 export declare class CompanyService {
     private readonly prisma;
     private readonly hashService;
@@ -182,5 +183,38 @@ export declare class CompanyService {
         autoMessageEnabled: boolean;
         totalUnpaidInstallments: number;
         totalMessagesSent: number;
+    }>;
+    updateCatalogPage(companyId: string, updateCatalogPageDto: UpdateCatalogPageDto): Promise<{
+        message: string;
+        id: string;
+        name: string;
+        catalogPageUrl: string;
+        catalogPageEnabled: boolean;
+        success: boolean;
+    }>;
+    getCatalogPageConfig(companyId: string): Promise<{
+        catalogPageUrl: string;
+        catalogPageEnabled: boolean;
+        pageUrl: string;
+    }>;
+    getPublicCatalogData(url: string): Promise<{
+        company: {
+            id: string;
+            name: string;
+            phone: string;
+            email: string;
+            logoUrl: string;
+            brandColor: string;
+            address: string;
+        };
+        products: {
+            price: string;
+            id: string;
+            name: string;
+            photos: string[];
+            size: string;
+            stockQuantity: number;
+            category: string;
+        }[];
     }>;
 }

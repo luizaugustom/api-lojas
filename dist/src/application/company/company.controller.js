@@ -20,6 +20,7 @@ const company_service_1 = require("./company.service");
 const create_company_dto_1 = require("./dto/create-company.dto");
 const update_company_dto_1 = require("./dto/update-company.dto");
 const update_fiscal_config_dto_1 = require("./dto/update-fiscal-config.dto");
+const update_catalog_page_dto_1 = require("./dto/update-catalog-page.dto");
 const jwt_auth_guard_1 = require("../../shared/guards/jwt-auth.guard");
 const roles_guard_1 = require("../../shared/guards/roles.guard");
 const roles_decorator_1 = require("../../shared/decorators/roles.decorator");
@@ -93,6 +94,12 @@ let CompanyController = class CompanyController {
     }
     getAutoMessageStatus(user) {
         return this.companyService.getAutoMessageStatus(user.companyId);
+    }
+    updateCatalogPage(user, updateCatalogPageDto) {
+        return this.companyService.updateCatalogPage(user.companyId, updateCatalogPageDto);
+    }
+    getCatalogPageConfig(user) {
+        return this.companyService.getCatalogPageConfig(user.companyId);
     }
 };
 exports.CompanyController = CompanyController;
@@ -339,6 +346,28 @@ __decorate([
     __metadata("design:paramtypes", [Object]),
     __metadata("design:returntype", void 0)
 ], CompanyController.prototype, "getAutoMessageStatus", null);
+__decorate([
+    (0, common_1.Patch)('my-company/catalog-page'),
+    (0, roles_decorator_1.Roles)(roles_decorator_1.UserRole.COMPANY),
+    (0, swagger_1.ApiOperation)({ summary: 'Configurar página de catálogo pública' }),
+    (0, swagger_1.ApiResponse)({ status: 200, description: 'Configurações da página de catálogo atualizadas' }),
+    (0, swagger_1.ApiResponse)({ status: 409, description: 'URL já está em uso' }),
+    __param(0, (0, current_user_decorator_1.CurrentUser)()),
+    __param(1, (0, common_1.Body)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [Object, update_catalog_page_dto_1.UpdateCatalogPageDto]),
+    __metadata("design:returntype", void 0)
+], CompanyController.prototype, "updateCatalogPage", null);
+__decorate([
+    (0, common_1.Get)('my-company/catalog-page'),
+    (0, roles_decorator_1.Roles)(roles_decorator_1.UserRole.COMPANY),
+    (0, swagger_1.ApiOperation)({ summary: 'Obter configurações da página de catálogo' }),
+    (0, swagger_1.ApiResponse)({ status: 200, description: 'Configurações da página de catálogo' }),
+    __param(0, (0, current_user_decorator_1.CurrentUser)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [Object]),
+    __metadata("design:returntype", void 0)
+], CompanyController.prototype, "getCatalogPageConfig", null);
 exports.CompanyController = CompanyController = __decorate([
     (0, swagger_1.ApiTags)('company'),
     (0, common_1.Controller)('company'),

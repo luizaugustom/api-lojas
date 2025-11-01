@@ -281,7 +281,7 @@ export class SellerService {
     }
 
     // Calculate total sales value
-    const totalSales = await this.prisma.sale.aggregate({
+    const totalSalesAggregate = await this.prisma.sale.aggregate({
       where: { sellerId: id },
       _sum: {
         total: true,
@@ -308,11 +308,16 @@ export class SellerService {
       },
     });
 
+    const totalSalesCount = seller._count.sales;
+    const totalRevenue = Number(totalSalesAggregate._sum.total || 0);
+    const averageSaleValue = totalSalesCount > 0 ? totalRevenue / totalSalesCount : 0;
+
     return {
-      totalSales: seller._count.sales,
-      totalSalesValue: totalSales._sum.total || 0,
+      totalSales: totalSalesCount,
+      totalRevenue: totalRevenue,
+      averageSaleValue: averageSaleValue,
       monthlySales: monthlySales._count.id,
-      monthlySalesValue: monthlySales._sum.total || 0,
+      monthlySalesValue: Number(monthlySales._sum.total || 0),
     };
   }
 

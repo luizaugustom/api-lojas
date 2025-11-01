@@ -7,6 +7,7 @@ export declare class CreateProductWithValidationDto {
     price: number;
     category?: string;
     expirationDate?: string;
+    unitOfMeasure?: string;
     activityId?: any;
     companyId?: any;
     id?: any;

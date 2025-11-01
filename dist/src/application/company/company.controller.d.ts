@@ -2,6 +2,7 @@ import { CompanyService } from './company.service';
 import { CreateCompanyDto } from './dto/create-company.dto';
 import { UpdateCompanyDto } from './dto/update-company.dto';
 import { UpdateFiscalConfigDto } from './dto/update-fiscal-config.dto';
+import { UpdateCatalogPageDto } from './dto/update-catalog-page.dto';
 import { PlanLimitsService } from '../../shared/services/plan-limits.service';
 export declare class CompanyController {
     private readonly companyService;
@@ -260,5 +261,18 @@ export declare class CompanyController {
         autoMessageEnabled: boolean;
         totalUnpaidInstallments: number;
         totalMessagesSent: number;
+    }>;
+    updateCatalogPage(user: any, updateCatalogPageDto: UpdateCatalogPageDto): Promise<{
+        message: string;
+        id: string;
+        name: string;
+        catalogPageUrl: string;
+        catalogPageEnabled: boolean;
+        success: boolean;
+    }>;
+    getCatalogPageConfig(user: any): Promise<{
+        catalogPageUrl: string;
+        catalogPageEnabled: boolean;
+        pageUrl: string;
     }>;
 }

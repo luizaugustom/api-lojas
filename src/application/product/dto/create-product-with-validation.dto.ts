@@ -108,6 +108,17 @@ export class CreateProductWithValidationDto {
   expirationDate?: string;
 
   // Campos que devem ser rejeitados explicitamente
+  @ApiProperty({
+    description: 'Unidade de medida do produto',
+    example: 'kg',
+    required: false,
+    enum: ['kg', 'g', 'ml', 'l', 'm', 'cm', 'un'],
+  })
+  @IsOptional()
+  @IsString()
+  @MaxLength(10)
+  unitOfMeasure?: string;
+
   @Exclude()
   activityId?: any;
 

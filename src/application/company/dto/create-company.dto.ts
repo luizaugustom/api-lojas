@@ -120,7 +120,7 @@ export class CreateCompanyDto {
   })
   @IsOptional()
   @IsEnum(PlanType, {
-    message: 'Plano deve ser BASIC, PLUS ou PRO',
+    message: 'Plano deve ser BASIC, PLUS, PRO ou TRIAL_7_DAYS',
   })
   plan?: PlanType;
 

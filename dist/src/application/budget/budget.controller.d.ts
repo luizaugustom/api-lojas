@@ -13,6 +13,7 @@ export declare class BudgetController {
             cnpj: string;
             email: string;
             phone: string;
+            logoUrl: string;
             district: string;
             street: string;
         };
@@ -48,9 +49,9 @@ export declare class BudgetController {
         clientName: string | null;
         status: string;
         notes: string | null;
-        budgetNumber: number;
-        clientPhone: string | null;
         validUntil: Date;
+        clientPhone: string | null;
+        budgetNumber: number;
         budgetDate: Date;
     }>;
     findAll(user: any, status?: string, sellerId?: string): Promise<({
@@ -86,9 +87,9 @@ export declare class BudgetController {
         clientName: string | null;
         status: string;
         notes: string | null;
-        budgetNumber: number;
-        clientPhone: string | null;
         validUntil: Date;
+        clientPhone: string | null;
+        budgetNumber: number;
         budgetDate: Date;
     })[]>;
     findOne(user: any, id: string): Promise<{
@@ -99,6 +100,7 @@ export declare class BudgetController {
             cnpj: string;
             email: string;
             phone: string;
+            logoUrl: string;
             state: string;
             city: string;
             district: string;
@@ -136,9 +138,9 @@ export declare class BudgetController {
         clientName: string | null;
         status: string;
         notes: string | null;
-        budgetNumber: number;
-        clientPhone: string | null;
         validUntil: Date;
+        clientPhone: string | null;
+        budgetNumber: number;
         budgetDate: Date;
     }>;
     update(user: any, id: string, updateBudgetDto: UpdateBudgetDto): Promise<{
@@ -173,6 +175,7 @@ export declare class BudgetController {
                 expirationDate: Date | null;
                 ncm: string | null;
                 cfop: string | null;
+                unitOfMeasure: string | null;
             };
         } & {
             id: string;
@@ -195,9 +198,9 @@ export declare class BudgetController {
         clientName: string | null;
         status: string;
         notes: string | null;
-        budgetNumber: number;
-        clientPhone: string | null;
         validUntil: Date;
+        clientPhone: string | null;
+        budgetNumber: number;
         budgetDate: Date;
     }>;
     remove(user: any, id: string): Promise<{

@@ -26,6 +26,7 @@ const cash_closure_module_1 = require("./application/cash-closure/cash-closure.m
 const printer_module_1 = require("./application/printer/printer.module");
 const fiscal_module_1 = require("./application/fiscal/fiscal.module");
 const upload_module_1 = require("./application/upload/upload.module");
+const scale_module_1 = require("./application/scale/scale.module");
 const whatsapp_module_1 = require("./application/whatsapp/whatsapp.module");
 const n8n_module_1 = require("./application/n8n/n8n.module");
 const health_module_1 = require("./application/health/health.module");
@@ -78,6 +79,7 @@ exports.AppModule = AppModule = __decorate([
             notification_module_1.NotificationModule,
             budget_module_1.BudgetModule,
             health_module_1.HealthModule,
+            scale_module_1.ScaleModule,
         ],
     })
 ], AppModule);

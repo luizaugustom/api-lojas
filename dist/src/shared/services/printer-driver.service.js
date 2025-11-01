@@ -270,10 +270,17 @@ let PrinterDriverService = PrinterDriverService_1 = class PrinterDriverService {
         }
       `;
             const { stdout } = await execAsync(`powershell.exe -Command "${psCommand.replace(/\n/g, ' ')}"`);
-            if (stdout.includes('INSTALLED') || stdout.includes('SUCCESS')) {
+            const hasTextDriver = stdout.includes('INSTALLED') || stdout.includes('SUCCESS');
+            if (hasTextDriver) {
+                try {
+                    await this.ensureUsbPrintersConfigured();
+                }
+                catch (e) {
+                    this.logger.warn('Falha ao configurar impressoras USB automaticamente:', e);
+                }
                 return {
                     success: true,
-                    message: 'Driver Generic / Text Only instalado ou já disponível',
+                    message: 'Drivers verificados. Driver genérico disponível e USBs configuradas (quando possível).',
                     errors: [],
                 };
             }
@@ -293,6 +300,71 @@ let PrinterDriverService = PrinterDriverService_1 = class PrinterDriverService {
                 errors: [error.message],
             };
         }
+    }
+    async ensureUsbPrintersConfigured() {
+        try {
+            const listPnp = `Get-PnpDevice -Class Printer -ErrorAction SilentlyContinue | Where-Object { $_.InstanceId -like 'USB*' } | Select-Object FriendlyName, InstanceId | ConvertTo-Json`;
+            const { stdout: pnpOut } = await execAsync(`powershell.exe -Command "${listPnp}"`);
+            let pnpPrinters = [];
+            if (pnpOut && pnpOut.trim()) {
+                const parsed = JSON.parse(pnpOut);
+                pnpPrinters = Array.isArray(parsed) ? parsed : [parsed];
+            }
+            if (pnpPrinters.length === 0) {
+                return;
+            }
+            const { stdout: gpOut } = await execAsync(`powershell.exe -Command "Get-Printer | Select-Object Name | ConvertTo-Json"`);
+            let systemPrinters = [];
+            if (gpOut && gpOut.trim()) {
+                const parsed = JSON.parse(gpOut);
+                systemPrinters = Array.isArray(parsed) ? parsed : [parsed];
+            }
+            const existingNames = new Set(systemPrinters.map((p) => (p.Name || '').toString().toLowerCase()));
+            const getPorts = `Get-PrinterPort | Where-Object { $_.Name -like 'USB*' } | Select-Object Name | ConvertTo-Json`;
+            const { stdout: portsOut } = await execAsync(`powershell.exe -Command "${getPorts}"`);
+            let ports = [];
+            if (portsOut && portsOut.trim()) {
+                const parsed = JSON.parse(portsOut);
+                const arr = Array.isArray(parsed) ? parsed : [parsed];
+                ports = arr.map((p) => p.Name);
+            }
+            const nextUsbPort = this.findNextUsbPortName(ports);
+            for (const dev of pnpPrinters) {
+                const friendly = (dev.FriendlyName || 'Impressora USB').toString();
+                if (existingNames.has(friendly.toLowerCase())) {
+                    continue;
+                }
+                if (!ports.includes(nextUsbPort)) {
+                    try {
+                        await execAsync(`powershell.exe -Command "Add-PrinterPort -Name '${nextUsbPort}'"`);
+                        ports.push(nextUsbPort);
+                    }
+                    catch (e) {
+                        this.logger.warn(`Falha ao criar porta ${nextUsbPort}:`, e);
+                    }
+                }
+                try {
+                    const addPrinterPs = `Add-Printer -Name "${friendly}" -DriverName "Generic / Text Only" -PortName "${nextUsbPort}"`;
+                    await execAsync(`powershell.exe -Command "${addPrinterPs}"`);
+                    this.logger.log(`Impressora lógica criada: ${friendly} -> ${nextUsbPort}`);
+                }
+                catch (e) {
+                    this.logger.warn(`Falha ao criar impressora lógica ${friendly}:`, e);
+                }
+            }
+        }
+        catch (error) {
+            this.logger.warn('Não foi possível configurar impressoras USB automaticamente:', error);
+        }
+    }
+    findNextUsbPortName(existing) {
+        const set = new Set(existing.map(n => n.toUpperCase()));
+        for (let i = 1; i <= 20; i++) {
+            const name = `USB${i.toString().padStart(3, '0')}`;
+            if (!set.has(name))
+                return name;
+        }
+        return 'USB099';
     }
     async installLinuxDrivers() {
         const errors = [];

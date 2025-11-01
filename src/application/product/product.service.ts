@@ -20,6 +20,25 @@ export class ProductService {
     private readonly photoValidationService: ProductPhotoValidationService,
   ) {}
 
+  private normalizePhotos(value: any): string[] {
+    if (Array.isArray(value)) return value as string[];
+    if (typeof value === 'string') {
+      try {
+        const parsed = JSON.parse(value);
+        if (Array.isArray(parsed)) return parsed as string[];
+        return value ? [value] : [];
+      } catch {
+        return value ? [value] : [];
+      }
+    }
+    return [];
+  }
+
+  private serializePhotos(arr?: string[] | null): any {
+    if (!arr || arr.length === 0) return null;
+    return JSON.stringify(arr);
+  }
+
   async create(companyId: string, createProductDto: CreateProductDto) {
     try {
       this.logger.log(`🚀 Creating product for company: ${companyId}`);
@@ -31,6 +50,7 @@ export class ProductService {
       const product = await this.prisma.product.create({
         data: {
           ...createProductDto,
+          ...(createProductDto.photos ? { photos: this.serializePhotos(createProductDto.photos) as any } : {}),
           companyId,
         },
         include: {
@@ -45,7 +65,7 @@ export class ProductService {
 
       this.logger.log(`✅ Product created: ${product.id} for company: ${companyId}`);
       this.logger.log(`📸 Product photos: ${JSON.stringify(product.photos)}`);
-      return product;
+      return { ...product, photos: this.normalizePhotos((product as any).photos) } as any;
     } catch (error) {
       if (error.code === 'P2002') {
         throw new ConflictException('Código de barras já está em uso');
@@ -76,7 +96,7 @@ export class ProductService {
       const product = await this.prisma.product.create({
         data: {
           ...createProductDto,
-          photos: photoUrls,
+          photos: this.serializePhotos(photoUrls) as any,
           companyId,
         },
         include: {
@@ -91,7 +111,7 @@ export class ProductService {
 
       this.logger.log(`✅ Product with photos created: ${product.id}`);
       this.logger.log(`📸 Photos uploaded: ${photoUrls.length}`);
-      return product;
+      return { ...product, photos: this.normalizePhotos((product as any).photos) } as any;
     } catch (error) {
       if (error.code === 'P2002') {
         throw new ConflictException('Código de barras já está em uso');
@@ -126,18 +146,27 @@ export class ProductService {
               name: true,
             },
           },
+          _count: {
+            select: {
+              saleItems: true,
+            },
+          },
         },
-        orderBy: {
-          createdAt: 'desc',
-        },
-        skip: (page - 1) * limit,
-        take: limit,
       }),
       this.prisma.product.count({ where }),
     ]);
 
+    // Ordenar por total de vendas (mais vendido primeiro)
+    const sortedProducts = products.sort((a, b) => b._count.saleItems - a._count.saleItems);
+    
+    // Aplicar paginação manual
+    const paginatedProducts = sortedProducts.slice((page - 1) * limit, page * limit);
+
     return {
-      products,
+      products: paginatedProducts.map(p => {
+        const { _count, ...productWithoutCount } = p;
+        return { ...productWithoutCount, photos: this.normalizePhotos((productWithoutCount as any).photos) };
+      }),
       total,
       page,
       limit,
@@ -173,7 +202,7 @@ export class ProductService {
       throw new NotFoundException('Produto não encontrado');
     }
 
-    return product;
+    return { ...product, photos: this.normalizePhotos((product as any).photos) } as any;
   }
 
   async findByBarcode(barcode: string, companyId?: string) {
@@ -198,7 +227,7 @@ export class ProductService {
       throw new NotFoundException('Produto não encontrado');
     }
 
-    return product;
+    return { ...product, photos: this.normalizePhotos((product as any).photos) } as any;
   }
 
   async update(id: string, updateProductDto: UpdateProductDto, companyId?: string) {
@@ -216,7 +245,10 @@ export class ProductService {
 
       const product = await this.prisma.product.update({
         where: { id },
-        data: updateProductDto,
+        data: {
+          ...updateProductDto,
+          ...(updateProductDto.photos ? { photos: this.serializePhotos(updateProductDto.photos) as any } : {}),
+        },
         include: {
           company: {
             select: {
@@ -228,7 +260,7 @@ export class ProductService {
       });
 
       this.logger.log(`Product updated: ${product.id}`);
-      return product;
+      return { ...product, photos: this.normalizePhotos((product as any).photos) } as any;
     } catch (error) {
       if (error.code === 'P2002') {
         throw new ConflictException('Código de barras já está em uso');
@@ -264,7 +296,7 @@ export class ProductService {
       const updatedPhotos = await this.photoService.prepareProductPhotos(
         companyId,
         newPhotos || [],
-        existingProduct.photos || [],
+        this.normalizePhotos((existingProduct as any).photos) || [],
         photosToDelete || [],
       );
 
@@ -272,7 +304,7 @@ export class ProductService {
         where: { id },
         data: {
           ...updateProductDto,
-          photos: updatedPhotos,
+          photos: this.serializePhotos(updatedPhotos) as any,
         },
         include: {
           company: {
@@ -286,7 +318,7 @@ export class ProductService {
 
       this.logger.log(`✅ Product updated with photos: ${id}`);
       this.logger.log(`📸 New photo count: ${updatedPhotos.length}`);
-      return product;
+      return { ...product, photos: this.normalizePhotos((product as any).photos) } as any;
     } catch (error) {
       this.logger.error('Error updating product with photos:', error);
       throw error;
@@ -317,11 +349,11 @@ export class ProductService {
       }
 
       // Delete product images before deleting the product
-      if (existingProduct.photos && existingProduct.photos.length > 0) {
+      if (this.normalizePhotos((existingProduct as any).photos).length > 0) {
         this.logger.log(`🗑️ Deleting ${existingProduct.photos.length} images for product: ${id}`);
         this.logger.log(`📋 Photos to delete: ${JSON.stringify(existingProduct.photos)}`);
         
-        const deleteResult = await this.uploadService.deleteMultipleFiles(existingProduct.photos);
+        const deleteResult = await this.uploadService.deleteMultipleFiles(this.normalizePhotos((existingProduct as any).photos));
         
         this.logger.log(`✅ Images deletion result for product ${id}: ${deleteResult.deleted} deleted, ${deleteResult.failed} failed`);
         
@@ -377,7 +409,7 @@ export class ProductService {
     });
 
     this.logger.log(`Product stock updated: ${product.id} to ${updateStockDto.stockQuantity}`);
-    return product;
+    return { ...product, photos: this.normalizePhotos((product as any).photos) } as any;
   }
 
   async getLowStockProducts(companyId?: string, threshold = 3) {
@@ -506,12 +538,12 @@ export class ProductService {
     }
 
     // Add the new photo to the existing photos array
-    const updatedPhotos = [...existingProduct.photos, photoUrl];
+    const updatedPhotos = [...this.normalizePhotos((existingProduct as any).photos), photoUrl];
 
     const product = await this.prisma.product.update({
       where: { id },
       data: {
-        photos: updatedPhotos,
+        photos: this.serializePhotos(updatedPhotos) as any,
       },
       include: {
         company: {
@@ -524,7 +556,7 @@ export class ProductService {
     });
 
     this.logger.log(`Photo added to product: ${product.id}`);
-    return product;
+    return { ...product, photos: this.normalizePhotos((product as any).photos) } as any;
   }
 
   async addPhotos(id: string, photoUrls: string[], companyId?: string) {
@@ -540,12 +572,12 @@ export class ProductService {
     }
 
     // Add the new photos to the existing photos array
-    const updatedPhotos = [...existingProduct.photos, ...photoUrls];
+    const updatedPhotos = [...this.normalizePhotos((existingProduct as any).photos), ...photoUrls];
 
     const product = await this.prisma.product.update({
       where: { id },
       data: {
-        photos: updatedPhotos,
+        photos: this.serializePhotos(updatedPhotos) as any,
       },
       include: {
         company: {
@@ -558,7 +590,7 @@ export class ProductService {
     });
 
     this.logger.log(`${photoUrls.length} photos added to product: ${product.id}`);
-    return product;
+    return { ...product, photos: this.normalizePhotos((product as any).photos) } as any;
   }
 
   async removePhoto(id: string, photoUrl: string, companyId?: string) {
@@ -574,12 +606,12 @@ export class ProductService {
     }
 
     // Check if the photo exists in the product's photos array
-    if (!existingProduct.photos.includes(photoUrl)) {
+    if (!this.normalizePhotos((existingProduct as any).photos).includes(photoUrl)) {
       throw new NotFoundException('Foto não encontrada no produto');
     }
 
     // Remove the photo from the array
-    const updatedPhotos = existingProduct.photos.filter(photo => photo !== photoUrl);
+    const updatedPhotos = this.normalizePhotos((existingProduct as any).photos).filter(photo => photo !== photoUrl);
 
     // Delete the photo file from the filesystem
     const fileDeleted = await this.uploadService.deleteFile(photoUrl);
@@ -592,7 +624,7 @@ export class ProductService {
     const product = await this.prisma.product.update({
       where: { id },
       data: {
-        photos: updatedPhotos,
+        photos: this.serializePhotos(updatedPhotos) as any,
       },
       include: {
         company: {
@@ -605,7 +637,7 @@ export class ProductService {
     });
 
     this.logger.log(`Photo removed from product: ${product.id}`);
-    return product;
+    return { ...product, photos: this.normalizePhotos((product as any).photos) } as any;
   }
 
   async removeAllPhotos(id: string, companyId?: string) {
@@ -621,10 +653,10 @@ export class ProductService {
     }
 
     // Delete all photo files from the filesystem
-    if (existingProduct.photos && existingProduct.photos.length > 0) {
+    if (this.normalizePhotos((existingProduct as any).photos).length > 0) {
       this.logger.log(`Deleting ${existingProduct.photos.length} photos from filesystem for product: ${id}`);
       
-      const deleteResult = await this.uploadService.deleteMultipleFiles(existingProduct.photos);
+      const deleteResult = await this.uploadService.deleteMultipleFiles(this.normalizePhotos((existingProduct as any).photos));
       
       this.logger.log(`Photos deletion result for product ${id}: ${deleteResult.deleted} deleted, ${deleteResult.failed} failed`);
       
@@ -637,7 +669,7 @@ export class ProductService {
     const product = await this.prisma.product.update({
       where: { id },
       data: {
-        photos: [],
+        photos: this.serializePhotos([]) as any,
       },
       include: {
         company: {
@@ -650,6 +682,6 @@ export class ProductService {
     });
 
     this.logger.log(`All photos removed from product: ${product.id}`);
-    return product;
+    return { ...product, photos: this.normalizePhotos((product as any).photos) } as any;
   }
 }

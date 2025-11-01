@@ -25,6 +25,7 @@ export interface LoginResponse {
     role: string;
     companyId?: string;
     name?: string;
+    plan?: string; // Plano da empresa (apenas para role 'company')
   };
 }
 
@@ -86,10 +87,21 @@ export class AuthService {
 
       // Mapear companyId para cada role
       let mappedCompanyId: string | null = null;
+      let plan: string | undefined = undefined;
+      
       if (role === 'company') {
         mappedCompanyId = user.id; // a própria empresa
+        plan = (user as any).plan; // Incluir o plano da empresa
       } else if (role === 'seller') {
         mappedCompanyId = user.companyId || null;
+        // Se for vendedor, buscar o plano da empresa associada
+        if (mappedCompanyId) {
+          const company = await this.prisma.company.findUnique({
+            where: { id: mappedCompanyId },
+            select: { plan: true },
+          });
+          plan = company?.plan;
+        }
       }
 
       return {
@@ -98,6 +110,7 @@ export class AuthService {
         role,
         companyId: mappedCompanyId,
         name: user.name || null,
+        plan,
       };
     } catch (error) {
       this.logger.error('Error validating user:', error);
@@ -146,6 +159,7 @@ export class AuthService {
         role: user.role,
         companyId: user.companyId,
         name: user.name,
+        plan: user.plan,
       },
       // also return refreshToken value so controller can set cookie
       refresh_token: refreshToken,
@@ -210,6 +224,18 @@ export class AuthService {
       },
     });
 
+    // Buscar plano se for empresa ou vendedor
+    let plan: string | undefined = undefined;
+    if (tokenRecord.role === 'company') {
+      plan = (user as any).plan;
+    } else if (tokenRecord.role === 'seller' && user.companyId) {
+      const company = await this.prisma.company.findUnique({
+        where: { id: user.companyId as string },
+        select: { plan: true },
+      });
+      plan = company?.plan;
+    }
+
     return {
       access_token,
       refresh_token: newRefresh,
@@ -219,6 +245,7 @@ export class AuthService {
         role: tokenRecord.role,
         companyId: (user.companyId as string) || undefined,
         name: user.name || undefined,
+        plan,
       },
     };
   }
@@ -262,10 +289,21 @@ export class AuthService {
 
       // Ajustar companyId no objeto do usuário retornado ao request
       let mappedCompanyId: string | null = null;
+      let plan: string | undefined = undefined;
+      
       if (payload.role === 'company') {
         mappedCompanyId = user.id;
+        plan = (user as any).plan; // Incluir o plano da empresa
       } else if (payload.role === 'seller') {
         mappedCompanyId = user.companyId || null;
+        // Se for vendedor, buscar o plano da empresa associada
+        if (mappedCompanyId) {
+          const company = await this.prisma.company.findUnique({
+            where: { id: mappedCompanyId },
+            select: { plan: true },
+          });
+          plan = company?.plan;
+        }
       }
 
       return {
@@ -274,6 +312,7 @@ export class AuthService {
         role: payload.role,
         companyId: mappedCompanyId,
         name: user.name || null,
+        plan,
       };
     } catch (error) {
       this.logger.error('Error validating JWT payload:', error);

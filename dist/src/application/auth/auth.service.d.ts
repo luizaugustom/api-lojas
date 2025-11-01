@@ -20,6 +20,7 @@ export interface LoginResponse {
         role: string;
         companyId?: string;
         name?: string;
+        plan?: string;
     };
 }
 export declare class AuthService {
@@ -44,6 +45,7 @@ export declare class AuthService {
             role: string;
             companyId: string;
             name: any;
+            plan: string;
         };
     }>;
     revokeRefreshToken(refreshToken: string): Promise<void>;

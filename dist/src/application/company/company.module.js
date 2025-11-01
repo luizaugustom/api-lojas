@@ -10,6 +10,8 @@ exports.CompanyModule = void 0;
 const common_1 = require("@nestjs/common");
 const company_service_1 = require("./company.service");
 const company_controller_1 = require("./company.controller");
+const company_public_controller_1 = require("./company-public.controller");
+const trial_expiration_service_1 = require("./trial-expiration.service");
 const prisma_module_1 = require("../../infrastructure/database/prisma.module");
 const hash_module_1 = require("../../shared/services/hash.module");
 const plan_limits_module_1 = require("../../shared/services/plan-limits.module");
@@ -21,8 +23,8 @@ exports.CompanyModule = CompanyModule;
 exports.CompanyModule = CompanyModule = __decorate([
     (0, common_1.Module)({
         imports: [prisma_module_1.PrismaModule, hash_module_1.HashModule, plan_limits_module_1.PlanLimitsModule, upload_module_1.UploadModule],
-        providers: [company_service_1.CompanyService, encryption_service_1.EncryptionService],
-        controllers: [company_controller_1.CompanyController],
+        providers: [company_service_1.CompanyService, encryption_service_1.EncryptionService, trial_expiration_service_1.TrialExpirationService],
+        controllers: [company_controller_1.CompanyController, company_public_controller_1.CompanyPublicController],
         exports: [company_service_1.CompanyService],
     })
 ], CompanyModule);

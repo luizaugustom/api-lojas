@@ -35,6 +35,13 @@ export class PlanLimitsService {
           maxSellers: null,
           maxBillsToPay: null,
         };
+      case PlanType.TRIAL_7_DAYS:
+        // Plano de teste tem os mesmos limites do PLUS
+        return {
+          maxProducts: 800,
+          maxSellers: 2,
+          maxBillsToPay: 15,
+        };
       default:
         return {
           maxProducts: 250,

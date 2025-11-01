@@ -19,9 +19,29 @@ export class BillToPayService {
       // Validar limite de contas a pagar do plano
       await this.planLimitsService.validateBillToPayLimit(companyId);
       
+      // Converter dueDate de string para Date
+      // Se a string estiver no formato YYYY-MM-DD, garantir que seja tratada como UTC
+      let dueDate: Date;
+      if (/^\d{4}-\d{2}-\d{2}$/.test(createBillToPayDto.dueDate)) {
+        // Formato YYYY-MM-DD - criar data no meio-dia UTC para evitar problemas de timezone
+        const [year, month, day] = createBillToPayDto.dueDate.split('-').map(Number);
+        dueDate = new Date(Date.UTC(year, month - 1, day, 12, 0, 0));
+      } else {
+        // Outros formatos - tentar parsear diretamente
+        dueDate = new Date(createBillToPayDto.dueDate);
+      }
+      
+      if (isNaN(dueDate.getTime())) {
+        throw new BadRequestException('Data de vencimento inválida');
+      }
+      
       const bill = await this.prisma.billToPay.create({
         data: {
-          ...createBillToPayDto,
+          title: createBillToPayDto.title,
+          amount: createBillToPayDto.amount,
+          dueDate,
+          barcode: createBillToPayDto.barcode,
+          paymentInfo: createBillToPayDto.paymentInfo,
           companyId,
         },
         include: {
@@ -173,9 +193,8 @@ export class BillToPayService {
         throw new NotFoundException('Conta a pagar não encontrada');
       }
 
-      if (existingBill.isPaid) {
-        throw new BadRequestException('Não é possível excluir conta já paga');
-      }
+      // Removida a restrição de excluir contas pagas
+      // Agora é possível excluir qualquer conta, independente do status
 
       await this.prisma.billToPay.delete({
         where: { id },

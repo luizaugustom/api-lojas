@@ -1,0 +1,51 @@
+services:
+  - type: web
+    name: montshop-api
+    env: node
+    region: oregon
+    plan: starter
+    branch: main
+    rootDir: api-lojas
+    buildCommand: npm ci && npm run db:generate && npm run build
+    startCommand: npm run start:prod
+    healthCheckPath: /health
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: 10000
+      - key: DATABASE_URL
+        fromDatabase:
+          name: montshop-db
+          property: connectionString
+      - key: JWT_SECRET
+        generateValue: true
+      - key: CORS_ORIGIN
+        sync: false
+      - key: FOCUSNFE_API_KEY
+        sync: false
+      - key: FOCUSNFE_BASE_URL
+        sync: false
+      - key: FISCAL_ENVIRONMENT
+        value: production
+      - key: FISCAL_PROVIDER
+        value: focusnfe
+      - key: FIREBASE_PROJECT_ID
+        sync: false
+      - key: FIREBASE_CLIENT_EMAIL
+        sync: false
+      - key: FIREBASE_PRIVATE_KEY
+        sync: false
+      - key: FIREBASE_STORAGE_BUCKET
+        sync: false
+      - key: THROTTLE_TTL
+        value: 60
+      - key: THROTTLE_LIMIT
+        value: 100
+
+databases:
+  - name: montshop-db
+    plan: starter
+    databaseName: montshop
+    user: montshop_user
+

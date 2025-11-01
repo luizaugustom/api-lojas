@@ -26,6 +26,27 @@ let ProductService = ProductService_1 = class ProductService {
         this.photoValidationService = photoValidationService;
         this.logger = new common_1.Logger(ProductService_1.name);
     }
+    normalizePhotos(value) {
+        if (Array.isArray(value))
+            return value;
+        if (typeof value === 'string') {
+            try {
+                const parsed = JSON.parse(value);
+                if (Array.isArray(parsed))
+                    return parsed;
+                return value ? [value] : [];
+            }
+            catch {
+                return value ? [value] : [];
+            }
+        }
+        return [];
+    }
+    serializePhotos(arr) {
+        if (!arr || arr.length === 0)
+            return null;
+        return JSON.stringify(arr);
+    }
     async create(companyId, createProductDto) {
         try {
             this.logger.log(`🚀 Creating product for company: ${companyId}`);
@@ -34,6 +55,7 @@ let ProductService = ProductService_1 = class ProductService {
             const product = await this.prisma.product.create({
                 data: {
                     ...createProductDto,
+                    ...(createProductDto.photos ? { photos: this.serializePhotos(createProductDto.photos) } : {}),
                     companyId,
                 },
                 include: {
@@ -47,7 +69,7 @@ let ProductService = ProductService_1 = class ProductService {
             });
             this.logger.log(`✅ Product created: ${product.id} for company: ${companyId}`);
             this.logger.log(`📸 Product photos: ${JSON.stringify(product.photos)}`);
-            return product;
+            return { ...product, photos: this.normalizePhotos(product.photos) };
         }
         catch (error) {
             if (error.code === 'P2002') {
@@ -69,7 +91,7 @@ let ProductService = ProductService_1 = class ProductService {
             const product = await this.prisma.product.create({
                 data: {
                     ...createProductDto,
-                    photos: photoUrls,
+                    photos: this.serializePhotos(photoUrls),
                     companyId,
                 },
                 include: {
@@ -83,7 +105,7 @@ let ProductService = ProductService_1 = class ProductService {
             });
             this.logger.log(`✅ Product with photos created: ${product.id}`);
             this.logger.log(`📸 Photos uploaded: ${photoUrls.length}`);
-            return product;
+            return { ...product, photos: this.normalizePhotos(product.photos) };
         }
         catch (error) {
             if (error.code === 'P2002') {
@@ -115,17 +137,22 @@ let ProductService = ProductService_1 = class ProductService {
                             name: true,
                         },
                     },
+                    _count: {
+                        select: {
+                            saleItems: true,
+                        },
+                    },
                 },
-                orderBy: {
-                    createdAt: 'desc',
-                },
-                skip: (page - 1) * limit,
-                take: limit,
             }),
             this.prisma.product.count({ where }),
         ]);
+        const sortedProducts = products.sort((a, b) => b._count.saleItems - a._count.saleItems);
+        const paginatedProducts = sortedProducts.slice((page - 1) * limit, page * limit);
         return {
-            products,
+            products: paginatedProducts.map(p => {
+                const { _count, ...productWithoutCount } = p;
+                return { ...productWithoutCount, photos: this.normalizePhotos(productWithoutCount.photos) };
+            }),
             total,
             page,
             limit,
@@ -155,7 +182,7 @@ let ProductService = ProductService_1 = class ProductService {
         if (companyId && product.companyId && product.companyId !== companyId) {
             throw new common_1.NotFoundException('Produto não encontrado');
         }
-        return product;
+        return { ...product, photos: this.normalizePhotos(product.photos) };
     }
     async findByBarcode(barcode, companyId) {
         const where = { barcode };
@@ -176,7 +203,7 @@ let ProductService = ProductService_1 = class ProductService {
         if (!product) {
             throw new common_1.NotFoundException('Produto não encontrado');
         }
-        return product;
+        return { ...product, photos: this.normalizePhotos(product.photos) };
     }
     async update(id, updateProductDto, companyId) {
         try {
@@ -189,7 +216,10 @@ let ProductService = ProductService_1 = class ProductService {
             }
             const product = await this.prisma.product.update({
                 where: { id },
-                data: updateProductDto,
+                data: {
+                    ...updateProductDto,
+                    ...(updateProductDto.photos ? { photos: this.serializePhotos(updateProductDto.photos) } : {}),
+                },
                 include: {
                     company: {
                         select: {
@@ -200,7 +230,7 @@ let ProductService = ProductService_1 = class ProductService {
                 },
             });
             this.logger.log(`Product updated: ${product.id}`);
-            return product;
+            return { ...product, photos: this.normalizePhotos(product.photos) };
         }
         catch (error) {
             if (error.code === 'P2002') {
@@ -222,12 +252,12 @@ let ProductService = ProductService_1 = class ProductService {
             if (existingProduct.companyId !== companyId) {
                 throw new common_1.NotFoundException('Produto não encontrado');
             }
-            const updatedPhotos = await this.photoService.prepareProductPhotos(companyId, newPhotos || [], existingProduct.photos || [], photosToDelete || []);
+            const updatedPhotos = await this.photoService.prepareProductPhotos(companyId, newPhotos || [], this.normalizePhotos(existingProduct.photos) || [], photosToDelete || []);
             const product = await this.prisma.product.update({
                 where: { id },
                 data: {
                     ...updateProductDto,
-                    photos: updatedPhotos,
+                    photos: this.serializePhotos(updatedPhotos),
                 },
                 include: {
                     company: {
@@ -240,7 +270,7 @@ let ProductService = ProductService_1 = class ProductService {
             });
             this.logger.log(`✅ Product updated with photos: ${id}`);
             this.logger.log(`📸 New photo count: ${updatedPhotos.length}`);
-            return product;
+            return { ...product, photos: this.normalizePhotos(product.photos) };
         }
         catch (error) {
             this.logger.error('Error updating product with photos:', error);
@@ -263,10 +293,10 @@ let ProductService = ProductService_1 = class ProductService {
             if (salesCount > 0) {
                 throw new common_1.BadRequestException('Não é possível excluir produto que possui vendas');
             }
-            if (existingProduct.photos && existingProduct.photos.length > 0) {
+            if (this.normalizePhotos(existingProduct.photos).length > 0) {
                 this.logger.log(`🗑️ Deleting ${existingProduct.photos.length} images for product: ${id}`);
                 this.logger.log(`📋 Photos to delete: ${JSON.stringify(existingProduct.photos)}`);
-                const deleteResult = await this.uploadService.deleteMultipleFiles(existingProduct.photos);
+                const deleteResult = await this.uploadService.deleteMultipleFiles(this.normalizePhotos(existingProduct.photos));
                 this.logger.log(`✅ Images deletion result for product ${id}: ${deleteResult.deleted} deleted, ${deleteResult.failed} failed`);
                 if (deleteResult.failed > 0) {
                     this.logger.warn(`⚠️ Failed to delete ${deleteResult.failed} images for product ${id}. Product will still be deleted.`);
@@ -311,7 +341,7 @@ let ProductService = ProductService_1 = class ProductService {
             },
         });
         this.logger.log(`Product stock updated: ${product.id} to ${updateStockDto.stockQuantity}`);
-        return product;
+        return { ...product, photos: this.normalizePhotos(product.photos) };
     }
     async getLowStockProducts(companyId, threshold = 3) {
         const where = {
@@ -421,11 +451,11 @@ let ProductService = ProductService_1 = class ProductService {
         if (companyId && existingProduct.companyId && existingProduct.companyId !== companyId) {
             throw new common_1.NotFoundException('Produto não encontrado');
         }
-        const updatedPhotos = [...existingProduct.photos, photoUrl];
+        const updatedPhotos = [...this.normalizePhotos(existingProduct.photos), photoUrl];
         const product = await this.prisma.product.update({
             where: { id },
             data: {
-                photos: updatedPhotos,
+                photos: this.serializePhotos(updatedPhotos),
             },
             include: {
                 company: {
@@ -437,7 +467,7 @@ let ProductService = ProductService_1 = class ProductService {
             },
         });
         this.logger.log(`Photo added to product: ${product.id}`);
-        return product;
+        return { ...product, photos: this.normalizePhotos(product.photos) };
     }
     async addPhotos(id, photoUrls, companyId) {
         const existingProduct = await this.prisma.product.findUnique({ where: { id } });
@@ -447,11 +477,11 @@ let ProductService = ProductService_1 = class ProductService {
         if (companyId && existingProduct.companyId && existingProduct.companyId !== companyId) {
             throw new common_1.NotFoundException('Produto não encontrado');
         }
-        const updatedPhotos = [...existingProduct.photos, ...photoUrls];
+        const updatedPhotos = [...this.normalizePhotos(existingProduct.photos), ...photoUrls];
         const product = await this.prisma.product.update({
             where: { id },
             data: {
-                photos: updatedPhotos,
+                photos: this.serializePhotos(updatedPhotos),
             },
             include: {
                 company: {
@@ -463,7 +493,7 @@ let ProductService = ProductService_1 = class ProductService {
             },
         });
         this.logger.log(`${photoUrls.length} photos added to product: ${product.id}`);
-        return product;
+        return { ...product, photos: this.normalizePhotos(product.photos) };
     }
     async removePhoto(id, photoUrl, companyId) {
         const existingProduct = await this.prisma.product.findUnique({ where: { id } });
@@ -473,10 +503,10 @@ let ProductService = ProductService_1 = class ProductService {
         if (companyId && existingProduct.companyId && existingProduct.companyId !== companyId) {
             throw new common_1.NotFoundException('Produto não encontrado');
         }
-        if (!existingProduct.photos.includes(photoUrl)) {
+        if (!this.normalizePhotos(existingProduct.photos).includes(photoUrl)) {
             throw new common_1.NotFoundException('Foto não encontrada no produto');
         }
-        const updatedPhotos = existingProduct.photos.filter(photo => photo !== photoUrl);
+        const updatedPhotos = this.normalizePhotos(existingProduct.photos).filter(photo => photo !== photoUrl);
         const fileDeleted = await this.uploadService.deleteFile(photoUrl);
         if (fileDeleted) {
             this.logger.log(`Photo file deleted from filesystem: ${photoUrl}`);
@@ -487,7 +517,7 @@ let ProductService = ProductService_1 = class ProductService {
         const product = await this.prisma.product.update({
             where: { id },
             data: {
-                photos: updatedPhotos,
+                photos: this.serializePhotos(updatedPhotos),
             },
             include: {
                 company: {
@@ -499,7 +529,7 @@ let ProductService = ProductService_1 = class ProductService {
             },
         });
         this.logger.log(`Photo removed from product: ${product.id}`);
-        return product;
+        return { ...product, photos: this.normalizePhotos(product.photos) };
     }
     async removeAllPhotos(id, companyId) {
         const existingProduct = await this.prisma.product.findUnique({ where: { id } });
@@ -509,9 +539,9 @@ let ProductService = ProductService_1 = class ProductService {
         if (companyId && existingProduct.companyId !== companyId) {
             throw new common_1.NotFoundException('Produto não encontrado');
         }
-        if (existingProduct.photos && existingProduct.photos.length > 0) {
+        if (this.normalizePhotos(existingProduct.photos).length > 0) {
             this.logger.log(`Deleting ${existingProduct.photos.length} photos from filesystem for product: ${id}`);
-            const deleteResult = await this.uploadService.deleteMultipleFiles(existingProduct.photos);
+            const deleteResult = await this.uploadService.deleteMultipleFiles(this.normalizePhotos(existingProduct.photos));
             this.logger.log(`Photos deletion result for product ${id}: ${deleteResult.deleted} deleted, ${deleteResult.failed} failed`);
             if (deleteResult.failed > 0) {
                 this.logger.warn(`Failed to delete ${deleteResult.failed} photos for product ${id}. Product photos will still be cleared.`);
@@ -520,7 +550,7 @@ let ProductService = ProductService_1 = class ProductService {
         const product = await this.prisma.product.update({
             where: { id },
             data: {
-                photos: [],
+                photos: this.serializePhotos([]),
             },
             include: {
                 company: {
@@ -532,7 +562,7 @@ let ProductService = ProductService_1 = class ProductService {
             },
         });
         this.logger.log(`All photos removed from product: ${product.id}`);
-        return product;
+        return { ...product, photos: this.normalizePhotos(product.photos) };
     }
 };
 exports.ProductService = ProductService;

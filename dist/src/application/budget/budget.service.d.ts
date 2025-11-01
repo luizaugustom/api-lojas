@@ -2,6 +2,7 @@ import { PrismaService } from '../../infrastructure/database/prisma.service';
 import { CreateBudgetDto } from './dto/create-budget.dto';
 import { UpdateBudgetDto } from './dto/update-budget.dto';
 import { PrinterService } from '../printer/printer.service';
+import { SaleService } from '../sale/sale.service';
 export interface BudgetPrintData {
     company: {
         name: string;
@@ -9,6 +10,7 @@ export interface BudgetPrintData {
         address?: string;
         phone?: string;
         email?: string;
+        logoUrl?: string;
     };
     budget: {
         id: string;
@@ -39,8 +41,9 @@ export interface BudgetPrintData {
 export declare class BudgetService {
     private readonly prisma;
     private readonly printerService;
+    private readonly saleService;
     private readonly logger;
-    constructor(prisma: PrismaService, printerService: PrinterService);
+    constructor(prisma: PrismaService, printerService: PrinterService, saleService: SaleService);
     create(companyId: string, sellerId: string | undefined, createBudgetDto: CreateBudgetDto): Promise<{
         company: {
             number: string;
@@ -49,6 +52,7 @@ export declare class BudgetService {
             cnpj: string;
             email: string;
             phone: string;
+            logoUrl: string;
             district: string;
             street: string;
         };
@@ -84,9 +88,9 @@ export declare class BudgetService {
         clientName: string | null;
         status: string;
         notes: string | null;
-        budgetNumber: number;
-        clientPhone: string | null;
         validUntil: Date;
+        clientPhone: string | null;
+        budgetNumber: number;
         budgetDate: Date;
     }>;
     findAll(companyId: string, sellerId?: string, status?: string): Promise<({
@@ -122,9 +126,9 @@ export declare class BudgetService {
         clientName: string | null;
         status: string;
         notes: string | null;
-        budgetNumber: number;
-        clientPhone: string | null;
         validUntil: Date;
+        clientPhone: string | null;
+        budgetNumber: number;
         budgetDate: Date;
     })[]>;
     findOne(id: string, companyId?: string): Promise<{
@@ -135,6 +139,7 @@ export declare class BudgetService {
             cnpj: string;
             email: string;
             phone: string;
+            logoUrl: string;
             state: string;
             city: string;
             district: string;
@@ -172,9 +177,9 @@ export declare class BudgetService {
         clientName: string | null;
         status: string;
         notes: string | null;
-        budgetNumber: number;
-        clientPhone: string | null;
         validUntil: Date;
+        clientPhone: string | null;
+        budgetNumber: number;
         budgetDate: Date;
     }>;
     update(id: string, companyId: string, updateBudgetDto: UpdateBudgetDto): Promise<{
@@ -209,6 +214,7 @@ export declare class BudgetService {
                 expirationDate: Date | null;
                 ncm: string | null;
                 cfop: string | null;
+                unitOfMeasure: string | null;
             };
         } & {
             id: string;
@@ -231,9 +237,9 @@ export declare class BudgetService {
         clientName: string | null;
         status: string;
         notes: string | null;
-        budgetNumber: number;
-        clientPhone: string | null;
         validUntil: Date;
+        clientPhone: string | null;
+        budgetNumber: number;
         budgetDate: Date;
     }>;
     remove(id: string, companyId: string): Promise<{

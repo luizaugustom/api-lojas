@@ -4,6 +4,8 @@
 
 - `env.example` - Arquivo de exemplo com todas as variáveis disponíveis
 - `CONFIGURACAO.md` - Guia completo e detalhado de configuração
+- `DEPLOY-RENDER.md` - Guia completo de deploy no Render.com
+- `RENDER-QUICK-START.md` - Quick start para deploy no Render
 
 ## 🚀 Início Rápido
 
@@ -107,6 +109,24 @@ Após configurar e iniciar, acesse:
 ## 📚 Documentação Completa
 
 Para um guia detalhado passo a passo, consulte o arquivo `CONFIGURACAO.md`.
+
+## 🚀 Deploy em Produção
+
+### Render.com
+
+Para fazer deploy no Render.com, consulte os guias:
+
+- **[RENDER-QUICK-START.md](./RENDER-QUICK-START.md)** - Guia rápido (5 minutos)
+- **[DEPLOY-RENDER.md](./DEPLOY-RENDER.md)** - Guia completo passo a passo
+
+### Variáveis no Render
+
+No Render.com, configure as variáveis de ambiente na seção **Environment** do seu serviço web. Todas as variáveis listadas acima devem ser configuradas, especialmente:
+
+- ✅ `DATABASE_URL` - Use a **Internal Database URL** do banco criado no Render
+- ✅ `JWT_SECRET` - Gere uma chave forte e única
+- ✅ `CORS_ORIGIN` - Configure com as URLs do seu frontend
+- ✅ Credenciais do Firebase e Focus NFe
 
 ---
 

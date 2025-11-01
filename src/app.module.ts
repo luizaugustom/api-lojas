@@ -17,6 +17,7 @@ import { CashClosureModule } from './application/cash-closure/cash-closure.modul
 import { PrinterModule } from './application/printer/printer.module';
 import { FiscalModule } from './application/fiscal/fiscal.module';
 import { UploadModule } from './application/upload/upload.module';
+import { ScaleModule } from './application/scale/scale.module';
 import { WhatsappModule } from './application/whatsapp/whatsapp.module';
 import { N8nModule } from './application/n8n/n8n.module';
 import { HealthModule } from './application/health/health.module';
@@ -66,6 +67,7 @@ import { BudgetModule } from './application/budget/budget.module';
     NotificationModule,
     BudgetModule,
     HealthModule,
+    ScaleModule,
   ],
 })
 export class AppModule {}

@@ -329,7 +329,7 @@ export class SaleService {
             ncm: item.product.ncm || '99999999',
             cfop: item.product.cfop || '5102',
           })),
-          customFooter: completeSale.company.customFooter || 'MONT TECNOLOGIA, SEU PARCEIRO DE SUCESSO !! 🚀🚀',
+          customFooter: completeSale.company.customFooter,
         };
 
         await this.printerService.printNFCe(nfcePrintData, companyId);
@@ -842,7 +842,7 @@ export class SaleService {
             ncm: item.product.ncm || '99999999',
             cfop: item.product.cfop || '5102',
           })),
-          customFooter: sale.company.customFooter || 'MONT TECNOLOGIA, SEU PARCEIRO DE SUCESSO !! 🚀🚀',
+          customFooter: sale.company.customFooter,
         };
 
         await this.printerService.printNFCe(nfcePrintData, sale.companyId);
@@ -886,7 +886,7 @@ export class SaleService {
             ncm: item.product.ncm || '99999999',
             cfop: item.product.cfop || '5102',
           })),
-          customFooter: sale.company.customFooter || 'MONT TECNOLOGIA, SEU PARCEIRO DE SUCESSO !! 🚀🚀',
+          customFooter: sale.company.customFooter,
         };
 
         await this.printerService.printNFCe(nfcePrintData, sale.companyId);

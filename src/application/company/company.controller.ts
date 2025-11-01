@@ -24,6 +24,7 @@ import { CompanyService } from './company.service';
 import { CreateCompanyDto } from './dto/create-company.dto';
 import { UpdateCompanyDto } from './dto/update-company.dto';
 import { UpdateFiscalConfigDto } from './dto/update-fiscal-config.dto';
+import { UpdateCatalogPageDto } from './dto/update-catalog-page.dto';
 import { JwtAuthGuard } from '../../shared/guards/jwt-auth.guard';
 import { RolesGuard } from '../../shared/guards/roles.guard';
 import { Roles, UserRole } from '../../shared/decorators/roles.decorator';
@@ -257,5 +258,25 @@ export class CompanyController {
   @ApiResponse({ status: 404, description: 'Empresa não encontrada' })
   getAutoMessageStatus(@CurrentUser() user: any) {
     return this.companyService.getAutoMessageStatus(user.companyId);
+  }
+
+  @Patch('my-company/catalog-page')
+  @Roles(UserRole.COMPANY)
+  @ApiOperation({ summary: 'Configurar página de catálogo pública' })
+  @ApiResponse({ status: 200, description: 'Configurações da página de catálogo atualizadas' })
+  @ApiResponse({ status: 409, description: 'URL já está em uso' })
+  updateCatalogPage(
+    @CurrentUser() user: any,
+    @Body() updateCatalogPageDto: UpdateCatalogPageDto,
+  ) {
+    return this.companyService.updateCatalogPage(user.companyId, updateCatalogPageDto);
+  }
+
+  @Get('my-company/catalog-page')
+  @Roles(UserRole.COMPANY)
+  @ApiOperation({ summary: 'Obter configurações da página de catálogo' })
+  @ApiResponse({ status: 200, description: 'Configurações da página de catálogo' })
+  getCatalogPageConfig(@CurrentUser() user: any) {
+    return this.companyService.getCatalogPageConfig(user.companyId);
   }
 }

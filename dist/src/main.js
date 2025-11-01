@@ -13,7 +13,8 @@ async function bootstrap() {
     const logger = new common_1.Logger('Bootstrap');
     const app = await core_1.NestFactory.create(app_module_1.AppModule);
     const configService = app.get(config_1.ConfigService);
-    app.useStaticAssets((0, path_1.join)(process.cwd(), 'uploads'), {
+    const uploadsDir = process.env.UPLOADS_DIR || (0, path_1.join)(process.cwd(), 'uploads');
+    app.useStaticAssets(uploadsDir, {
         prefix: '/uploads/',
     });
     app.use((0, helmet_1.default)({

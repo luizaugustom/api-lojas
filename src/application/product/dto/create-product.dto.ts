@@ -146,4 +146,15 @@ export class CreateProductDto {
     return cleaned.length === 4 ? cleaned : '5102';
   })
   cfop?: string;
+
+  @ApiProperty({
+    description: 'Unidade de medida do produto',
+    example: 'kg',
+    required: false,
+    enum: ['kg', 'g', 'ml', 'l', 'm', 'cm', 'un'],
+  })
+  @IsOptional()
+  @IsString()
+  @MaxLength(10)
+  unitOfMeasure?: string;
 }

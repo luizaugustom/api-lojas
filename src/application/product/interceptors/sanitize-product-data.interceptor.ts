@@ -17,7 +17,8 @@ export class SanitizeProductDataInterceptor implements NestInterceptor {
         'stockQuantity',
         'price',
         'category',
-        'expirationDate'
+        'expirationDate',
+        'unitOfMeasure'
       ];
 
       // Filtrar apenas campos permitidos

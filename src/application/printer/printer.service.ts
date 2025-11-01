@@ -419,6 +419,21 @@ export class PrinterService {
     });
   }
 
+  async deletePrinter(user: any, id: string) {
+    // Admin pode excluir qualquer impressora; empresa só as suas
+    const printer = await this.prisma.printer.findUnique({ where: { id } });
+    if (!printer) {
+      throw new BadRequestException('Impressora não encontrada');
+    }
+    if (user.role !== 'ADMIN' && printer.companyId !== user.companyId) {
+      throw new BadRequestException('Sem permissão para excluir esta impressora');
+    }
+
+    const deleted = await this.prisma.printer.delete({ where: { id } });
+    this.logger.log(`Printer deleted: ${id} by user: ${user.id}`);
+    return deleted;
+  }
+
   async updatePrinterStatus(id: string, status: { isConnected: boolean; paperStatus: string }) {
     return this.prisma.printer.update({
       where: { id },
@@ -544,9 +559,6 @@ export class PrinterService {
       receipt += `TROCO: ${this.formatCurrency(sale.change)}\n`;
     }
     
-    receipt += this.centerText('--------------------------------') + '\n';
-    receipt += this.centerText('MONT TECNOLOGIA, SEU PARCEIRO') + '\n';
-    receipt += this.centerText('DE SUCESSO !! 🚀🚀') + '\n';
     receipt += this.centerText('--------------------------------') + '\n\n\n';
     
     return receipt;
@@ -1128,6 +1140,26 @@ export class PrinterService {
       return await this.thermalPrinter.getPrintQueue(printer.name);
     } catch (error) {
       this.logger.error('Erro ao obter fila de impressão:', error);
+      return [];
+    }
+  }
+
+  /**
+   * Obtém logs de erro/sistema relacionados à impressora
+   */
+  async getPrinterLogs(printerId: string): Promise<string[]> {
+    try {
+      const printer = await this.prisma.printer.findUnique({
+        where: { id: printerId },
+      });
+
+      if (!printer) {
+        throw new BadRequestException('Impressora não encontrada');
+      }
+
+      return await this.driverService.getPrinterErrorLogs(printer.name);
+    } catch (error) {
+      this.logger.error('Erro ao obter logs da impressora:', error);
       return [];
     }
   }

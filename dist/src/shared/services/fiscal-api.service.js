@@ -373,6 +373,7 @@ let FiscalApiService = FiscalApiService_1 = class FiscalApiService {
             if (!company.admin.focusNfeApiKey) {
                 throw new common_1.BadRequestException('API Key do Focus NFe não configurada');
             }
+            this.validateCompanyFiscalData(company);
             return await this.generateNFeFocusNFe(request, company);
         }
         catch (error) {
@@ -390,6 +391,33 @@ let FiscalApiService = FiscalApiService_1 = class FiscalApiService {
             };
         }
     }
+    validateCompanyFiscalData(company) {
+        const errors = [];
+        if (!company.cnpj) {
+            errors.push('CNPJ da empresa é obrigatório');
+        }
+        if (!company.name) {
+            errors.push('Nome da empresa é obrigatório');
+        }
+        if (!company.street) {
+            errors.push('Endereço da empresa é obrigatório');
+        }
+        if (!company.number) {
+            errors.push('Número do endereço da empresa é obrigatório');
+        }
+        if (!company.city) {
+            errors.push('Cidade da empresa é obrigatória');
+        }
+        if (!company.state) {
+            errors.push('Estado da empresa é obrigatório');
+        }
+        if (!company.zipCode) {
+            errors.push('CEP da empresa é obrigatório');
+        }
+        if (errors.length > 0) {
+            throw new common_1.BadRequestException(`Dados fiscais incompletos da empresa: ${errors.join(', ')}. Configure na seção de empresas.`);
+        }
+    }
     async generateNFeFocusNFe(request, company) {
         try {
             const ref = request.referenceId || `nfe_${Date.now()}`;
@@ -403,19 +431,32 @@ let FiscalApiService = FiscalApiService_1 = class FiscalApiService {
                 tipo_documento: 1,
                 finalidade_emissao: '1',
                 cnpj_emitente: company.cnpj.replace(/\D/g, ''),
+                razao_social: company.name,
+                nome_fantasia: company.name,
+                endereco: company.street || '',
+                numero: company.number || 'S/N',
+                complemento: company.complement || '',
+                bairro: company.district || '',
+                municipio: company.city || '',
+                uf: company.state || '',
+                cep: company.zipCode?.replace(/\D/g, '') || '',
+                telefone: company.phone?.replace(/\D/g, '') || '',
+                inscricao_estadual: company.stateRegistration || 'ISENTO',
+                inscricao_estadual_indicador: company.stateRegistration ? '1' : '9',
+                ...(company.cnae && { cnae: company.cnae }),
+                ...(company.municipioIbge && { codigo_municipio: company.municipioIbge }),
+                regime_tributario: this.mapTaxRegime(company.taxRegime),
                 nome_destinatario: request.recipient.name,
                 [isCompany ? 'cnpj_destinatario' : 'cpf_destinatario']: recipientDoc,
                 ...(request.recipient.email && { email_destinatario: request.recipient.email }),
                 ...(request.recipient.phone && { telefone_destinatario: request.recipient.phone.replace(/\D/g, '') }),
-                ...(request.recipient.address && {
-                    logradouro_destinatario: request.recipient.address.street || '',
-                    numero_destinatario: request.recipient.address.number || 'S/N',
-                    bairro_destinatario: request.recipient.address.district || '',
-                    municipio_destinatario: request.recipient.address.city || '',
-                    uf_destinatario: request.recipient.address.state || '',
-                    cep_destinatario: request.recipient.address.zipCode?.replace(/\D/g, '') || '',
-                    ...(request.recipient.address.complement && { complemento_destinatario: request.recipient.address.complement }),
-                }),
+                logradouro_destinatario: request.recipient.address?.street || '',
+                numero_destinatario: request.recipient.address?.number || 'S/N',
+                complemento_destinatario: request.recipient.address?.complement || '',
+                bairro_destinatario: request.recipient.address?.district || '',
+                municipio_destinatario: request.recipient.address?.city || '',
+                uf_destinatario: request.recipient.address?.state || '',
+                cep_destinatario: request.recipient.address?.zipCode?.replace(/\D/g, '') || '',
                 indicador_inscricao_estadual_destinatario: '9',
                 consumidor_final: '1',
                 presenca_comprador: '9',
@@ -477,6 +518,17 @@ let FiscalApiService = FiscalApiService_1 = class FiscalApiService {
             }
             throw new common_1.BadRequestException(error.message || 'Erro ao gerar NF-e no Focus NFe');
         }
+    }
+    mapTaxRegime(taxRegime) {
+        if (!taxRegime)
+            return '1';
+        const mapping = {
+            'SIMPLES_NACIONAL': '1',
+            'LUCRO_PRESUMIDO': '2',
+            'LUCRO_REAL': '3',
+            'MEI': '4',
+        };
+        return mapping[taxRegime.toUpperCase()] || '1';
     }
     mapPaymentMethodCodeSefaz(method) {
         const mapping = {

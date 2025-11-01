@@ -155,6 +155,18 @@ export declare class PrinterService {
         paperStatus: string;
         lastStatusCheck: Date | null;
     })[]>;
+    deletePrinter(user: any, id: string): Promise<{
+        id: string;
+        createdAt: Date;
+        updatedAt: Date;
+        name: string;
+        companyId: string;
+        type: string;
+        connectionInfo: string;
+        isConnected: boolean;
+        paperStatus: string;
+        lastStatusCheck: Date | null;
+    }>;
     updatePrinterStatus(id: string, status: {
         isConnected: boolean;
         paperStatus: string;
@@ -200,6 +212,7 @@ export declare class PrinterService {
     getCustomFooter(companyId: string): Promise<string | null>;
     openCashDrawer(printerId: string): Promise<boolean>;
     getPrintQueue(printerId: string): Promise<any[]>;
+    getPrinterLogs(printerId: string): Promise<string[]>;
     printBudget(data: any): Promise<boolean>;
     private generateBudgetContent;
     private getBudgetStatus;

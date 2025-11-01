@@ -23,9 +23,24 @@ let BillToPayService = BillToPayService_1 = class BillToPayService {
     async create(companyId, createBillToPayDto) {
         try {
             await this.planLimitsService.validateBillToPayLimit(companyId);
+            let dueDate;
+            if (/^\d{4}-\d{2}-\d{2}$/.test(createBillToPayDto.dueDate)) {
+                const [year, month, day] = createBillToPayDto.dueDate.split('-').map(Number);
+                dueDate = new Date(Date.UTC(year, month - 1, day, 12, 0, 0));
+            }
+            else {
+                dueDate = new Date(createBillToPayDto.dueDate);
+            }
+            if (isNaN(dueDate.getTime())) {
+                throw new common_1.BadRequestException('Data de vencimento inválida');
+            }
             const bill = await this.prisma.billToPay.create({
                 data: {
-                    ...createBillToPayDto,
+                    title: createBillToPayDto.title,
+                    amount: createBillToPayDto.amount,
+                    dueDate,
+                    barcode: createBillToPayDto.barcode,
+                    paymentInfo: createBillToPayDto.paymentInfo,
                     companyId,
                 },
                 include: {
@@ -157,9 +172,6 @@ let BillToPayService = BillToPayService_1 = class BillToPayService {
             });
             if (!existingBill) {
                 throw new common_1.NotFoundException('Conta a pagar não encontrada');
-            }
-            if (existingBill.isPaid) {
-                throw new common_1.BadRequestException('Não é possível excluir conta já paga');
             }
             await this.prisma.billToPay.delete({
                 where: { id },

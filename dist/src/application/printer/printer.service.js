@@ -245,6 +245,18 @@ let PrinterService = PrinterService_1 = class PrinterService {
             },
         });
     }
+    async deletePrinter(user, id) {
+        const printer = await this.prisma.printer.findUnique({ where: { id } });
+        if (!printer) {
+            throw new common_1.BadRequestException('Impressora não encontrada');
+        }
+        if (user.role !== 'ADMIN' && printer.companyId !== user.companyId) {
+            throw new common_1.BadRequestException('Sem permissão para excluir esta impressora');
+        }
+        const deleted = await this.prisma.printer.delete({ where: { id } });
+        this.logger.log(`Printer deleted: ${id} by user: ${user.id}`);
+        return deleted;
+    }
     async updatePrinterStatus(id, status) {
         return this.prisma.printer.update({
             where: { id },
@@ -347,9 +359,6 @@ let PrinterService = PrinterService_1 = class PrinterService {
         if (sale.change > 0) {
             receipt += `TROCO: ${this.formatCurrency(sale.change)}\n`;
         }
-        receipt += this.centerText('--------------------------------') + '\n';
-        receipt += this.centerText('MONT TECNOLOGIA, SEU PARCEIRO') + '\n';
-        receipt += this.centerText('DE SUCESSO !! 🚀🚀') + '\n';
         receipt += this.centerText('--------------------------------') + '\n\n\n';
         return receipt;
     }
@@ -800,6 +809,21 @@ let PrinterService = PrinterService_1 = class PrinterService {
         }
         catch (error) {
             this.logger.error('Erro ao obter fila de impressão:', error);
+            return [];
+        }
+    }
+    async getPrinterLogs(printerId) {
+        try {
+            const printer = await this.prisma.printer.findUnique({
+                where: { id: printerId },
+            });
+            if (!printer) {
+                throw new common_1.BadRequestException('Impressora não encontrada');
+            }
+            return await this.driverService.getPrinterErrorLogs(printer.name);
+        }
+        catch (error) {
+            this.logger.error('Erro ao obter logs da impressora:', error);
             return [];
         }
     }

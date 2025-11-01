@@ -76,9 +76,10 @@ export declare class SellerService {
     }>;
     getSellerStats(id: string, companyId?: string): Promise<{
         totalSales: number;
-        totalSalesValue: number | import("@prisma/client/runtime/library").Decimal;
+        totalRevenue: number;
+        averageSaleValue: number;
         monthlySales: number;
-        monthlySalesValue: number | import("@prisma/client/runtime/library").Decimal;
+        monthlySalesValue: number;
     }>;
     getSellerSales(id: string, companyId?: string, page?: number, limit?: number): Promise<{
         sales: ({

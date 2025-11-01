@@ -190,7 +190,6 @@ __decorate([
     (0, swagger_1.ApiOperation)({ summary: 'Remover conta a pagar' }),
     (0, swagger_1.ApiResponse)({ status: 200, description: 'Conta a pagar removida com sucesso' }),
     (0, swagger_1.ApiResponse)({ status: 404, description: 'Conta a pagar não encontrada' }),
-    (0, swagger_1.ApiResponse)({ status: 400, description: 'Não é possível excluir conta já paga' }),
     __param(0, (0, common_1.Param)('id', uuid_validation_pipe_1.UuidValidationPipe)),
     __param(1, (0, current_user_decorator_1.CurrentUser)()),
     __metadata("design:type", Function),

@@ -377,6 +377,7 @@ export class ProductController {
         expirationDate: { type: 'string' },
         ncm: { type: 'string' },
         cfop: { type: 'string' },
+        unitOfMeasure: { type: 'string' },
       },
     },
   })
@@ -452,6 +453,98 @@ export class ProductController {
       {},
       newPhotos,
       photosToDeleteArray,
+    );
+  }
+
+  @Patch(':id/upload-and-update')
+  @Roles(UserRole.COMPANY)
+  @UseInterceptors(FilesInterceptor('photos', 3), SanitizeUpdateDataInterceptor)
+  @ApiOperation({ 
+    summary: 'Atualizar produto com upload de fotos',
+    description: 'Atualiza um produto e faz upload de fotos simultaneamente, similar ao upload-and-create mas para edição'
+  })
+  @ApiConsumes('multipart/form-data')
+  @ApiBody({
+    description: 'Fotos e dados do produto para atualização',
+    schema: {
+      type: 'object',
+      properties: {
+        photos: {
+          type: 'array',
+          items: {
+            type: 'string',
+            format: 'binary',
+          },
+          maxItems: 3,
+          description: 'Máximo de 3 fotos novas'
+        },
+        photosToDelete: {
+          type: 'array',
+          items: { type: 'string' },
+          description: 'URLs das fotos a serem removidas'
+        },
+        name: { type: 'string' },
+        barcode: { type: 'string' },
+        stockQuantity: { type: 'number' },
+        price: { type: 'number' },
+        size: { type: 'string' },
+        category: { type: 'string' },
+        expirationDate: { type: 'string' },
+        ncm: { type: 'string' },
+        cfop: { type: 'string' },
+        unitOfMeasure: { type: 'string' },
+      },
+    },
+  })
+  @ApiResponse({ status: 200, description: 'Produto atualizado com fotos com sucesso' })
+  @ApiResponse({ status: 400, description: 'Dados inválidos ou limite de fotos excedido' })
+  async uploadPhotosAndUpdate(
+    @Param('id', UuidValidationPipe) id: string,
+    @UploadedFiles() photos: Express.Multer.File[],
+    @Body() productData: any,
+    @Body('photosToDelete') photosToDeleteBody: string | string[],
+    @CurrentUser() user: any,
+  ) {
+    this.logger.log(`🚀 Upload and update product ${id} for company: ${user.companyId}`);
+    this.logger.log(`📸 Photos received: ${photos?.length || 0}`);
+    
+    // Validar limite de fotos
+    if (photos && photos.length > 3) {
+      throw new BadRequestException('Máximo de 3 fotos por produto');
+    }
+
+    // Processar photosToDelete - usar o parâmetro específico primeiro, depois fallback para o body
+    let photosToDelete: string[] = [];
+    if (photosToDeleteBody) {
+      photosToDelete = Array.isArray(photosToDeleteBody)
+        ? photosToDeleteBody
+        : [photosToDeleteBody];
+    } else if (productData.photosToDelete) {
+      photosToDelete = Array.isArray(productData.photosToDelete)
+        ? productData.photosToDelete
+        : [productData.photosToDelete];
+    }
+
+    // Criar UpdateProductDto apenas com campos presentes
+    const updateProductDto: UpdateProductDto = {};
+    
+    if (productData.name !== undefined) updateProductDto.name = productData.name;
+    if (productData.barcode !== undefined) updateProductDto.barcode = productData.barcode;
+    if (productData.stockQuantity !== undefined) updateProductDto.stockQuantity = parseInt(productData.stockQuantity);
+    if (productData.price !== undefined) updateProductDto.price = parseFloat(productData.price);
+    if (productData.size !== undefined) updateProductDto.size = productData.size;
+    if (productData.category !== undefined) updateProductDto.category = productData.category;
+    if (productData.expirationDate !== undefined) updateProductDto.expirationDate = productData.expirationDate;
+    if (productData.ncm !== undefined) updateProductDto.ncm = productData.ncm;
+    if (productData.cfop !== undefined) updateProductDto.cfop = productData.cfop;
+    if (productData.unitOfMeasure !== undefined) updateProductDto.unitOfMeasure = productData.unitOfMeasure;
+
+    return this.productService.updateWithPhotos(
+      id,
+      user.companyId,
+      updateProductDto,
+      photos || [],
+      photosToDelete,
     );
   }
 }

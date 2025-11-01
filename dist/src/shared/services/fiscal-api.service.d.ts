@@ -98,7 +98,9 @@ export declare class FiscalApiService {
     private generateNFCeEnotas;
     private generateNFCeMock;
     generateNFe(request: NFeRequest): Promise<NFeResponse>;
+    private validateCompanyFiscalData;
     private generateNFeFocusNFe;
+    private mapTaxRegime;
     private mapPaymentMethodCodeSefaz;
     private mapPaymentMethods;
     uploadCertificate(certificatePath: string, password: string): Promise<boolean>;

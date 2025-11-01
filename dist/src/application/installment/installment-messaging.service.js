@@ -15,6 +15,7 @@ const common_1 = require("@nestjs/common");
 const schedule_1 = require("@nestjs/schedule");
 const prisma_service_1 = require("../../infrastructure/database/prisma.service");
 const whatsapp_service_1 = require("../whatsapp/whatsapp.service");
+const client_1 = require("@prisma/client");
 let InstallmentMessagingService = InstallmentMessagingService_1 = class InstallmentMessagingService {
     constructor(prisma, whatsappService) {
         this.prisma = prisma;
@@ -28,13 +29,16 @@ let InstallmentMessagingService = InstallmentMessagingService_1 = class Installm
                 where: {
                     autoMessageEnabled: true,
                     isActive: true,
+                    plan: {
+                        in: [client_1.PlanType.PLUS, client_1.PlanType.PRO, client_1.PlanType.TRIAL_7_DAYS],
+                    },
                 },
                 select: {
                     id: true,
                     name: true,
                 },
             });
-            this.logger.log(`Encontradas ${companies.length} empresas com envio automático ativado`);
+            this.logger.log(`Encontradas ${companies.length} empresas com envio automático ativado e planos PLUS, PRO ou TRIAL_7_DAYS`);
             for (const company of companies) {
                 await this.processCompanyInstallments(company.id, company.name);
             }

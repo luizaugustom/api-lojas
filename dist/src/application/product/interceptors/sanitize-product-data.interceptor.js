@@ -20,7 +20,8 @@ let SanitizeProductDataInterceptor = class SanitizeProductDataInterceptor {
                 'stockQuantity',
                 'price',
                 'category',
-                'expirationDate'
+                'expirationDate',
+                'unitOfMeasure'
             ];
             const sanitizedBody = {};
             allowedFields.forEach(field => {

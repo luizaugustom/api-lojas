@@ -16,6 +16,7 @@ export declare class AuthController {
             role: string;
             companyId: string;
             name: any;
+            plan: string;
         };
     }>;
     logout(req: Request, res: Response): Promise<{

@@ -8,41 +8,20 @@ export declare class ProductController {
     private readonly uploadService;
     private readonly logger;
     constructor(productService: ProductService, uploadService: UploadService);
-    create(user: any, createProductDto: CreateProductDto): Promise<{
-        company: {
-            id: string;
-            name: string;
-        };
-    } & {
-        id: string;
-        createdAt: Date;
-        updatedAt: Date;
-        name: string;
-        companyId: string;
-        barcode: string;
-        photos: string[];
-        size: string | null;
-        stockQuantity: number;
-        price: import("@prisma/client/runtime/library").Decimal;
-        category: string | null;
-        expirationDate: Date | null;
-        ncm: string | null;
-        cfop: string | null;
-    }>;
+    create(user: any, createProductDto: CreateProductDto): Promise<any>;
     findAll(user: any, page?: number, limit?: number, search?: string): Promise<{
-        products: ({
+        products: {
+            photos: string[];
             company: {
                 id: string;
                 name: string;
             };
-        } & {
             id: string;
             createdAt: Date;
             updatedAt: Date;
             name: string;
             companyId: string;
             barcode: string;
-            photos: string[];
             size: string | null;
             stockQuantity: number;
             price: import("@prisma/client/runtime/library").Decimal;
@@ -50,7 +29,8 @@ export declare class ProductController {
             expirationDate: Date | null;
             ncm: string | null;
             cfop: string | null;
-        })[];
+            unitOfMeasure: string | null;
+        }[];
         total: number;
         page: number;
         limit: number;
@@ -82,6 +62,7 @@ export declare class ProductController {
         expirationDate: Date | null;
         ncm: string | null;
         cfop: string | null;
+        unitOfMeasure: string | null;
     })[]>;
     getExpiring(user: any, days?: number): Promise<({
         company: {
@@ -103,222 +84,21 @@ export declare class ProductController {
         expirationDate: Date | null;
         ncm: string | null;
         cfop: string | null;
+        unitOfMeasure: string | null;
     })[]>;
     getCategories(user: any): Promise<string[]>;
-    findByBarcode(barcode: string, user: any): Promise<{
-        company: {
-            id: string;
-            name: string;
-        };
-    } & {
-        id: string;
-        createdAt: Date;
-        updatedAt: Date;
-        name: string;
-        companyId: string;
-        barcode: string;
-        photos: string[];
-        size: string | null;
-        stockQuantity: number;
-        price: import("@prisma/client/runtime/library").Decimal;
-        category: string | null;
-        expirationDate: Date | null;
-        ncm: string | null;
-        cfop: string | null;
-    }>;
-    findOne(id: string, user: any): Promise<{
-        company: {
-            id: string;
-            name: string;
-        };
-        _count: {
-            saleItems: number;
-        };
-    } & {
-        id: string;
-        createdAt: Date;
-        updatedAt: Date;
-        name: string;
-        companyId: string;
-        barcode: string;
-        photos: string[];
-        size: string | null;
-        stockQuantity: number;
-        price: import("@prisma/client/runtime/library").Decimal;
-        category: string | null;
-        expirationDate: Date | null;
-        ncm: string | null;
-        cfop: string | null;
-    }>;
-    update(id: string, updateProductDto: UpdateProductDto, user: any): Promise<{
-        company: {
-            id: string;
-            name: string;
-        };
-    } & {
-        id: string;
-        createdAt: Date;
-        updatedAt: Date;
-        name: string;
-        companyId: string;
-        barcode: string;
-        photos: string[];
-        size: string | null;
-        stockQuantity: number;
-        price: import("@prisma/client/runtime/library").Decimal;
-        category: string | null;
-        expirationDate: Date | null;
-        ncm: string | null;
-        cfop: string | null;
-    }>;
-    updateStock(id: string, updateStockDto: UpdateStockDto, user: any): Promise<{
-        company: {
-            id: string;
-            name: string;
-        };
-    } & {
-        id: string;
-        createdAt: Date;
-        updatedAt: Date;
-        name: string;
-        companyId: string;
-        barcode: string;
-        photos: string[];
-        size: string | null;
-        stockQuantity: number;
-        price: import("@prisma/client/runtime/library").Decimal;
-        category: string | null;
-        expirationDate: Date | null;
-        ncm: string | null;
-        cfop: string | null;
-    }>;
+    findByBarcode(barcode: string, user: any): Promise<any>;
+    findOne(id: string, user: any): Promise<any>;
+    update(id: string, updateProductDto: UpdateProductDto, user: any): Promise<any>;
+    updateStock(id: string, updateStockDto: UpdateStockDto, user: any): Promise<any>;
     remove(id: string, user: any): Promise<{
         message: string;
     }>;
-    addPhoto(id: string, photo: Express.Multer.File, user: any): Promise<{
-        company: {
-            id: string;
-            name: string;
-        };
-    } & {
-        id: string;
-        createdAt: Date;
-        updatedAt: Date;
-        name: string;
-        companyId: string;
-        barcode: string;
-        photos: string[];
-        size: string | null;
-        stockQuantity: number;
-        price: import("@prisma/client/runtime/library").Decimal;
-        category: string | null;
-        expirationDate: Date | null;
-        ncm: string | null;
-        cfop: string | null;
-    }>;
-    addPhotos(id: string, photos: Express.Multer.File[], user: any): Promise<{
-        company: {
-            id: string;
-            name: string;
-        };
-    } & {
-        id: string;
-        createdAt: Date;
-        updatedAt: Date;
-        name: string;
-        companyId: string;
-        barcode: string;
-        photos: string[];
-        size: string | null;
-        stockQuantity: number;
-        price: import("@prisma/client/runtime/library").Decimal;
-        category: string | null;
-        expirationDate: Date | null;
-        ncm: string | null;
-        cfop: string | null;
-    }>;
-    removePhoto(id: string, photoUrl: string, user: any): Promise<{
-        company: {
-            id: string;
-            name: string;
-        };
-    } & {
-        id: string;
-        createdAt: Date;
-        updatedAt: Date;
-        name: string;
-        companyId: string;
-        barcode: string;
-        photos: string[];
-        size: string | null;
-        stockQuantity: number;
-        price: import("@prisma/client/runtime/library").Decimal;
-        category: string | null;
-        expirationDate: Date | null;
-        ncm: string | null;
-        cfop: string | null;
-    }>;
-    removeAllPhotos(id: string, user: any): Promise<{
-        company: {
-            id: string;
-            name: string;
-        };
-    } & {
-        id: string;
-        createdAt: Date;
-        updatedAt: Date;
-        name: string;
-        companyId: string;
-        barcode: string;
-        photos: string[];
-        size: string | null;
-        stockQuantity: number;
-        price: import("@prisma/client/runtime/library").Decimal;
-        category: string | null;
-        expirationDate: Date | null;
-        ncm: string | null;
-        cfop: string | null;
-    }>;
-    uploadPhotosAndCreate(photos: Express.Multer.File[], productData: any, user: any): Promise<{
-        company: {
-            id: string;
-            name: string;
-        };
-    } & {
-        id: string;
-        createdAt: Date;
-        updatedAt: Date;
-        name: string;
-        companyId: string;
-        barcode: string;
-        photos: string[];
-        size: string | null;
-        stockQuantity: number;
-        price: import("@prisma/client/runtime/library").Decimal;
-        category: string | null;
-        expirationDate: Date | null;
-        ncm: string | null;
-        cfop: string | null;
-    }>;
-    updateProductPhotos(id: string, newPhotos: Express.Multer.File[], photosToDelete: string | string[], user: any): Promise<{
-        company: {
-            id: string;
-            name: string;
-        };
-    } & {
-        id: string;
-        createdAt: Date;
-        updatedAt: Date;
-        name: string;
-        companyId: string;
-        barcode: string;
-        photos: string[];
-        size: string | null;
-        stockQuantity: number;
-        price: import("@prisma/client/runtime/library").Decimal;
-        category: string | null;
-        expirationDate: Date | null;
-        ncm: string | null;
-        cfop: string | null;
-    }>;
+    addPhoto(id: string, photo: Express.Multer.File, user: any): Promise<any>;
+    addPhotos(id: string, photos: Express.Multer.File[], user: any): Promise<any>;
+    removePhoto(id: string, photoUrl: string, user: any): Promise<any>;
+    removeAllPhotos(id: string, user: any): Promise<any>;
+    uploadPhotosAndCreate(photos: Express.Multer.File[], productData: any, user: any): Promise<any>;
+    updateProductPhotos(id: string, newPhotos: Express.Multer.File[], photosToDelete: string | string[], user: any): Promise<any>;
+    uploadPhotosAndUpdate(id: string, photos: Express.Multer.File[], productData: any, photosToDeleteBody: string | string[], user: any): Promise<any>;
 }

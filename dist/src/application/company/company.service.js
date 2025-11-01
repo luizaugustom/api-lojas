@@ -16,6 +16,7 @@ const prisma_service_1 = require("../../infrastructure/database/prisma.service")
 const hash_service_1 = require("../../shared/services/hash.service");
 const encryption_service_1 = require("../../shared/services/encryption.service");
 const upload_service_1 = require("../upload/upload.service");
+const client_1 = require("@prisma/client");
 const axios_1 = require("axios");
 const FormData = require("form-data");
 const fs = require("fs");
@@ -65,6 +66,10 @@ let CompanyService = CompanyService_1 = class CompanyService {
                 if (field === 'email') {
                     throw new common_1.ConflictException('Email já está em uso');
                 }
+            }
+            if (error.code === 'P2003' || error.message?.includes('PlanType') || error.message?.includes('TRIAL_7_DAYS')) {
+                this.logger.error('Erro ao criar empresa: Enum PlanType não inclui TRIAL_7_DAYS. Aplique a migration do banco de dados.', error);
+                throw new common_1.BadRequestException('Erro: O plano TRIAL_7_DAYS não está disponível no banco de dados. Por favor, aplique a migration do Prisma: npx prisma migrate deploy');
             }
             this.logger.error('Error creating company:', error);
             throw error;
@@ -646,6 +651,161 @@ let CompanyService = CompanyService_1 = class CompanyService {
         }
         catch (error) {
             this.logger.error('Error getting auto message status:', error);
+            throw error;
+        }
+    }
+    async updateCatalogPage(companyId, updateCatalogPageDto) {
+        try {
+            const company = await this.prisma.company.findUnique({
+                where: { id: companyId },
+                select: { id: true, name: true, catalogPageUrl: true, catalogPageEnabled: true },
+            });
+            if (!company) {
+                throw new common_1.NotFoundException('Empresa não encontrada');
+            }
+            const updateData = {};
+            if (updateCatalogPageDto.catalogPageUrl !== undefined) {
+                if (updateCatalogPageDto.catalogPageUrl) {
+                    const existingCompany = await this.prisma.company.findFirst({
+                        where: {
+                            catalogPageUrl: updateCatalogPageDto.catalogPageUrl,
+                            id: { not: companyId },
+                        },
+                    });
+                    if (existingCompany) {
+                        throw new common_1.ConflictException(`A URL "${updateCatalogPageDto.catalogPageUrl}" já está em uso por outra empresa`);
+                    }
+                }
+                updateData.catalogPageUrl = updateCatalogPageDto.catalogPageUrl;
+            }
+            if (updateCatalogPageDto.catalogPageEnabled !== undefined) {
+                updateData.catalogPageEnabled = updateCatalogPageDto.catalogPageEnabled;
+            }
+            const updatedCompany = await this.prisma.company.update({
+                where: { id: companyId },
+                data: updateData,
+                select: {
+                    id: true,
+                    name: true,
+                    catalogPageUrl: true,
+                    catalogPageEnabled: true,
+                },
+            });
+            this.logger.log(`Catalog page updated for company ${companyId}: ${JSON.stringify(updateData)}`);
+            return {
+                success: true,
+                ...updatedCompany,
+                message: 'Configurações da página de catálogo atualizadas com sucesso!',
+            };
+        }
+        catch (error) {
+            this.logger.error('Error updating catalog page:', error);
+            throw error;
+        }
+    }
+    async getCatalogPageConfig(companyId) {
+        try {
+            const company = await this.prisma.company.findUnique({
+                where: { id: companyId },
+                select: {
+                    id: true,
+                    name: true,
+                    catalogPageUrl: true,
+                    catalogPageEnabled: true,
+                },
+            });
+            if (!company) {
+                throw new common_1.NotFoundException('Empresa não encontrada');
+            }
+            return {
+                catalogPageUrl: company.catalogPageUrl,
+                catalogPageEnabled: company.catalogPageEnabled,
+                pageUrl: company.catalogPageUrl
+                    ? `/catalogo/${company.catalogPageUrl}`
+                    : null,
+            };
+        }
+        catch (error) {
+            this.logger.error('Error getting catalog page config:', error);
+            throw error;
+        }
+    }
+    async getPublicCatalogData(url) {
+        try {
+            const company = await this.prisma.company.findFirst({
+                where: {
+                    catalogPageUrl: url,
+                    catalogPageEnabled: true,
+                },
+                select: {
+                    id: true,
+                    name: true,
+                    phone: true,
+                    email: true,
+                    logoUrl: true,
+                    brandColor: true,
+                    plan: true,
+                    street: true,
+                    number: true,
+                    district: true,
+                    city: true,
+                    state: true,
+                    zipCode: true,
+                    complement: true,
+                    products: {
+                        where: {
+                            stockQuantity: {
+                                gt: 0,
+                            },
+                        },
+                        select: {
+                            id: true,
+                            name: true,
+                            photos: true,
+                            price: true,
+                            stockQuantity: true,
+                            size: true,
+                            category: true,
+                        },
+                        orderBy: {
+                            name: 'asc',
+                        },
+                    },
+                },
+            });
+            if (!company) {
+                throw new common_1.NotFoundException('Página de catálogo não encontrada ou não está habilitada');
+            }
+            if (company.plan !== client_1.PlanType.PRO) {
+                throw new common_1.NotFoundException('O catálogo público está disponível apenas para empresas com plano PRO');
+            }
+            const addressParts = [
+                company.street,
+                company.number,
+                company.district,
+                company.city,
+                company.state,
+                company.zipCode,
+            ].filter(Boolean);
+            const fullAddress = addressParts.join(', ');
+            return {
+                company: {
+                    id: company.id,
+                    name: company.name,
+                    phone: company.phone,
+                    email: company.email,
+                    logoUrl: company.logoUrl,
+                    brandColor: company.brandColor,
+                    address: fullAddress,
+                },
+                products: company.products.map((product) => ({
+                    ...product,
+                    price: product.price.toString(),
+                })),
+            };
+        }
+        catch (error) {
+            this.logger.error('Error getting public catalog data:', error);
             throw error;
         }
     }

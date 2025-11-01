@@ -8,17 +8,27 @@ var __decorate = (this && this.__decorate) || function (decorators, target, key,
 var __metadata = (this && this.__metadata) || function (k, v) {
     if (typeof Reflect === "object" && typeof Reflect.metadata === "function") return Reflect.metadata(k, v);
 };
+var __param = (this && this.__param) || function (paramIndex, decorator) {
+    return function (target, key) { decorator(target, key, paramIndex); }
+};
 var BudgetService_1;
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.BudgetService = void 0;
 const common_1 = require("@nestjs/common");
 const prisma_service_1 = require("../../infrastructure/database/prisma.service");
+const update_budget_dto_1 = require("./dto/update-budget.dto");
 const printer_service_1 = require("../printer/printer.service");
+const sale_service_1 = require("../sale/sale.service");
+const payment_method_dto_1 = require("../sale/dto/payment-method.dto");
 const PDFDocument = require("pdfkit");
+const axios_1 = require("axios");
+const fs = require("fs");
+const path = require("path");
 let BudgetService = BudgetService_1 = class BudgetService {
-    constructor(prisma, printerService) {
+    constructor(prisma, printerService, saleService) {
         this.prisma = prisma;
         this.printerService = printerService;
+        this.saleService = saleService;
         this.logger = new common_1.Logger(BudgetService_1.name);
     }
     async create(companyId, sellerId, createBudgetDto) {
@@ -118,6 +128,7 @@ let BudgetService = BudgetService_1 = class BudgetService {
                             district: true,
                             phone: true,
                             email: true,
+                            logoUrl: true,
                         },
                     },
                 },
@@ -204,6 +215,7 @@ let BudgetService = BudgetService_1 = class BudgetService {
                         state: true,
                         phone: true,
                         email: true,
+                        logoUrl: true,
                     },
                 },
             },
@@ -215,6 +227,60 @@ let BudgetService = BudgetService_1 = class BudgetService {
     }
     async update(id, companyId, updateBudgetDto) {
         const budget = await this.findOne(id, companyId);
+        const oldStatus = budget.status;
+        if (updateBudgetDto.status === update_budget_dto_1.BudgetStatus.APPROVED && oldStatus !== update_budget_dto_1.BudgetStatus.APPROVED) {
+            this.logger.log(`Budget ${id} status changed to approved, creating sale automatically`);
+            if (!budget.sellerId) {
+                throw new common_1.BadRequestException('Orçamento deve ter um vendedor associado para ser aprovado e gerar venda');
+            }
+            const existingSale = await this.prisma.sale.findFirst({
+                where: {
+                    companyId,
+                    items: {
+                        some: {
+                            productId: budget.items[0]?.productId,
+                        },
+                    },
+                    clientName: budget.clientName || undefined,
+                    clientCpfCnpj: budget.clientCpfCnpj || undefined,
+                    saleDate: {
+                        gte: new Date(Date.now() - 5 * 60 * 1000),
+                    },
+                },
+            });
+            if (existingSale) {
+                this.logger.warn(`Sale already exists for budget ${id}, skipping automatic creation`);
+            }
+            else {
+                try {
+                    const saleItems = budget.items.map(item => ({
+                        productId: item.productId,
+                        quantity: item.quantity,
+                        unitPrice: Number(item.unitPrice),
+                        totalPrice: Number(item.totalPrice),
+                    }));
+                    const createSaleDto = {
+                        items: saleItems.map(item => ({
+                            productId: item.productId,
+                            quantity: item.quantity,
+                        })),
+                        clientName: budget.clientName,
+                        clientCpfCnpj: budget.clientCpfCnpj,
+                        paymentMethods: [{
+                                method: payment_method_dto_1.PaymentMethod.CASH,
+                                amount: Number(budget.total),
+                            }],
+                        totalPaid: Number(budget.total),
+                        skipPrint: true,
+                    };
+                    await this.saleService.create(companyId, budget.sellerId, createSaleDto);
+                    this.logger.log(`Sale created automatically for budget ${id}`);
+                }
+                catch (error) {
+                    this.logger.error(`Error creating sale for budget ${id}: ${error.message}`, error.stack);
+                }
+            }
+        }
         const updatedBudget = await this.prisma.budget.update({
             where: { id },
             data: {
@@ -250,6 +316,7 @@ let BudgetService = BudgetService_1 = class BudgetService {
                 address: `${budget.company.street || ''}, ${budget.company.number || ''} - ${budget.company.district || ''}`,
                 phone: budget.company.phone,
                 email: budget.company.email,
+                logoUrl: budget.company.logoUrl,
             },
             budget: {
                 id: budget.id,
@@ -283,7 +350,7 @@ let BudgetService = BudgetService_1 = class BudgetService {
     }
     async generatePdf(id, companyId) {
         const budget = await this.findOne(id, companyId);
-        return new Promise((resolve, reject) => {
+        return new Promise(async (resolve, reject) => {
             try {
                 const doc = new PDFDocument({
                     size: 'A4',
@@ -298,7 +365,7 @@ let BudgetService = BudgetService_1 = class BudgetService {
                     resolve(pdfBuffer);
                 });
                 doc.on('error', reject);
-                this.generatePdfContent(doc, budget);
+                await this.generatePdfContent(doc, budget);
                 doc.end();
             }
             catch (error) {
@@ -307,18 +374,58 @@ let BudgetService = BudgetService_1 = class BudgetService {
             }
         });
     }
-    generatePdfContent(doc, budget) {
+    async generatePdfContent(doc, budget) {
         const company = budget.company;
         const items = budget.items;
         const date = new Date(budget.budgetDate).toLocaleDateString('pt-BR');
         const validUntil = new Date(budget.validUntil).toLocaleDateString('pt-BR');
         let yPosition = doc.y;
+        let hasLogo = false;
+        if (company.logoUrl) {
+            try {
+                let logoBuffer = null;
+                if (company.logoUrl.startsWith('http://') || company.logoUrl.startsWith('https://')) {
+                    try {
+                        const response = await axios_1.default.get(company.logoUrl, { responseType: 'arraybuffer', timeout: 5000 });
+                        logoBuffer = Buffer.from(response.data);
+                    }
+                    catch (error) {
+                        this.logger.warn(`Could not download logo from ${company.logoUrl}: ${error.message}`);
+                    }
+                }
+                else {
+                    try {
+                        const filePath = path.join(process.cwd(), 'uploads', company.logoUrl);
+                        if (fs.existsSync(filePath)) {
+                            logoBuffer = fs.readFileSync(filePath);
+                        }
+                    }
+                    catch (error) {
+                        this.logger.warn(`Could not read local logo file: ${error.message}`);
+                    }
+                }
+                if (logoBuffer) {
+                    doc.image(logoBuffer, 470, yPosition, {
+                        width: 70,
+                        height: 70,
+                        fit: [70, 70]
+                    });
+                    hasLogo = true;
+                }
+            }
+            catch (error) {
+                this.logger.error(`Error adding logo to PDF: ${error.message}`);
+            }
+        }
         doc
             .fontSize(20)
             .font('Helvetica-Bold')
             .fillColor('#2C3E50')
             .text('ORÇAMENTO', { align: 'center' });
         yPosition = doc.y + 10;
+        if (!hasLogo) {
+            yPosition -= 10;
+        }
         doc
             .moveTo(50, yPosition)
             .lineTo(545, yPosition)
@@ -598,7 +705,9 @@ let BudgetService = BudgetService_1 = class BudgetService {
 exports.BudgetService = BudgetService;
 exports.BudgetService = BudgetService = BudgetService_1 = __decorate([
     (0, common_1.Injectable)(),
+    __param(2, (0, common_1.Inject)((0, common_1.forwardRef)(() => sale_service_1.SaleService))),
     __metadata("design:paramtypes", [prisma_service_1.PrismaService,
-        printer_service_1.PrinterService])
+        printer_service_1.PrinterService,
+        sale_service_1.SaleService])
 ], BudgetService);
 //# sourceMappingURL=budget.service.js.map

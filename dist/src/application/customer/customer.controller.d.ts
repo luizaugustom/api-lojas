@@ -143,8 +143,8 @@ export declare class CustomerController {
                 id: string;
                 createdAt: Date;
                 amount: import("@prisma/client/runtime/library").Decimal;
-                paymentDate: Date;
                 paymentMethod: string;
+                paymentDate: Date;
                 notes: string | null;
                 installmentId: string;
             }[];

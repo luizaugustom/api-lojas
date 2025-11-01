@@ -9,4 +9,5 @@ export declare class CreateProductDto {
     expirationDate?: string;
     ncm?: string;
     cfop?: string;
+    unitOfMeasure?: string;
 }

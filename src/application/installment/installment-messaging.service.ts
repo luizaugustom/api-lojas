@@ -2,6 +2,7 @@ import { Injectable, Logger } from '@nestjs/common';
 import { Cron, CronExpression } from '@nestjs/schedule';
 import { PrismaService } from '../../infrastructure/database/prisma.service';
 import { WhatsappService } from '../whatsapp/whatsapp.service';
+import { PlanType } from '@prisma/client';
 
 @Injectable()
 export class InstallmentMessagingService {
@@ -20,11 +21,14 @@ export class InstallmentMessagingService {
     this.logger.log('Iniciando verificação de parcelas para envio de mensagens automáticas...');
 
     try {
-      // Buscar empresas que têm o envio automático ativado
+      // Buscar empresas que têm o envio automático ativado e planos PLUS, PRO ou TRIAL_7_DAYS
       const companies = await this.prisma.company.findMany({
         where: {
           autoMessageEnabled: true,
           isActive: true,
+          plan: {
+            in: [PlanType.PLUS, PlanType.PRO, PlanType.TRIAL_7_DAYS],
+          },
         },
         select: {
           id: true,
@@ -32,7 +36,7 @@ export class InstallmentMessagingService {
         },
       });
 
-      this.logger.log(`Encontradas ${companies.length} empresas com envio automático ativado`);
+      this.logger.log(`Encontradas ${companies.length} empresas com envio automático ativado e planos PLUS, PRO ou TRIAL_7_DAYS`);
 
       for (const company of companies) {
         await this.processCompanyInstallments(company.id, company.name);

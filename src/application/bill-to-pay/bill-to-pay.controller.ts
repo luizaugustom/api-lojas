@@ -160,7 +160,6 @@ export class BillToPayController {
   @ApiOperation({ summary: 'Remover conta a pagar' })
   @ApiResponse({ status: 200, description: 'Conta a pagar removida com sucesso' })
   @ApiResponse({ status: 404, description: 'Conta a pagar não encontrada' })
-  @ApiResponse({ status: 400, description: 'Não é possível excluir conta já paga' })
   remove(
     @Param('id', UuidValidationPipe) id: string,
     @CurrentUser() user: any,

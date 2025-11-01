@@ -56,8 +56,8 @@ export declare class SaleService {
             id: string;
             createdAt: Date;
             amount: import("@prisma/client/runtime/library").Decimal;
-            saleId: string;
             method: string;
+            saleId: string;
             additionalInfo: string | null;
         }[];
     } & {
@@ -99,8 +99,8 @@ export declare class SaleService {
                 id: string;
                 createdAt: Date;
                 amount: import("@prisma/client/runtime/library").Decimal;
-                saleId: string;
                 method: string;
+                saleId: string;
                 additionalInfo: string | null;
             }[];
         } & {
@@ -152,8 +152,8 @@ export declare class SaleService {
             id: string;
             createdAt: Date;
             amount: import("@prisma/client/runtime/library").Decimal;
-            saleId: string;
             method: string;
+            saleId: string;
             additionalInfo: string | null;
         }[];
         exchanges: ({

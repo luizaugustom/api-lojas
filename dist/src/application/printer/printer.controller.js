@@ -76,6 +76,16 @@ let PrinterController = class PrinterController {
     async getPrintQueue(id) {
         return await this.printerService.getPrintQueue(id);
     }
+    async getPrinterLogs(id) {
+        const logs = await this.printerService.getPrinterLogs(id);
+        return { logs };
+    }
+    async deletePrinter(user, id) {
+        if (!id)
+            throw new common_1.BadRequestException('ID inválido');
+        const result = await this.printerService.deletePrinter(user, id);
+        return { success: true, deletedId: result.id };
+    }
 };
 exports.PrinterController = PrinterController;
 __decorate([
@@ -205,6 +215,27 @@ __decorate([
     __metadata("design:paramtypes", [String]),
     __metadata("design:returntype", Promise)
 ], PrinterController.prototype, "getPrintQueue", null);
+__decorate([
+    (0, common_1.Get)(':id/logs'),
+    (0, roles_decorator_1.Roles)(roles_decorator_1.UserRole.ADMIN, roles_decorator_1.UserRole.COMPANY),
+    (0, swagger_1.ApiOperation)({ summary: 'Obter logs recentes da impressora' }),
+    (0, swagger_1.ApiResponse)({ status: 200, description: 'Logs de impressora' }),
+    __param(0, (0, common_1.Param)('id', uuid_validation_pipe_1.UuidValidationPipe)),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String]),
+    __metadata("design:returntype", Promise)
+], PrinterController.prototype, "getPrinterLogs", null);
+__decorate([
+    (0, common_1.Delete)(':id'),
+    (0, roles_decorator_1.Roles)(roles_decorator_1.UserRole.ADMIN, roles_decorator_1.UserRole.COMPANY),
+    (0, swagger_1.ApiOperation)({ summary: 'Excluir impressora' }),
+    (0, swagger_1.ApiResponse)({ status: 200, description: 'Impressora excluída com sucesso' }),
+    __param(0, (0, current_user_decorator_1.CurrentUser)()),
+    __param(1, (0, common_1.Param)('id', uuid_validation_pipe_1.UuidValidationPipe)),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [Object, String]),
+    __metadata("design:returntype", Promise)
+], PrinterController.prototype, "deletePrinter", null);
 exports.PrinterController = PrinterController = __decorate([
     (0, swagger_1.ApiTags)('printer'),
     (0, common_1.Controller)('printer'),

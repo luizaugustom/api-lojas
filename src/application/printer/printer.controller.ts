@@ -2,6 +2,7 @@ import {
   Controller,
   Get,
   Post,
+  Delete,
   Body,
   Param,
   UseGuards,
@@ -149,5 +150,27 @@ export class PrinterController {
   @ApiResponse({ status: 200, description: 'Fila de impressão' })
   async getPrintQueue(@Param('id', UuidValidationPipe) id: string) {
     return await this.printerService.getPrintQueue(id);
+  }
+
+  @Get(':id/logs')
+  @Roles(UserRole.ADMIN, UserRole.COMPANY)
+  @ApiOperation({ summary: 'Obter logs recentes da impressora' })
+  @ApiResponse({ status: 200, description: 'Logs de impressora' })
+  async getPrinterLogs(@Param('id', UuidValidationPipe) id: string) {
+    const logs = await this.printerService.getPrinterLogs(id);
+    return { logs };
+  }
+
+  @Delete(':id')
+  @Roles(UserRole.ADMIN, UserRole.COMPANY)
+  @ApiOperation({ summary: 'Excluir impressora' })
+  @ApiResponse({ status: 200, description: 'Impressora excluída com sucesso' })
+  async deletePrinter(
+    @CurrentUser() user: any,
+    @Param('id', UuidValidationPipe) id: string,
+  ) {
+    if (!id) throw new BadRequestException('ID inválido');
+    const result = await this.printerService.deletePrinter(user, id);
+    return { success: true, deletedId: result.id };
   }
 }

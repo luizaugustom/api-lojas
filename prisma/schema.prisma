@@ -14,6 +14,7 @@ enum PlanType {
   BASIC
   PLUS
   PRO
+  TRIAL_7_DAYS
 }
 
 enum TaxRegime {
@@ -42,56 +43,60 @@ model Admin {
 }
 
 model Company {
-  id              String   @id @default(uuid())
-  name            String
-  login           String   @unique
-  password        String
-  phone           String?
-  cnpj            String   @unique
-  stateRegistration String?
+  id                    String   @id @default(uuid())
+  name                  String
+  login                 String   @unique
+  password              String
+  phone                 String?
+  cnpj                  String   @unique
+  stateRegistration     String?
   municipalRegistration String?
-  email           String   @unique
-  logoUrl         String?
-  brandColor      String?
-  customFooter    String?  // Footer personalizado para NFCe
-  plan            PlanType @default(BASIC)
-  isActive        Boolean  @default(true)
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
+  email                 String   @unique
+  logoUrl               String?
+  brandColor            String?
+  customFooter          String? // Footer personalizado para NFCe
+  plan                  PlanType @default(BASIC)
+  isActive              Boolean  @default(true)
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
 
   // Address
-  zipCode         String?
-  state           String?
-  city            String?
-  district        String?
-  street          String?
-  number          String?
-  complement      String?
+  zipCode    String?
+  state      String?
+  city       String?
+  district   String?
+  street     String?
+  number     String?
+  complement String?
 
   // Banking Data
-  beneficiaryName String?
+  beneficiaryName    String?
   beneficiaryCpfCnpj String?
-  bankCode        String?
-  bankName        String?
-  agency          String?
-  accountNumber   String?
-  accountType     String?
+  bankCode           String?
+  bankName           String?
+  agency             String?
+  accountNumber      String?
+  accountType        String?
 
   // Fiscal Configuration (Company-specific)
   taxRegime           TaxRegime? @default(SIMPLES_NACIONAL) // Regime tributário
   cnae                String? // CNAE - Classificação Nacional de Atividades Econômicas (7 dígitos)
   certificatePassword String? // Senha do certificado digital (criptografada)
-  nfceSerie           String? @default("1") // Série da NFC-e
+  nfceSerie           String?    @default("1") // Série da NFC-e
   municipioIbge       String? // Código IBGE do município (ex: 4205407)
   csc                 String? // Código de Segurança do Contribuinte (criptografado)
-  idTokenCsc          String? @default("000001") // ID do Token CSC
+  idTokenCsc          String?    @default("000001") // ID do Token CSC
 
   // Automatic Message Configuration
-  autoMessageEnabled  Boolean  @default(false) // Ativa/desativa envio automático de mensagens de cobrança
+  autoMessageEnabled Boolean @default(false) // Ativa/desativa envio automático de mensagens de cobrança
+
+  // Catalog Page Configuration
+  catalogPageUrl     String? // URL única para página pública de catálogo (ex: "masolucoes")
+  catalogPageEnabled Boolean @default(false) // Se a página de catálogo está ativada
 
   // Relations
   adminId         String
-  admin           Admin           @relation(fields: [adminId], references: [id], onDelete: Cascade)
+  admin           Admin            @relation(fields: [adminId], references: [id], onDelete: Cascade)
   sellers         Seller[]
   products        Product[]
   sales           Sale[]
@@ -100,6 +105,7 @@ model Company {
   cashClosures    CashClosure[]
   fiscalDocuments FiscalDocument[]
   printers        Printer[]
+  scales          Scale[]
   installments    Installment[]
   budgets         Budget[]
 
@@ -107,338 +113,355 @@ model Company {
 }
 
 model Seller {
-  id             String   @id @default(uuid())
-  login          String   @unique
-  password       String
-  name           String
-  cpf            String?
-  birthDate      DateTime?
-  email          String?
-  phone          String?
-  commissionRate Decimal  @default(0) @db.Decimal(5, 2) // Porcentagem de comissão (0-100)
-  hasIndividualCash Boolean @default(false) // Se true, vendedor tem caixa individual; se false, usa caixa compartilhado
-  createdAt      DateTime @default(now())
-  updatedAt      DateTime @updatedAt
+  id                String    @id @default(uuid())
+  login             String    @unique
+  password          String
+  name              String
+  cpf               String?
+  birthDate         DateTime?
+  email             String?
+  phone             String?
+  commissionRate    Decimal   @default(0) @db.Decimal(5, 2) // Porcentagem de comissão (0-100)
+  hasIndividualCash Boolean   @default(false) // Se true, vendedor tem caixa individual; se false, usa caixa compartilhado
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
 
   // Relations
-  companyId   String
-  company     Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
-  sales       Sale[]
-  budgets     Budget[]
+  companyId    String
+  company      Company       @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  sales        Sale[]
+  budgets      Budget[]
   cashClosures CashClosure[] // Caixas individuais do vendedor
 
   @@map("sellers")
 }
 
 model Product {
-  id              String   @id @default(uuid())
-  name            String
-  photos          String[] // Array of photo URLs
-  barcode         String   @unique
-  size            String?
-  stockQuantity   Int      @default(0)
-  price           Decimal  @db.Decimal(10, 2)
-  category        String?
-  expirationDate  DateTime?
-  ncm             String?  @default("99999999") // Nomenclatura Comum do Mercosul (8 dígitos)
-  cfop            String?  @default("5102") // Código Fiscal de Operações (4 dígitos)
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
+  id             String    @id @default(uuid())
+  name           String
+  photos         String[] // Array of photo URLs
+  barcode        String    @unique
+  size           String?
+  stockQuantity  Int       @default(0)
+  price          Decimal   @db.Decimal(10, 2)
+  category       String?
+  expirationDate DateTime?
+  ncm            String?   @default("99999999") // Nomenclatura Comum do Mercosul (8 dígitos)
+  cfop           String?   @default("5102") // Código Fiscal de Operações (4 dígitos)
+  unitOfMeasure  String?   @default("un") // Unidade de medida (kg, g, ml, l, m, cm, un)
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
 
   // Relations
-  companyId       String
-  company         Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
-  saleItems       SaleItem[]
+  companyId        String
+  company          Company           @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  saleItems        SaleItem[]
   productExchanges ProductExchange[]
-  budgetItems     BudgetItem[]
+  budgetItems      BudgetItem[]
 
   @@map("products")
 }
 
 model Sale {
-  id              String   @id @default(uuid())
-  total           Decimal  @db.Decimal(10, 2)
-  clientCpfCnpj   String?
-  clientName      String?
-  change          Decimal  @db.Decimal(10, 2) @default(0)
-  isInstallment   Boolean  @default(false)
-  saleDate        DateTime @default(now())
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
+  id            String   @id @default(uuid())
+  total         Decimal  @db.Decimal(10, 2)
+  clientCpfCnpj String?
+  clientName    String?
+  change        Decimal  @default(0) @db.Decimal(10, 2)
+  isInstallment Boolean  @default(false)
+  saleDate      DateTime @default(now())
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
 
   // Relations
-  companyId       String
-  company         Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
-  sellerId        String
-  seller          Seller @relation(fields: [sellerId], references: [id])
-  items           SaleItem[]
-  paymentMethods  SalePaymentMethod[]
-  exchanges       ProductExchange[]
-  cashClosureId   String?
-  cashClosure     CashClosure? @relation(fields: [cashClosureId], references: [id])
-  installments    Installment[]
+  companyId      String
+  company        Company             @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  sellerId       String
+  seller         Seller              @relation(fields: [sellerId], references: [id])
+  items          SaleItem[]
+  paymentMethods SalePaymentMethod[]
+  exchanges      ProductExchange[]
+  cashClosureId  String?
+  cashClosure    CashClosure?        @relation(fields: [cashClosureId], references: [id])
+  installments   Installment[]
 
   @@map("sales")
 }
 
 model SalePaymentMethod {
-  id              String   @id @default(uuid())
-  method          String   // payment method (cash, pix, credit_card, etc.)
-  amount          Decimal  @db.Decimal(10, 2)
-  additionalInfo  String?  // additional payment information
-  createdAt       DateTime @default(now())
+  id             String   @id @default(uuid())
+  method         String // payment method (cash, pix, credit_card, etc.)
+  amount         Decimal  @db.Decimal(10, 2)
+  additionalInfo String? // additional payment information
+  createdAt      DateTime @default(now())
 
   // Relations
-  saleId          String
-  sale            Sale @relation(fields: [saleId], references: [id], onDelete: Cascade)
+  saleId String
+  sale   Sale   @relation(fields: [saleId], references: [id], onDelete: Cascade)
 
   @@map("sale_payment_methods")
 }
 
 model SaleItem {
-  id          String  @id @default(uuid())
-  quantity    Int
-  unitPrice   Decimal @db.Decimal(10, 2)
-  totalPrice  Decimal @db.Decimal(10, 2)
-  createdAt   DateTime @default(now())
+  id         String   @id @default(uuid())
+  quantity   Int
+  unitPrice  Decimal  @db.Decimal(10, 2)
+  totalPrice Decimal  @db.Decimal(10, 2)
+  createdAt  DateTime @default(now())
 
   // Relations
-  saleId      String
-  sale        Sale @relation(fields: [saleId], references: [id], onDelete: Cascade)
-  productId   String
-  product     Product @relation(fields: [productId], references: [id])
+  saleId    String
+  sale      Sale    @relation(fields: [saleId], references: [id], onDelete: Cascade)
+  productId String
+  product   Product @relation(fields: [productId], references: [id])
 
   @@map("sale_items")
 }
 
 model Customer {
-  id          String   @id @default(uuid())
-  name        String
-  phone       String?
-  email       String?
-  cpfCnpj     String?
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  id        String   @id @default(uuid())
+  name      String
+  phone     String?
+  email     String?
+  cpfCnpj   String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   // Address
-  zipCode     String?
-  state       String?
-  city        String?
-  district    String?
-  street      String?
-  number      String?
-  complement  String?
+  zipCode    String?
+  state      String?
+  city       String?
+  district   String?
+  street     String?
+  number     String?
+  complement String?
 
   // Relations
-  companyId   String
-  company     Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  companyId    String
+  company      Company       @relation(fields: [companyId], references: [id], onDelete: Cascade)
   installments Installment[]
 
   @@map("customers")
 }
 
 model BillToPay {
-  id              String   @id @default(uuid())
-  title           String
-  barcode         String?
-  paymentInfo     String?
-  dueDate         DateTime
-  amount          Decimal  @db.Decimal(10, 2)
-  isPaid          Boolean  @default(false)
-  paidAt          DateTime?
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
+  id          String    @id @default(uuid())
+  title       String
+  barcode     String?
+  paymentInfo String?
+  dueDate     DateTime
+  amount      Decimal   @db.Decimal(10, 2)
+  isPaid      Boolean   @default(false)
+  paidAt      DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
 
   // Relations
-  companyId       String
-  company         Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  companyId String
+  company   Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
 
   @@map("bills_to_pay")
 }
 
 model CashClosure {
-  id              String   @id @default(uuid())
-  openingDate     DateTime @default(now())
-  closingDate     DateTime?
-  openingAmount   Decimal  @db.Decimal(10, 2) @default(0)
-  closingAmount   Decimal  @db.Decimal(10, 2) @default(0)
-  totalSales      Decimal  @db.Decimal(10, 2) @default(0)
-  totalWithdrawals Decimal @db.Decimal(10, 2) @default(0)
-  isClosed        Boolean  @default(false)
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
+  id               String    @id @default(uuid())
+  openingDate      DateTime  @default(now())
+  closingDate      DateTime?
+  openingAmount    Decimal   @default(0) @db.Decimal(10, 2)
+  closingAmount    Decimal   @default(0) @db.Decimal(10, 2)
+  totalSales       Decimal   @default(0) @db.Decimal(10, 2)
+  totalWithdrawals Decimal   @default(0) @db.Decimal(10, 2)
+  isClosed         Boolean   @default(false)
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
 
   // Relations
-  companyId       String
-  company         Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
-  sellerId        String? // Se preenchido, é um caixa individual deste vendedor; se null, é caixa compartilhado da empresa
-  seller          Seller? @relation(fields: [sellerId], references: [id], onDelete: Cascade)
-  sales           Sale[]
+  companyId String
+  company   Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  sellerId  String? // Se preenchido, é um caixa individual deste vendedor; se null, é caixa compartilhado da empresa
+  seller    Seller? @relation(fields: [sellerId], references: [id], onDelete: Cascade)
+  sales     Sale[]
 
   @@map("cash_closures")
 }
 
 model ProductExchange {
-  id              String   @id @default(uuid())
-  reason          String
-  exchangeDate    DateTime @default(now())
-  originalQuantity Int
+  id                String   @id @default(uuid())
+  reason            String
+  exchangeDate      DateTime @default(now())
+  originalQuantity  Int
   exchangedQuantity Int
-  createdAt       DateTime @default(now())
+  createdAt         DateTime @default(now())
 
   // Relations
-  originalSaleId  String
-  originalSale    Sale @relation(fields: [originalSaleId], references: [id], onDelete: Cascade)
-  productId       String
-  product         Product @relation(fields: [productId], references: [id])
+  originalSaleId String
+  originalSale   Sale    @relation(fields: [originalSaleId], references: [id], onDelete: Cascade)
+  productId      String
+  product        Product @relation(fields: [productId], references: [id])
 
   @@map("product_exchanges")
 }
 
 model FiscalDocument {
-  id              String   @id @default(uuid())
-  documentType    String   // NFe, NFSe, etc.
-  documentNumber  String
-  accessKey       String   @unique
-  status          String   // Emitida, Cancelada, etc.
-  totalValue      Decimal? @db.Decimal(10, 2) // Valor total do documento
-  supplierName    String?  // Nome do fornecedor (para notas de entrada)
-  xmlContent      String?  // XML content
-  pdfUrl          String?  // PDF URL
-  qrCodeUrl       String?  // URL do QR Code
-  protocol        String?  // Protocolo de autorização SEFAZ
-  serieNumber     String?  // Série do documento
-  emissionDate    DateTime @default(now())
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
+  id             String   @id @default(uuid())
+  documentType   String // NFe, NFSe, etc.
+  documentNumber String
+  accessKey      String   @unique
+  status         String // Emitida, Cancelada, etc.
+  totalValue     Decimal? @db.Decimal(10, 2) // Valor total do documento
+  supplierName   String? // Nome do fornecedor (para notas de entrada)
+  xmlContent     String? // XML content
+  pdfUrl         String? // PDF URL
+  qrCodeUrl      String? // URL do QR Code
+  protocol       String? // Protocolo de autorização SEFAZ
+  serieNumber    String? // Série do documento
+  emissionDate   DateTime @default(now())
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
 
   // Relations
-  companyId       String
-  company         Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  companyId String
+  company   Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
 
   @@map("fiscal_documents")
 }
 
 model Printer {
-  id              String   @id @default(uuid())
+  id              String    @id @default(uuid())
   name            String
-  type            String   // USB, Network, Bluetooth
-  connectionInfo  String   // IP, MAC, etc.
-  isConnected     Boolean  @default(false)
-  paperStatus     String   @default("OK") // OK, LOW, EMPTY
+  type            String // USB, Network, Bluetooth
+  connectionInfo  String // IP, MAC, etc.
+  isConnected     Boolean   @default(false)
+  paperStatus     String    @default("OK") // OK, LOW, EMPTY
   lastStatusCheck DateTime?
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
 
   // Relations
-  companyId       String
-  company         Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  companyId String
+  company   Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
 
   @@map("printers")
 }
 
+model Scale {
+  id              String    @id @default(uuid())
+  name            String
+  connectionInfo  String // COM3, /dev/ttyUSB0, HID
+  isConnected     Boolean   @default(false)
+  lastStatusCheck DateTime?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  // Relations
+  companyId String
+  company   Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  @@map("scales")
+}
+
 model RefreshToken {
-  id         String   @id @default(uuid())
-  tokenHash  String   @unique
-  userId     String
-  role       String
-  createdAt  DateTime @default(now())
-  expiresAt  DateTime
-  revoked    Boolean  @default(false)
+  id        String   @id @default(uuid())
+  tokenHash String   @unique
+  userId    String
+  role      String
+  createdAt DateTime @default(now())
+  expiresAt DateTime
+  revoked   Boolean  @default(false)
 
   @@map("refresh_tokens")
 }
 
 model Installment {
-  id              String   @id @default(uuid())
-  installmentNumber Int    // Número da parcela (1, 2, 3, etc.)
-  totalInstallments Int    // Total de parcelas
-  amount          Decimal  @db.Decimal(10, 2) // Valor da parcela
-  remainingAmount Decimal  @db.Decimal(10, 2) // Valor restante da parcela
-  dueDate         DateTime // Data de vencimento
-  isPaid          Boolean  @default(false)
-  paidAt          DateTime? // Data do pagamento
-  description     String?  // Descrição opcional
+  id                String    @id @default(uuid())
+  installmentNumber Int // Número da parcela (1, 2, 3, etc.)
+  totalInstallments Int // Total de parcelas
+  amount            Decimal   @db.Decimal(10, 2) // Valor da parcela
+  remainingAmount   Decimal   @db.Decimal(10, 2) // Valor restante da parcela
+  dueDate           DateTime // Data de vencimento
+  isPaid            Boolean   @default(false)
+  paidAt            DateTime? // Data do pagamento
+  description       String? // Descrição opcional
   lastMessageSentAt DateTime? // Data do último envio de mensagem automática
-  messageCount    Int      @default(0) // Contador de mensagens enviadas
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
+  messageCount      Int       @default(0) // Contador de mensagens enviadas
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
 
   // Relations
-  saleId          String
-  sale            Sale @relation(fields: [saleId], references: [id], onDelete: Cascade)
-  customerId      String
-  customer        Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
-  companyId       String
-  company         Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
-  payments        InstallmentPayment[]
+  saleId     String
+  sale       Sale                 @relation(fields: [saleId], references: [id], onDelete: Cascade)
+  customerId String
+  customer   Customer             @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  companyId  String
+  company    Company              @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  payments   InstallmentPayment[]
 
   @@map("installments")
 }
 
 model InstallmentPayment {
-  id              String   @id @default(uuid())
-  amount          Decimal  @db.Decimal(10, 2) // Valor pago
-  paymentDate     DateTime @default(now())
-  paymentMethod   String   // Método de pagamento usado
-  notes           String?  // Notas/observações
-  createdAt       DateTime @default(now())
+  id            String   @id @default(uuid())
+  amount        Decimal  @db.Decimal(10, 2) // Valor pago
+  paymentDate   DateTime @default(now())
+  paymentMethod String // Método de pagamento usado
+  notes         String? // Notas/observações
+  createdAt     DateTime @default(now())
 
   // Relations
-  installmentId   String
-  installment     Installment @relation(fields: [installmentId], references: [id], onDelete: Cascade)
+  installmentId String
+  installment   Installment @relation(fields: [installmentId], references: [id], onDelete: Cascade)
 
   @@map("installment_payments")
 }
 
 model NotificationPreference {
-  id              String   @id @default(uuid())
-  userId          String   // ID do usuário (Admin, Company ou Seller)
-  userRole        String   // Tipo de usuário (admin, company, seller)
-  
+  id       String @id @default(uuid())
+  userId   String // ID do usuário (Admin, Company ou Seller)
+  userRole String // Tipo de usuário (admin, company, seller)
+
   // Preferências de notificação
-  stockAlerts     Boolean  @default(false)  // Alertas de estoque baixo
-  billReminders   Boolean  @default(false)  // Lembretes de contas a vencer
-  weeklyReports   Boolean  @default(false)  // Relatórios semanais
-  salesAlerts     Boolean  @default(false)  // Alertas de vendas
-  systemUpdates   Boolean  @default(false)  // Atualizações do sistema
-  
+  stockAlerts   Boolean @default(false) // Alertas de estoque baixo
+  billReminders Boolean @default(false) // Lembretes de contas a vencer
+  weeklyReports Boolean @default(false) // Relatórios semanais
+  salesAlerts   Boolean @default(false) // Alertas de vendas
+  systemUpdates Boolean @default(false) // Atualizações do sistema
+
   // Canais de notificação
-  emailEnabled    Boolean  @default(false)  // Receber por email
-  inAppEnabled    Boolean  @default(false)  // Notificações in-app
-  
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
+  emailEnabled Boolean @default(false) // Receber por email
+  inAppEnabled Boolean @default(false) // Notificações in-app
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   @@unique([userId, userRole])
   @@map("notification_preferences")
 }
 
 model Notification {
-  id              String   @id @default(uuid())
-  userId          String   // ID do usuário destinatário
-  userRole        String   // Tipo de usuário (admin, company, seller)
-  
+  id       String @id @default(uuid())
+  userId   String // ID do usuário destinatário
+  userRole String // Tipo de usuário (admin, company, seller)
+
   // Conteúdo da notificação
-  type            String   // stock_alert, bill_reminder, sale_alert, system_update, etc.
-  title           String   // Título da notificação
-  message         String   // Mensagem completa
-  
+  type    String // stock_alert, bill_reminder, sale_alert, system_update, etc.
+  title   String // Título da notificação
+  message String // Mensagem completa
+
   // Metadados
-  priority        String   @default("normal") // low, normal, high, urgent
-  category        String?  // Categoria para filtragem (vendas, estoque, financeiro, etc.)
-  actionUrl       String?  // URL para ação relacionada
-  actionLabel     String?  // Label do botão de ação
-  
+  priority    String  @default("normal") // low, normal, high, urgent
+  category    String? // Categoria para filtragem (vendas, estoque, financeiro, etc.)
+  actionUrl   String? // URL para ação relacionada
+  actionLabel String? // Label do botão de ação
+
   // Dados adicionais (JSON)
-  metadata        String?  // JSON com dados extras
-  
+  metadata String? // JSON com dados extras
+
   // Status
-  isRead          Boolean  @default(false)
-  readAt          DateTime?
-  
-  createdAt       DateTime @default(now())
-  expiresAt       DateTime? // Data de expiração da notificação
+  isRead Boolean   @default(false)
+  readAt DateTime?
+
+  createdAt DateTime  @default(now())
+  expiresAt DateTime? // Data de expiração da notificação
 
   @@index([userId, userRole, isRead])
   @@index([createdAt])
@@ -446,42 +469,42 @@ model Notification {
 }
 
 model Budget {
-  id              String   @id @default(uuid())
-  budgetNumber    Int      // Número sequencial do orçamento
-  total           Decimal  @db.Decimal(10, 2)
-  clientName      String?
-  clientPhone     String?
-  clientEmail     String?
-  clientCpfCnpj   String?
-  notes           String?  // Observações do orçamento
-  validUntil      DateTime // Data de validade do orçamento
-  status          String   @default("pending") // pending, approved, rejected, expired
-  budgetDate      DateTime @default(now())
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
+  id            String   @id @default(uuid())
+  budgetNumber  Int // Número sequencial do orçamento
+  total         Decimal  @db.Decimal(10, 2)
+  clientName    String?
+  clientPhone   String?
+  clientEmail   String?
+  clientCpfCnpj String?
+  notes         String? // Observações do orçamento
+  validUntil    DateTime // Data de validade do orçamento
+  status        String   @default("pending") // pending, approved, rejected, expired
+  budgetDate    DateTime @default(now())
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
 
   // Relations
-  companyId       String
-  company         Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
-  sellerId        String?
-  seller          Seller? @relation(fields: [sellerId], references: [id])
-  items           BudgetItem[]
+  companyId String
+  company   Company      @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  sellerId  String?
+  seller    Seller?      @relation(fields: [sellerId], references: [id])
+  items     BudgetItem[]
 
   @@map("budgets")
 }
 
 model BudgetItem {
-  id          String  @id @default(uuid())
-  quantity    Int
-  unitPrice   Decimal @db.Decimal(10, 2)
-  totalPrice  Decimal @db.Decimal(10, 2)
-  createdAt   DateTime @default(now())
+  id         String   @id @default(uuid())
+  quantity   Int
+  unitPrice  Decimal  @db.Decimal(10, 2)
+  totalPrice Decimal  @db.Decimal(10, 2)
+  createdAt  DateTime @default(now())
 
   // Relations
-  budgetId    String
-  budget      Budget @relation(fields: [budgetId], references: [id], onDelete: Cascade)
-  productId   String
-  product     Product @relation(fields: [productId], references: [id])
+  budgetId  String
+  budget    Budget  @relation(fields: [budgetId], references: [id], onDelete: Cascade)
+  productId String
+  product   Product @relation(fields: [productId], references: [id])
 
   @@map("budget_items")
 }

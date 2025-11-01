@@ -152,10 +152,15 @@ Usado para armazenar imagens dos produtos.
 
 | Arquivo | Conteúdo |
 |---------|----------|
-| `env.example` | 📝 Template completo de variáveis |
-| `README-ENV.md` | ⚡ Referência rápida |
-| `CONFIGURACAO.md` | 📖 Guia completo passo a passo |
 | Este arquivo | 🎯 Início rápido |
+| `env.example` | 📝 Template completo de variáveis |
+| `README-ENV.md` | ⚡ Referência rápida de variáveis |
+| `CONFIGURACAO.md` | 📖 Guia completo passo a passo |
+| `README-DEPLOY.md` | 🚀 Guia de deploy em produção |
+| `GUIA-DEPLOY-PRODUCAO.md` | 📖 Deploy detalhado passo a passo |
+| `SERVIÇOS-RECOMENDADOS.md` | 🗄️ Comparação de serviços e custos |
+| `DEPLOY-RENDER.md` | 🔧 Deploy específico Render.com |
+| `RENDER-QUICK-START.md` | ⚡ Deploy rápido Render (5 min) |
 
 ---
 
@@ -168,6 +173,40 @@ Após configurar a API:
 3. 🏢 Criar a primeira empresa no sistema
 4. 📄 Configurar dados fiscais da empresa
 5. 🛍️ Começar a usar!
+
+---
+
+## 🚀 Deploy em Produção
+
+Pronto para subir em produção?
+
+### Opção 1: Render (Mais Simples)
+👉 **Consulte**: `README-DEPLOY.md` ou `GUIA-DEPLOY-PRODUCAO.md`
+
+**Início rápido:**
+1. Commit e push do código para GitHub
+2. Acesse [render.com](https://render.com)
+3. **New +** → **Blueprint**
+4. Conecte repositório GitHub
+5. Configure variáveis de ambiente
+6. Execute migrações
+7. ✅ Pronto!
+
+### Opção 2: Outros Serviços
+👉 **Consulte**: `SERVIÇOS-RECOMENDADOS.md` para comparação completa
+
+**Alternativas:**
+- **Railway**: Deploy super rápido
+- **Fly.io**: Edge computing global
+- **DigitalOcean**: Produção escalável
+
+### Bancos de Dados Recomendados
+👉 **Consulte**: `SERVIÇOS-RECOMENDADOS.md`
+
+**Opções:**
+- **Supabase** (Recomendado): Free tier generoso
+- **Neon**: Serverless PostgreSQL
+- **Render PostgreSQL**: Integrado ao Render
 
 ---
 

@@ -6,6 +6,8 @@ import { UploadService } from '../upload/upload.service';
 import { CreateCompanyDto } from './dto/create-company.dto';
 import { UpdateCompanyDto } from './dto/update-company.dto';
 import { UpdateFiscalConfigDto } from './dto/update-fiscal-config.dto';
+import { UpdateCatalogPageDto } from './dto/update-catalog-page.dto';
+import { PlanType } from '@prisma/client';
 import axios from 'axios';
 import * as FormData from 'form-data';
 import * as fs from 'fs';
@@ -60,6 +62,13 @@ export class CompanyService {
         if (field === 'email') {
           throw new ConflictException('Email já está em uso');
         }
+      }
+      // Verificar se é erro de enum inválido
+      if (error.code === 'P2003' || error.message?.includes('PlanType') || error.message?.includes('TRIAL_7_DAYS')) {
+        this.logger.error('Erro ao criar empresa: Enum PlanType não inclui TRIAL_7_DAYS. Aplique a migration do banco de dados.', error);
+        throw new BadRequestException(
+          'Erro: O plano TRIAL_7_DAYS não está disponível no banco de dados. Por favor, aplique a migration do Prisma: npx prisma migrate deploy'
+        );
       }
       this.logger.error('Error creating company:', error);
       throw error;
@@ -786,6 +795,195 @@ export class CompanyService {
       };
     } catch (error) {
       this.logger.error('Error getting auto message status:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Atualizar configurações da página de catálogo
+   */
+  async updateCatalogPage(companyId: string, updateCatalogPageDto: UpdateCatalogPageDto) {
+    try {
+      const company = await this.prisma.company.findUnique({
+        where: { id: companyId },
+        select: { id: true, name: true, catalogPageUrl: true, catalogPageEnabled: true },
+      });
+
+      if (!company) {
+        throw new NotFoundException('Empresa não encontrada');
+      }
+
+      const updateData: any = {};
+
+      // Validar URL única se estiver sendo alterada
+      if (updateCatalogPageDto.catalogPageUrl !== undefined) {
+        if (updateCatalogPageDto.catalogPageUrl) {
+          // Verificar se a URL já está em uso por outra empresa
+          const existingCompany = await this.prisma.company.findFirst({
+            where: {
+              catalogPageUrl: updateCatalogPageDto.catalogPageUrl,
+              id: { not: companyId },
+            },
+          });
+
+          if (existingCompany) {
+            throw new ConflictException(
+              `A URL "${updateCatalogPageDto.catalogPageUrl}" já está em uso por outra empresa`
+            );
+          }
+        }
+        updateData.catalogPageUrl = updateCatalogPageDto.catalogPageUrl;
+      }
+
+      if (updateCatalogPageDto.catalogPageEnabled !== undefined) {
+        updateData.catalogPageEnabled = updateCatalogPageDto.catalogPageEnabled;
+      }
+
+      const updatedCompany = await this.prisma.company.update({
+        where: { id: companyId },
+        data: updateData,
+        select: {
+          id: true,
+          name: true,
+          catalogPageUrl: true,
+          catalogPageEnabled: true,
+        },
+      });
+
+      this.logger.log(`Catalog page updated for company ${companyId}: ${JSON.stringify(updateData)}`);
+
+      return {
+        success: true,
+        ...updatedCompany,
+        message: 'Configurações da página de catálogo atualizadas com sucesso!',
+      };
+    } catch (error) {
+      this.logger.error('Error updating catalog page:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Obter configurações da página de catálogo
+   */
+  async getCatalogPageConfig(companyId: string) {
+    try {
+      const company = await this.prisma.company.findUnique({
+        where: { id: companyId },
+        select: {
+          id: true,
+          name: true,
+          catalogPageUrl: true,
+          catalogPageEnabled: true,
+        },
+      });
+
+      if (!company) {
+        throw new NotFoundException('Empresa não encontrada');
+      }
+
+      return {
+        catalogPageUrl: company.catalogPageUrl,
+        catalogPageEnabled: company.catalogPageEnabled,
+        pageUrl: company.catalogPageUrl
+          ? `/catalogo/${company.catalogPageUrl}`
+          : null,
+      };
+    } catch (error) {
+      this.logger.error('Error getting catalog page config:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Obter dados públicos do catálogo por URL
+   */
+  async getPublicCatalogData(url: string) {
+    try {
+      const company = await this.prisma.company.findFirst({
+        where: {
+          catalogPageUrl: url,
+          catalogPageEnabled: true,
+        },
+        select: {
+          id: true,
+          name: true,
+          phone: true,
+          email: true,
+          logoUrl: true,
+          brandColor: true,
+          plan: true,
+          street: true,
+          number: true,
+          district: true,
+          city: true,
+          state: true,
+          zipCode: true,
+          complement: true,
+          products: {
+            where: {
+              stockQuantity: {
+                gt: 0, // Apenas produtos com estoque
+              },
+            },
+            select: {
+              id: true,
+              name: true,
+              photos: true,
+              price: true,
+              stockQuantity: true,
+              size: true,
+              category: true,
+            },
+            orderBy: {
+              name: 'asc',
+            },
+          },
+        },
+      });
+
+      if (!company) {
+        throw new NotFoundException(
+          'Página de catálogo não encontrada ou não está habilitada'
+        );
+      }
+
+      // Verificar se a empresa tem plano PRO
+      if (company.plan !== PlanType.PRO) {
+        throw new NotFoundException(
+          'O catálogo público está disponível apenas para empresas com plano PRO'
+        );
+      }
+
+      // Formatar endereço completo
+      const addressParts = [
+        company.street,
+        company.number,
+        company.district,
+        company.city,
+        company.state,
+        company.zipCode,
+      ].filter(Boolean);
+
+      const fullAddress = addressParts.join(', ');
+
+      return {
+        company: {
+          id: company.id,
+          name: company.name,
+          phone: company.phone,
+          email: company.email,
+          logoUrl: company.logoUrl,
+          brandColor: company.brandColor,
+          address: fullAddress,
+        },
+        products: company.products.map((product) => ({
+          ...product,
+          price: product.price.toString(),
+        })),
+      };
+    } catch (error) {
+      this.logger.error('Error getting public catalog data:', error);
       throw error;
     }
   }

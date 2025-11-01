@@ -512,6 +512,9 @@ export class FiscalApiService {
         throw new BadRequestException('API Key do Focus NFe não configurada');
       }
 
+      // Validar dados obrigatórios da empresa para emissão de NF-e
+      this.validateCompanyFiscalData(company);
+
       // Por enquanto, usar apenas Focus NFe para NF-e
       return await this.generateNFeFocusNFe(request, company);
     } catch (error) {
@@ -529,6 +532,47 @@ export class FiscalApiService {
         error: error.message || 'Erro ao gerar NF-e',
         errors: [error.message],
       };
+    }
+  }
+
+  /**
+   * Validar dados fiscais obrigatórios da empresa para emissão de NF-e
+   */
+  private validateCompanyFiscalData(company: any): void {
+    const errors: string[] = [];
+
+    if (!company.cnpj) {
+      errors.push('CNPJ da empresa é obrigatório');
+    }
+
+    if (!company.name) {
+      errors.push('Nome da empresa é obrigatório');
+    }
+
+    if (!company.street) {
+      errors.push('Endereço da empresa é obrigatório');
+    }
+
+    if (!company.number) {
+      errors.push('Número do endereço da empresa é obrigatório');
+    }
+
+    if (!company.city) {
+      errors.push('Cidade da empresa é obrigatória');
+    }
+
+    if (!company.state) {
+      errors.push('Estado da empresa é obrigatório');
+    }
+
+    if (!company.zipCode) {
+      errors.push('CEP da empresa é obrigatório');
+    }
+
+    if (errors.length > 0) {
+      throw new BadRequestException(
+        `Dados fiscais incompletos da empresa: ${errors.join(', ')}. Configure na seção de empresas.`
+      );
     }
   }
 
@@ -551,22 +595,39 @@ export class FiscalApiService {
         finalidade_emissao: '1', // 1=Normal
         cnpj_emitente: company.cnpj.replace(/\D/g, ''),
         
+        // Dados do emitente (obrigatórios)
+        razao_social: company.name,
+        nome_fantasia: company.name,
+        endereco: company.street || '',
+        numero: company.number || 'S/N',
+        complemento: company.complement || '',
+        bairro: company.district || '',
+        municipio: company.city || '',
+        uf: company.state || '',
+        cep: company.zipCode?.replace(/\D/g, '') || '',
+        telefone: company.phone?.replace(/\D/g, '') || '',
+        inscricao_estadual: company.stateRegistration || 'ISENTO',
+        inscricao_estadual_indicador: company.stateRegistration ? '1' : '9', // 1=Contribuinte ICMS, 9=Isento
+        ...(company.cnae && { cnae: company.cnae }),
+        ...(company.municipioIbge && { codigo_municipio: company.municipioIbge }),
+        
+        // Regime tributário (CRT)
+        regime_tributario: this.mapTaxRegime(company.taxRegime),
+        
         // Dados do destinatário
         nome_destinatario: request.recipient.name,
         [isCompany ? 'cnpj_destinatario' : 'cpf_destinatario']: recipientDoc,
         ...(request.recipient.email && { email_destinatario: request.recipient.email }),
         ...(request.recipient.phone && { telefone_destinatario: request.recipient.phone.replace(/\D/g, '') }),
         
-        // Endereço do destinatário (se fornecido)
-        ...(request.recipient.address && {
-          logradouro_destinatario: request.recipient.address.street || '',
-          numero_destinatario: request.recipient.address.number || 'S/N',
-          bairro_destinatario: request.recipient.address.district || '',
-          municipio_destinatario: request.recipient.address.city || '',
-          uf_destinatario: request.recipient.address.state || '',
-          cep_destinatario: request.recipient.address.zipCode?.replace(/\D/g, '') || '',
-          ...(request.recipient.address.complement && { complemento_destinatario: request.recipient.address.complement }),
-        }),
+        // Endereço do destinatário (obrigatório para NF-e)
+        logradouro_destinatario: request.recipient.address?.street || '',
+        numero_destinatario: request.recipient.address?.number || 'S/N',
+        complemento_destinatario: request.recipient.address?.complement || '',
+        bairro_destinatario: request.recipient.address?.district || '',
+        municipio_destinatario: request.recipient.address?.city || '',
+        uf_destinatario: request.recipient.address?.state || '',
+        cep_destinatario: request.recipient.address?.zipCode?.replace(/\D/g, '') || '',
 
         // Indicadores
         indicador_inscricao_estadual_destinatario: '9', // 9=Não contribuinte
@@ -658,6 +719,22 @@ export class FiscalApiService {
         error.message || 'Erro ao gerar NF-e no Focus NFe'
       );
     }
+  }
+
+  /**
+   * Mapear regime tributário para código CRT (Código de Regime Tributário)
+   */
+  private mapTaxRegime(taxRegime: string | null | undefined): string {
+    if (!taxRegime) return '1'; // Default: Simples Nacional
+    
+    const mapping = {
+      'SIMPLES_NACIONAL': '1', // 1=Simples Nacional
+      'LUCRO_PRESUMIDO': '2',  // 2=Lucro Presumido
+      'LUCRO_REAL': '3',       // 3=Lucro Real
+      'MEI': '4',              // 4=MEI
+    };
+    
+    return mapping[taxRegime.toUpperCase() as keyof typeof mapping] || '1';
   }
 
   /**

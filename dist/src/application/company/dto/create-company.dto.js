@@ -144,7 +144,7 @@ __decorate([
     }),
     (0, class_validator_1.IsOptional)(),
     (0, class_validator_1.IsEnum)(client_1.PlanType, {
-        message: 'Plano deve ser BASIC, PLUS ou PRO',
+        message: 'Plano deve ser BASIC, PLUS, PRO ou TRIAL_7_DAYS',
     }),
     __metadata("design:type", String)
 ], CreateCompanyDto.prototype, "plan", void 0);

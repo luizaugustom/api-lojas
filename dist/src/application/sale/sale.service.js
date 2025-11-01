@@ -279,7 +279,7 @@ let SaleService = SaleService_1 = class SaleService {
                             ncm: item.product.ncm || '99999999',
                             cfop: item.product.cfop || '5102',
                         })),
-                        customFooter: completeSale.company.customFooter || 'MONT TECNOLOGIA, SEU PARCEIRO DE SUCESSO !! 🚀🚀',
+                        customFooter: completeSale.company.customFooter,
                     };
                     await this.printerService.printNFCe(nfcePrintData, companyId);
                     this.logger.log(`NFCe printed successfully for sale: ${completeSale.id}`);
@@ -720,7 +720,7 @@ let SaleService = SaleService_1 = class SaleService {
                         ncm: item.product.ncm || '99999999',
                         cfop: item.product.cfop || '5102',
                     })),
-                    customFooter: sale.company.customFooter || 'MONT TECNOLOGIA, SEU PARCEIRO DE SUCESSO !! 🚀🚀',
+                    customFooter: sale.company.customFooter,
                 };
                 await this.printerService.printNFCe(nfcePrintData, sale.companyId);
             }
@@ -763,7 +763,7 @@ let SaleService = SaleService_1 = class SaleService {
                         ncm: item.product.ncm || '99999999',
                         cfop: item.product.cfop || '5102',
                     })),
-                    customFooter: sale.company.customFooter || 'MONT TECNOLOGIA, SEU PARCEIRO DE SUCESSO !! 🚀🚀',
+                    customFooter: sale.company.customFooter,
                 };
                 await this.printerService.printNFCe(nfcePrintData, sale.companyId);
             }

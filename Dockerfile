@@ -1,18 +1,18 @@
-# Build stage
-FROM node:18-bullseye-slim AS builder
+# ============================================
+# BUILD STAGE
+# ============================================
+FROM node:20-bullseye-slim AS builder
 
 WORKDIR /app
 
-# Copy package files
+# Copy dependency files first for better caching
 COPY package*.json ./
 COPY prisma ./prisma/
 
-# Install system build deps required for native modules (node-gyp)
-# python3, make, g++, build-base and libusb-dev are needed for packages like `usb`
+# Install system build dependencies for native modules
 RUN apt-get update \
   && apt-get install -y --no-install-recommends \
     python3 \
-    python3-pip \
     make \
     g++ \
     build-essential \
@@ -21,40 +21,44 @@ RUN apt-get update \
     pkg-config \
     ca-certificates \
     openssl \
-    libssl1.1 \
   && rm -rf /var/lib/apt/lists/* \
   && ln -sf /usr/bin/python3 /usr/bin/python
 
-# Ensure node-gyp will use python
+# Set environment for node-gyp
 ENV PYTHON=/usr/bin/python
 ENV npm_config_python=/usr/bin/python
 
-# Install all dependencies (needed to build the app)
-RUN npm ci && npm cache clean --force
+# Install dependencies with clean cache
+RUN npm ci --prefer-offline --no-audit && npm cache clean --force
 
-# Generate Prisma client
+# Generate Prisma Client
 RUN npx prisma generate
 
 # Copy source code
 COPY . .
 
-# Build the application
+# Build application
 RUN npm run build
 
-# Remove devDependencies from node_modules so we only ship production deps
+# Prune devDependencies for production
 RUN npm prune --production
 
-# Production stage
-FROM node:18-bullseye-slim AS production
+# ============================================
+# PRODUCTION STAGE
+# ============================================
+FROM node:20-bullseye-slim AS production
 
 WORKDIR /app
 
-# Install dumb-init for proper signal handling and common runtime deps
+# Install runtime dependencies only
 RUN apt-get update \
-  && apt-get install -y --no-install-recommends dumb-init ca-certificates libssl1.1 \
+  && apt-get install -y --no-install-recommends \
+    dumb-init \
+    ca-certificates \
+    curl \
   && rm -rf /var/lib/apt/lists/*
 
-# Create non-root user and group
+# Create non-root user
 RUN groupadd -g 1001 nodejs || true \
   && useradd -u 1001 -r -g nodejs -m -d /home/nestjs -s /sbin/nologin nestjs || true
 
@@ -63,22 +67,23 @@ COPY --from=builder --chown=nestjs:nodejs /app/dist ./dist
 COPY --from=builder --chown=nestjs:nodejs /app/node_modules ./node_modules
 COPY --from=builder --chown=nestjs:nodejs /app/package*.json ./
 COPY --from=builder --chown=nestjs:nodejs /app/prisma ./prisma
+COPY --from=builder --chown=nestjs:nodejs /app/healthcheck.js ./healthcheck.js
 
 # Create uploads directory
-# Create uploads directory and set ownership
 RUN mkdir -p /app/uploads && chown nestjs:nodejs /app/uploads
 
 # Switch to non-root user
-# Switch to non-root user
 USER nestjs
 
-# Expose port
+# Expose port (will be overridden by HOST/PORT env vars)
 EXPOSE 3000
 
-# Health check
-HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
-  CMD node healthcheck.js
+# Health check with better defaults
+HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=3 \
+  CMD node healthcheck.js || exit 1
 
-# Start the application
+# Use dumb-init for proper signal handling
 ENTRYPOINT ["dumb-init", "--"]
+
+# Start application
 CMD ["node", "dist/src/main.js"]

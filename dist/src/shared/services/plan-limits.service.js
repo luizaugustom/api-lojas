@@ -37,6 +37,12 @@ let PlanLimitsService = class PlanLimitsService {
                     maxSellers: null,
                     maxBillsToPay: null,
                 };
+            case client_1.PlanType.TRIAL_7_DAYS:
+                return {
+                    maxProducts: 800,
+                    maxSellers: 2,
+                    maxBillsToPay: 15,
+                };
             default:
                 return {
                     maxProducts: 250,

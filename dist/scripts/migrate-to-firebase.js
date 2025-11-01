@@ -90,16 +90,17 @@ async function updateDatabaseReferences(oldUrl, newUrl, dryRun) {
     const productsToUpdate = await prisma.product.findMany({
         where: {
             photos: {
-                has: oldUrl,
+                equals: oldUrl,
             },
         },
     });
     if (!dryRun) {
         for (const product of productsToUpdate) {
-            const updatedPhotos = product.photos.map(photo => photo === oldUrl ? newUrl : photo);
+            const photosArray = Array.isArray(product.photos) ? product.photos : [];
+            const updatedPhotos = photosArray.map((photo) => photo === oldUrl ? newUrl : photo);
             await prisma.product.update({
                 where: { id: product.id },
-                data: { photos: updatedPhotos },
+                data: { photos: JSON.stringify(updatedPhotos) },
             });
             updatedCount++;
         }

@@ -30,5 +30,12 @@ describe('BillToPayService', () => {
         expect(prismaMock.billToPay.delete).toHaveBeenCalled();
         expect(result).toHaveProperty('message');
     });
+    it('should delete paid bill', async () => {
+        prismaMock.billToPay.findUnique.mockResolvedValue({ id: 'b3', isPaid: true });
+        prismaMock.billToPay.delete.mockResolvedValue({});
+        const result = await service.remove('b3');
+        expect(prismaMock.billToPay.delete).toHaveBeenCalled();
+        expect(result).toHaveProperty('message');
+    });
 });
 //# sourceMappingURL=bill-to-pay.service.spec.js.map

@@ -1,9 +1,14 @@
-import { Injectable, Logger, NotFoundException, BadRequestException } from '@nestjs/common';
+import { Injectable, Logger, NotFoundException, BadRequestException, Inject, forwardRef } from '@nestjs/common';
 import { PrismaService } from '../../infrastructure/database/prisma.service';
 import { CreateBudgetDto } from './dto/create-budget.dto';
-import { UpdateBudgetDto } from './dto/update-budget.dto';
+import { UpdateBudgetDto, BudgetStatus } from './dto/update-budget.dto';
 import { PrinterService } from '../printer/printer.service';
+import { SaleService } from '../sale/sale.service';
+import { PaymentMethod } from '../sale/dto/payment-method.dto';
 import * as PDFDocument from 'pdfkit';
+import axios from 'axios';
+import * as fs from 'fs';
+import * as path from 'path';
 
 export interface BudgetPrintData {
   company: {
@@ -12,6 +17,7 @@ export interface BudgetPrintData {
     address?: string;
     phone?: string;
     email?: string;
+    logoUrl?: string;
   };
   budget: {
     id: string;
@@ -47,6 +53,8 @@ export class BudgetService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly printerService: PrinterService,
+    @Inject(forwardRef(() => SaleService))
+    private readonly saleService: SaleService,
   ) {}
 
   async create(companyId: string, sellerId: string | undefined, createBudgetDto: CreateBudgetDto) {
@@ -165,6 +173,7 @@ export class BudgetService {
             district: true,
             phone: true,
             email: true,
+            logoUrl: true,
           },
         },
       },
@@ -259,6 +268,7 @@ export class BudgetService {
             state: true,
             phone: true,
             email: true,
+            logoUrl: true,
           },
         },
       },
@@ -273,6 +283,73 @@ export class BudgetService {
 
   async update(id: string, companyId: string, updateBudgetDto: UpdateBudgetDto) {
     const budget = await this.findOne(id, companyId);
+    const oldStatus = budget.status;
+
+    // Se o status foi alterado para approved, criar venda automaticamente
+    if (updateBudgetDto.status === BudgetStatus.APPROVED && oldStatus !== BudgetStatus.APPROVED) {
+      this.logger.log(`Budget ${id} status changed to approved, creating sale automatically`);
+
+      // Verificar se o orçamento já tem vendedor associado
+      if (!budget.sellerId) {
+        throw new BadRequestException('Orçamento deve ter um vendedor associado para ser aprovado e gerar venda');
+      }
+
+      // Verificar se já existe uma venda para este orçamento
+      const existingSale = await this.prisma.sale.findFirst({
+        where: {
+          companyId,
+          // Procurar por venda com os mesmos itens e cliente
+          items: {
+            some: {
+              productId: budget.items[0]?.productId,
+            },
+          },
+          clientName: budget.clientName || undefined,
+          clientCpfCnpj: budget.clientCpfCnpj || undefined,
+          saleDate: {
+            gte: new Date(Date.now() - 5 * 60 * 1000), // Últimos 5 minutos
+          },
+        },
+      });
+
+      if (existingSale) {
+        this.logger.warn(`Sale already exists for budget ${id}, skipping automatic creation`);
+      } else {
+        try {
+          // Preparar dados da venda baseados no orçamento
+          const saleItems = budget.items.map(item => ({
+            productId: item.productId,
+            quantity: item.quantity,
+            unitPrice: Number(item.unitPrice),
+            totalPrice: Number(item.totalPrice),
+          }));
+
+          // Criar venda com pagamento em dinheiro (valor total)
+          const createSaleDto = {
+            items: saleItems.map(item => ({
+              productId: item.productId,
+              quantity: item.quantity,
+            })),
+            clientName: budget.clientName,
+            clientCpfCnpj: budget.clientCpfCnpj,
+            paymentMethods: [{
+              method: PaymentMethod.CASH,
+              amount: Number(budget.total),
+            }],
+            totalPaid: Number(budget.total),
+            skipPrint: true, // Não imprimir automaticamente
+          };
+
+          // Criar a venda
+          await this.saleService.create(companyId, budget.sellerId, createSaleDto);
+          this.logger.log(`Sale created automatically for budget ${id}`);
+        } catch (error) {
+          this.logger.error(`Error creating sale for budget ${id}: ${error.message}`, error.stack);
+          // Continuar com a atualização do orçamento mesmo se a venda falhar
+          // O erro será logado mas não interromperá o processo
+        }
+      }
+    }
 
     const updatedBudget = await this.prisma.budget.update({
       where: { id },
@@ -317,6 +394,7 @@ export class BudgetService {
         address: `${budget.company.street || ''}, ${budget.company.number || ''} - ${budget.company.district || ''}`,
         phone: budget.company.phone,
         email: budget.company.email,
+        logoUrl: budget.company.logoUrl,
       },
       budget: {
         id: budget.id,
@@ -355,7 +433,7 @@ export class BudgetService {
   async generatePdf(id: string, companyId?: string): Promise<Buffer> {
     const budget = await this.findOne(id, companyId);
 
-    return new Promise((resolve, reject) => {
+    return new Promise(async (resolve, reject) => {
       try {
         const doc = new PDFDocument({
           size: 'A4',
@@ -374,7 +452,7 @@ export class BudgetService {
         doc.on('error', reject);
 
         // Generate the PDF content
-        this.generatePdfContent(doc, budget);
+        await this.generatePdfContent(doc, budget);
 
         doc.end();
       } catch (error) {
@@ -384,7 +462,7 @@ export class BudgetService {
     });
   }
 
-  private generatePdfContent(doc: PDFKit.PDFDocument, budget: any): void {
+  private async generatePdfContent(doc: PDFKit.PDFDocument, budget: any): Promise<void> {
     const company = budget.company;
     const items = budget.items;
     const date = new Date(budget.budgetDate).toLocaleDateString('pt-BR');
@@ -393,8 +471,51 @@ export class BudgetService {
     let yPosition = doc.y;
 
     // ============================================
-    // HEADER - Informações da Empresa
+    // LOGO DA EMPRESA E TÍTULO
     // ============================================
+    let hasLogo = false;
+    
+    if (company.logoUrl) {
+      try {
+        let logoBuffer: Buffer | null = null;
+        
+        // Tentar baixar a imagem da URL
+        if (company.logoUrl.startsWith('http://') || company.logoUrl.startsWith('https://')) {
+          try {
+            const response = await axios.get(company.logoUrl, { responseType: 'arraybuffer', timeout: 5000 });
+            logoBuffer = Buffer.from(response.data);
+          } catch (error) {
+            this.logger.warn(`Could not download logo from ${company.logoUrl}: ${error.message}`);
+          }
+        } else {
+          // Tentar ler arquivo local
+          try {
+            const filePath = path.join(process.cwd(), 'uploads', company.logoUrl);
+            if (fs.existsSync(filePath)) {
+              logoBuffer = fs.readFileSync(filePath);
+            }
+          } catch (error) {
+            this.logger.warn(`Could not read local logo file: ${error.message}`);
+          }
+        }
+
+        // Se conseguiu obter o buffer, adicionar a logo ao PDF
+        if (logoBuffer) {
+          // Adicionar logo no topo direito
+          doc.image(logoBuffer, 470, yPosition, { 
+            width: 70, 
+            height: 70, 
+            fit: [70, 70]
+          });
+          hasLogo = true;
+        }
+      } catch (error) {
+        this.logger.error(`Error adding logo to PDF: ${error.message}`);
+        // Continua sem a logo se houver erro
+      }
+    }
+
+    // Título centralizado
     doc
       .fontSize(20)
       .font('Helvetica-Bold')
@@ -402,6 +523,11 @@ export class BudgetService {
       .text('ORÇAMENTO', { align: 'center' });
     
     yPosition = doc.y + 10;
+    
+    // Se não tem logo, ajustar a posição para compensar
+    if (!hasLogo) {
+      yPosition -= 10;
+    }
 
     // Divisória após título
     doc

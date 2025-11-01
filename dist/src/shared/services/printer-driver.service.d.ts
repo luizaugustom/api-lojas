@@ -30,6 +30,8 @@ export declare class PrinterDriverService {
         errors: string[];
     }>;
     private installWindowsDrivers;
+    private ensureUsbPrintersConfigured;
+    private findNextUsbPortName;
     private installLinuxDrivers;
     private installMacDrivers;
     private getLinuxPrinterDriver;

@@ -1,0 +1,428 @@
+// Prisma schema para modo desktop/offline (SQLite)
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+// Reutiliza o mesmo modelo do schema principal (copiado)
+// Atenção: Decimal em SQLite é mapeado para texto/numérico pelo Prisma
+
+enum PlanType {
+  BASIC
+  PLUS
+  PRO
+}
+
+enum TaxRegime {
+  SIMPLES_NACIONAL
+  LUCRO_PRESUMIDO
+  LUCRO_REAL
+  MEI
+}
+
+model Admin {
+  id        String   @id @default(uuid())
+  login     String   @unique
+  password  String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  focusNfeApiKey      String?
+  focusNfeEnvironment String? @default("sandbox")
+  ibptToken           String?
+  companies Company[]
+  @@map("admins")
+}
+
+model Company {
+  id              String   @id @default(uuid())
+  name            String
+  login           String   @unique
+  password        String
+  phone           String?
+  cnpj            String   @unique
+  stateRegistration String?
+  municipalRegistration String?
+  email           String   @unique
+  logoUrl         String?
+  brandColor      String?
+  customFooter    String?
+  plan            PlanType @default(BASIC)
+  isActive        Boolean  @default(true)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  zipCode         String?
+  state           String?
+  city            String?
+  district        String?
+  street          String?
+  number          String?
+  complement      String?
+  beneficiaryName String?
+  beneficiaryCpfCnpj String?
+  bankCode        String?
+  bankName        String?
+  agency          String?
+  accountNumber   String?
+  accountType     String?
+  taxRegime           TaxRegime? @default(SIMPLES_NACIONAL)
+  cnae                String?
+  certificatePassword String?
+  nfceSerie           String? @default("1")
+  municipioIbge       String?
+  csc                 String?
+  idTokenCsc          String? @default("000001")
+  autoMessageEnabled  Boolean  @default(false)
+  catalogPageUrl      String?
+  catalogPageEnabled  Boolean  @default(false)
+  adminId         String
+  admin           Admin           @relation(fields: [adminId], references: [id], onDelete: Cascade)
+  sellers         Seller[]
+  products        Product[]
+  sales           Sale[]
+  customers       Customer[]
+  billsToPay      BillToPay[]
+  cashClosures    CashClosure[]
+  fiscalDocuments FiscalDocument[]
+  printers        Printer[]
+  scales          Scale[]
+  installments    Installment[]
+  budgets         Budget[]
+  @@map("companies")
+}
+
+model Seller {
+  id             String   @id @default(uuid())
+  login          String   @unique
+  password       String
+  name           String
+  cpf            String?
+  birthDate      DateTime?
+  email          String?
+  phone          String?
+  commissionRate Decimal  @default(0)
+  hasIndividualCash Boolean @default(false)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+  companyId   String
+  company     Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  sales       Sale[]
+  budgets     Budget[]
+  cashClosures CashClosure[]
+  @@map("sellers")
+}
+
+model Product {
+  id              String   @id @default(uuid())
+  name            String
+  photos          String?
+  barcode         String   @unique
+  size            String?
+  stockQuantity   Int      @default(0)
+  price           Decimal
+  category        String?
+  expirationDate  DateTime?
+  ncm             String?  @default("99999999")
+  cfop            String?  @default("5102")
+  unitOfMeasure   String?  @default("un")
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  companyId       String
+  company         Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  saleItems       SaleItem[]
+  productExchanges ProductExchange[]
+  budgetItems     BudgetItem[]
+  @@map("products")
+}
+
+model Sale {
+  id              String   @id @default(uuid())
+  total           Decimal
+  clientCpfCnpj   String?
+  clientName      String?
+  change          Decimal  @default(0)
+  isInstallment   Boolean  @default(false)
+  saleDate        DateTime @default(now())
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  companyId       String
+  company         Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  sellerId        String
+  seller          Seller @relation(fields: [sellerId], references: [id])
+  items           SaleItem[]
+  paymentMethods  SalePaymentMethod[]
+  exchanges       ProductExchange[]
+  cashClosureId   String?
+  cashClosure     CashClosure? @relation(fields: [cashClosureId], references: [id])
+  installments    Installment[]
+  @@map("sales")
+}
+
+model SalePaymentMethod {
+  id              String   @id @default(uuid())
+  method          String
+  amount          Decimal
+  additionalInfo  String?
+  createdAt       DateTime @default(now())
+  saleId          String
+  sale            Sale @relation(fields: [saleId], references: [id], onDelete: Cascade)
+  @@map("sale_payment_methods")
+}
+
+model SaleItem {
+  id          String  @id @default(uuid())
+  quantity    Int
+  unitPrice   Decimal
+  totalPrice  Decimal
+  createdAt   DateTime @default(now())
+  saleId      String
+  sale        Sale @relation(fields: [saleId], references: [id], onDelete: Cascade)
+  productId   String
+  product     Product @relation(fields: [productId], references: [id])
+  @@map("sale_items")
+}
+
+model Customer {
+  id          String   @id @default(uuid())
+  name        String
+  phone       String?
+  email       String?
+  cpfCnpj     String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  zipCode     String?
+  state       String?
+  city        String?
+  district    String?
+  street      String?
+  number      String?
+  complement  String?
+  companyId   String
+  company     Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  installments Installment[]
+  @@map("customers")
+}
+
+model BillToPay {
+  id              String   @id @default(uuid())
+  title           String
+  barcode         String?
+  paymentInfo     String?
+  dueDate         DateTime
+  amount          Decimal
+  isPaid          Boolean  @default(false)
+  paidAt          DateTime?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  companyId       String
+  company         Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  @@map("bills_to_pay")
+}
+
+model CashClosure {
+  id              String   @id @default(uuid())
+  openingDate     DateTime @default(now())
+  closingDate     DateTime?
+  openingAmount   Decimal  @default(0)
+  closingAmount   Decimal  @default(0)
+  totalSales      Decimal  @default(0)
+  totalWithdrawals Decimal @default(0)
+  isClosed        Boolean  @default(false)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  companyId       String
+  company         Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  sellerId        String?
+  seller          Seller? @relation(fields: [sellerId], references: [id], onDelete: Cascade)
+  sales           Sale[]
+  @@map("cash_closures")
+}
+
+model ProductExchange {
+  id              String   @id @default(uuid())
+  reason          String
+  exchangeDate    DateTime @default(now())
+  originalQuantity Int
+  exchangedQuantity Int
+  createdAt       DateTime @default(now())
+  originalSaleId  String
+  originalSale    Sale @relation(fields: [originalSaleId], references: [id], onDelete: Cascade)
+  productId       String
+  product         Product @relation(fields: [productId], references: [id])
+  @@map("product_exchanges")
+}
+
+model FiscalDocument {
+  id              String   @id @default(uuid())
+  documentType    String
+  documentNumber  String
+  accessKey       String   @unique
+  status          String
+  totalValue      Decimal?
+  supplierName    String?
+  xmlContent      String?
+  pdfUrl          String?
+  qrCodeUrl       String?
+  protocol        String?
+  serieNumber     String?
+  emissionDate    DateTime @default(now())
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  companyId       String
+  company         Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  @@map("fiscal_documents")
+}
+
+model Printer {
+  id              String   @id @default(uuid())
+  name            String
+  type            String
+  connectionInfo  String
+  isConnected     Boolean  @default(false)
+  paperStatus     String   @default("OK")
+  lastStatusCheck DateTime?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  companyId       String
+  company         Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  @@map("printers")
+}
+
+model Scale {
+  id              String   @id @default(uuid())
+  name            String
+  connectionInfo  String
+  isConnected     Boolean  @default(false)
+  lastStatusCheck DateTime?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  companyId       String
+  company         Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  @@map("scales")
+}
+
+model RefreshToken {
+  id         String   @id @default(uuid())
+  tokenHash  String   @unique
+  userId     String
+  role       String
+  createdAt  DateTime @default(now())
+  expiresAt  DateTime
+  revoked    Boolean  @default(false)
+  @@map("refresh_tokens")
+}
+
+model Installment {
+  id              String   @id @default(uuid())
+  installmentNumber Int
+  totalInstallments Int
+  amount          Decimal
+  remainingAmount Decimal
+  dueDate         DateTime
+  isPaid          Boolean  @default(false)
+  paidAt          DateTime?
+  description     String?
+  lastMessageSentAt DateTime?
+  messageCount    Int      @default(0)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  saleId          String
+  sale            Sale @relation(fields: [saleId], references: [id], onDelete: Cascade)
+  customerId      String
+  customer        Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  companyId       String
+  company         Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  payments        InstallmentPayment[]
+  @@map("installments")
+}
+
+model InstallmentPayment {
+  id              String   @id @default(uuid())
+  amount          Decimal
+  paymentDate     DateTime @default(now())
+  paymentMethod   String
+  notes           String?
+  createdAt       DateTime @default(now())
+  installmentId   String
+  installment     Installment @relation(fields: [installmentId], references: [id], onDelete: Cascade)
+  @@map("installment_payments")
+}
+
+model NotificationPreference {
+  id              String   @id @default(uuid())
+  userId          String
+  userRole        String
+  stockAlerts     Boolean  @default(false)
+  billReminders   Boolean  @default(false)
+  weeklyReports   Boolean  @default(false)
+  salesAlerts     Boolean  @default(false)
+  systemUpdates   Boolean  @default(false)
+  emailEnabled    Boolean  @default(false)
+  inAppEnabled    Boolean  @default(false)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  @@unique([userId, userRole])
+  @@map("notification_preferences")
+}
+
+model Notification {
+  id              String   @id @default(uuid())
+  userId          String
+  userRole        String
+  type            String
+  title           String
+  message         String
+  priority        String   @default("normal")
+  category        String?
+  actionUrl       String?
+  actionLabel     String?
+  metadata        String?
+  isRead          Boolean  @default(false)
+  readAt          DateTime?
+  createdAt       DateTime @default(now())
+  expiresAt       DateTime?
+  @@index([userId, userRole, isRead])
+  @@index([createdAt])
+  @@map("notifications")
+}
+
+model Budget {
+  id              String   @id @default(uuid())
+  budgetNumber    Int
+  total           Decimal
+  clientName      String?
+  clientPhone     String?
+  clientEmail     String?
+  clientCpfCnpj   String?
+  notes           String?
+  validUntil      DateTime
+  status          String   @default("pending")
+  budgetDate      DateTime @default(now())
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  companyId       String
+  company         Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  sellerId        String?
+  seller          Seller? @relation(fields: [sellerId], references: [id])
+  items           BudgetItem[]
+  @@map("budgets")
+}
+
+model BudgetItem {
+  id          String  @id @default(uuid())
+  quantity    Int
+  unitPrice   Decimal
+  totalPrice  Decimal
+  createdAt   DateTime @default(now())
+  budgetId    String
+  budget      Budget @relation(fields: [budgetId], references: [id], onDelete: Cascade)
+  productId   String
+  product     Product @relation(fields: [productId], references: [id])
+  @@map("budget_items")
+}
+
+

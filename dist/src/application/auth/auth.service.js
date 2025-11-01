@@ -68,11 +68,20 @@ let AuthService = AuthService_1 = class AuthService {
                 return null;
             }
             let mappedCompanyId = null;
+            let plan = undefined;
             if (role === 'company') {
                 mappedCompanyId = user.id;
+                plan = user.plan;
             }
             else if (role === 'seller') {
                 mappedCompanyId = user.companyId || null;
+                if (mappedCompanyId) {
+                    const company = await this.prisma.company.findUnique({
+                        where: { id: mappedCompanyId },
+                        select: { plan: true },
+                    });
+                    plan = company?.plan;
+                }
             }
             return {
                 id: user.id,
@@ -80,6 +89,7 @@ let AuthService = AuthService_1 = class AuthService {
                 role,
                 companyId: mappedCompanyId,
                 name: user.name || null,
+                plan,
             };
         }
         catch (error) {
@@ -119,6 +129,7 @@ let AuthService = AuthService_1 = class AuthService {
                 role: user.role,
                 companyId: user.companyId,
                 name: user.name,
+                plan: user.plan,
             },
             refresh_token: refreshToken,
         };
@@ -169,6 +180,17 @@ let AuthService = AuthService_1 = class AuthService {
                 expiresAt: new Date(Date.now() + refreshTtlSeconds * 1000),
             },
         });
+        let plan = undefined;
+        if (tokenRecord.role === 'company') {
+            plan = user.plan;
+        }
+        else if (tokenRecord.role === 'seller' && user.companyId) {
+            const company = await this.prisma.company.findUnique({
+                where: { id: user.companyId },
+                select: { plan: true },
+            });
+            plan = company?.plan;
+        }
         return {
             access_token,
             refresh_token: newRefresh,
@@ -178,6 +200,7 @@ let AuthService = AuthService_1 = class AuthService {
                 role: tokenRecord.role,
                 companyId: user.companyId || undefined,
                 name: user.name || undefined,
+                plan,
             },
         };
     }
@@ -216,11 +239,20 @@ let AuthService = AuthService_1 = class AuthService {
                 return null;
             }
             let mappedCompanyId = null;
+            let plan = undefined;
             if (payload.role === 'company') {
                 mappedCompanyId = user.id;
+                plan = user.plan;
             }
             else if (payload.role === 'seller') {
                 mappedCompanyId = user.companyId || null;
+                if (mappedCompanyId) {
+                    const company = await this.prisma.company.findUnique({
+                        where: { id: mappedCompanyId },
+                        select: { plan: true },
+                    });
+                    plan = company?.plan;
+                }
             }
             return {
                 id: user.id,
@@ -228,6 +260,7 @@ let AuthService = AuthService_1 = class AuthService {
                 role: payload.role,
                 companyId: mappedCompanyId,
                 name: user.name || null,
+                plan,
             };
         }
         catch (error) {

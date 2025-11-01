@@ -247,7 +247,7 @@ let SellerService = SellerService_1 = class SellerService {
         if (!seller) {
             throw new common_1.NotFoundException('Vendedor não encontrado');
         }
-        const totalSales = await this.prisma.sale.aggregate({
+        const totalSalesAggregate = await this.prisma.sale.aggregate({
             where: { sellerId: id },
             _sum: {
                 total: true,
@@ -270,11 +270,15 @@ let SellerService = SellerService_1 = class SellerService {
                 id: true,
             },
         });
+        const totalSalesCount = seller._count.sales;
+        const totalRevenue = Number(totalSalesAggregate._sum.total || 0);
+        const averageSaleValue = totalSalesCount > 0 ? totalRevenue / totalSalesCount : 0;
         return {
-            totalSales: seller._count.sales,
-            totalSalesValue: totalSales._sum.total || 0,
+            totalSales: totalSalesCount,
+            totalRevenue: totalRevenue,
+            averageSaleValue: averageSaleValue,
             monthlySales: monthlySales._count.id,
-            monthlySalesValue: monthlySales._sum.total || 0,
+            monthlySalesValue: Number(monthlySales._sum.total || 0),
         };
     }
     async getSellerSales(id, companyId, page = 1, limit = 10) {

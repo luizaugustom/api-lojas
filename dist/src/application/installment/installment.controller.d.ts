@@ -20,8 +20,8 @@ export declare class InstallmentController {
             id: string;
             createdAt: Date;
             amount: import("@prisma/client/runtime/library").Decimal;
-            paymentDate: Date;
             paymentMethod: string;
+            paymentDate: Date;
             notes: string | null;
             installmentId: string;
         }[];
@@ -60,8 +60,8 @@ export declare class InstallmentController {
             id: string;
             createdAt: Date;
             amount: import("@prisma/client/runtime/library").Decimal;
-            paymentDate: Date;
             paymentMethod: string;
+            paymentDate: Date;
             notes: string | null;
             installmentId: string;
         }[];
@@ -100,8 +100,8 @@ export declare class InstallmentController {
             id: string;
             createdAt: Date;
             amount: import("@prisma/client/runtime/library").Decimal;
-            paymentDate: Date;
             paymentMethod: string;
+            paymentDate: Date;
             notes: string | null;
             installmentId: string;
         }[];
@@ -162,8 +162,8 @@ export declare class InstallmentController {
             id: string;
             createdAt: Date;
             amount: import("@prisma/client/runtime/library").Decimal;
-            paymentDate: Date;
             paymentMethod: string;
+            paymentDate: Date;
             notes: string | null;
             installmentId: string;
         }[];
@@ -200,8 +200,8 @@ export declare class InstallmentController {
             id: string;
             createdAt: Date;
             amount: import("@prisma/client/runtime/library").Decimal;
-            paymentDate: Date;
             paymentMethod: string;
+            paymentDate: Date;
             notes: string | null;
             installmentId: string;
         }[];
@@ -239,8 +239,8 @@ export declare class InstallmentController {
                 id: string;
                 createdAt: Date;
                 amount: import("@prisma/client/runtime/library").Decimal;
-                paymentDate: Date;
                 paymentMethod: string;
+                paymentDate: Date;
                 notes: string | null;
                 installmentId: string;
             }[];
@@ -266,8 +266,8 @@ export declare class InstallmentController {
             id: string;
             createdAt: Date;
             amount: import("@prisma/client/runtime/library").Decimal;
-            paymentDate: Date;
             paymentMethod: string;
+            paymentDate: Date;
             notes: string | null;
             installmentId: string;
         };

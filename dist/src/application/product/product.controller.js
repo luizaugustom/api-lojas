@@ -170,6 +170,46 @@ let ProductController = ProductController_1 = class ProductController {
             : photosToDelete ? [photosToDelete] : [];
         return this.productService.updateWithPhotos(id, user.companyId, {}, newPhotos, photosToDeleteArray);
     }
+    async uploadPhotosAndUpdate(id, photos, productData, photosToDeleteBody, user) {
+        this.logger.log(`🚀 Upload and update product ${id} for company: ${user.companyId}`);
+        this.logger.log(`📸 Photos received: ${photos?.length || 0}`);
+        if (photos && photos.length > 3) {
+            throw new common_1.BadRequestException('Máximo de 3 fotos por produto');
+        }
+        let photosToDelete = [];
+        if (photosToDeleteBody) {
+            photosToDelete = Array.isArray(photosToDeleteBody)
+                ? photosToDeleteBody
+                : [photosToDeleteBody];
+        }
+        else if (productData.photosToDelete) {
+            photosToDelete = Array.isArray(productData.photosToDelete)
+                ? productData.photosToDelete
+                : [productData.photosToDelete];
+        }
+        const updateProductDto = {};
+        if (productData.name !== undefined)
+            updateProductDto.name = productData.name;
+        if (productData.barcode !== undefined)
+            updateProductDto.barcode = productData.barcode;
+        if (productData.stockQuantity !== undefined)
+            updateProductDto.stockQuantity = parseInt(productData.stockQuantity);
+        if (productData.price !== undefined)
+            updateProductDto.price = parseFloat(productData.price);
+        if (productData.size !== undefined)
+            updateProductDto.size = productData.size;
+        if (productData.category !== undefined)
+            updateProductDto.category = productData.category;
+        if (productData.expirationDate !== undefined)
+            updateProductDto.expirationDate = productData.expirationDate;
+        if (productData.ncm !== undefined)
+            updateProductDto.ncm = productData.ncm;
+        if (productData.cfop !== undefined)
+            updateProductDto.cfop = productData.cfop;
+        if (productData.unitOfMeasure !== undefined)
+            updateProductDto.unitOfMeasure = productData.unitOfMeasure;
+        return this.productService.updateWithPhotos(id, user.companyId, updateProductDto, photos || [], photosToDelete);
+    }
 };
 exports.ProductController = ProductController;
 __decorate([
@@ -430,6 +470,7 @@ __decorate([
                 expirationDate: { type: 'string' },
                 ncm: { type: 'string' },
                 cfop: { type: 'string' },
+                unitOfMeasure: { type: 'string' },
             },
         },
     }),
@@ -477,6 +518,58 @@ __decorate([
     __metadata("design:paramtypes", [String, Array, Object, Object]),
     __metadata("design:returntype", Promise)
 ], ProductController.prototype, "updateProductPhotos", null);
+__decorate([
+    (0, common_1.Patch)(':id/upload-and-update'),
+    (0, roles_decorator_1.Roles)(roles_decorator_1.UserRole.COMPANY),
+    (0, common_1.UseInterceptors)((0, platform_express_1.FilesInterceptor)('photos', 3), sanitize_update_data_interceptor_1.SanitizeUpdateDataInterceptor),
+    (0, swagger_1.ApiOperation)({
+        summary: 'Atualizar produto com upload de fotos',
+        description: 'Atualiza um produto e faz upload de fotos simultaneamente, similar ao upload-and-create mas para edição'
+    }),
+    (0, swagger_1.ApiConsumes)('multipart/form-data'),
+    (0, swagger_1.ApiBody)({
+        description: 'Fotos e dados do produto para atualização',
+        schema: {
+            type: 'object',
+            properties: {
+                photos: {
+                    type: 'array',
+                    items: {
+                        type: 'string',
+                        format: 'binary',
+                    },
+                    maxItems: 3,
+                    description: 'Máximo de 3 fotos novas'
+                },
+                photosToDelete: {
+                    type: 'array',
+                    items: { type: 'string' },
+                    description: 'URLs das fotos a serem removidas'
+                },
+                name: { type: 'string' },
+                barcode: { type: 'string' },
+                stockQuantity: { type: 'number' },
+                price: { type: 'number' },
+                size: { type: 'string' },
+                category: { type: 'string' },
+                expirationDate: { type: 'string' },
+                ncm: { type: 'string' },
+                cfop: { type: 'string' },
+                unitOfMeasure: { type: 'string' },
+            },
+        },
+    }),
+    (0, swagger_1.ApiResponse)({ status: 200, description: 'Produto atualizado com fotos com sucesso' }),
+    (0, swagger_1.ApiResponse)({ status: 400, description: 'Dados inválidos ou limite de fotos excedido' }),
+    __param(0, (0, common_1.Param)('id', uuid_validation_pipe_1.UuidValidationPipe)),
+    __param(1, (0, common_1.UploadedFiles)()),
+    __param(2, (0, common_1.Body)()),
+    __param(3, (0, common_1.Body)('photosToDelete')),
+    __param(4, (0, current_user_decorator_1.CurrentUser)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String, Array, Object, Object, Object]),
+    __metadata("design:returntype", Promise)
+], ProductController.prototype, "uploadPhotosAndUpdate", null);
 exports.ProductController = ProductController = ProductController_1 = __decorate([
     (0, swagger_1.ApiTags)('product'),
     (0, common_1.Controller)('product'),
