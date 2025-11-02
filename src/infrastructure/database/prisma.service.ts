@@ -33,8 +33,9 @@ function getDatabaseUrlWithPooling(configService: ConfigService, logger: Logger)
     }
     
     // Configurar connection_limit para PostgreSQL
-    // Valor padrão: 10 conexões (ajuste conforme necessário)
-    const connectionLimit = configService.get<string>('DATABASE_CONNECTION_LIMIT') || '10';
+    // Valor padrão: 5 conexões (conservador para evitar esgotamento)
+    // Ajuste conforme necessário através da variável DATABASE_CONNECTION_LIMIT
+    const connectionLimit = configService.get<string>('DATABASE_CONNECTION_LIMIT') || '5';
     
     // Apenas adiciona connection_limit se não existir e for PostgreSQL
     if (url.protocol === 'postgresql:' || url.protocol === 'postgres:') {
@@ -51,6 +52,17 @@ function getDatabaseUrlWithPooling(configService: ConfigService, logger: Logger)
       // Adicionar connect_timeout
       if (!url.searchParams.has('connect_timeout')) {
         url.searchParams.set('connect_timeout', '10');
+      }
+      
+      // Configurações adicionais para melhor gerenciamento de conexões
+      // statement_cache_size reduz o uso de memória e conexões
+      if (!url.searchParams.has('statement_cache_size')) {
+        url.searchParams.set('statement_cache_size', '0'); // 0 = desabilita cache de statements
+      }
+      
+      // keepalive_idle ajuda a detectar conexões mortas mais rapidamente
+      if (!url.searchParams.has('keepalive_idle')) {
+        url.searchParams.set('keepalive_idle', '30');
       }
     }
     
@@ -86,6 +98,20 @@ function isConnectionError(error: unknown): boolean {
   return connectionErrorKeywords.some(keyword => errorMessage.includes(keyword)) ||
          (error instanceof PrismaClientKnownRequestError && 
           (error.code === 'P1001' || error.code === 'P1017'));
+}
+
+/**
+ * Verifica se o erro é de "too many connections"
+ * Nestes casos, não devemos tentar reconectar imediatamente
+ */
+function isTooManyConnectionsError(error: unknown): boolean {
+  if (!(error instanceof Error)) {
+    return false;
+  }
+  
+  const errorMessage = error.message.toLowerCase();
+  return errorMessage.includes('too many database connections') ||
+         errorMessage.includes('remaining connection slots');
 }
 
 /**
@@ -205,8 +231,31 @@ export class PrismaService extends PrismaClient implements OnModuleInit, OnModul
     } catch (error) {
       this.logger.error('Failed to connect to database after retries:', error);
       
-      // Tentar reconectar após 10 segundos em caso de falha inicial
-      if (isConnectionError(error)) {
+      // Se for erro de "too many connections", aguardar mais tempo antes de tentar novamente
+      if (isTooManyConnectionsError(error)) {
+        const waitTime = 30000; // 30 segundos para aguardar que conexões sejam liberadas
+        this.logger.warn(
+          `Erro de muitas conexões detectado. Aguardando ${waitTime / 1000} segundos antes de tentar novamente...`
+        );
+        
+        setTimeout(async () => {
+          try {
+            await retryWithBackoff(
+              async () => {
+                await this.$connect();
+                return true;
+              },
+              this.maxRetries,
+              this.logger,
+              'Reconexão ao banco de dados'
+            );
+            this.logger.log('Reconexão ao banco de dados bem-sucedida');
+          } catch (retryError) {
+            this.logger.error('Falha na reconexão ao banco de dados:', retryError);
+          }
+        }, waitTime);
+      } else if (isConnectionError(error)) {
+        // Para outros erros de conexão, tentar reconectar após 10 segundos
         this.logger.warn('Tentando reconectar ao banco de dados em 10 segundos...');
         setTimeout(async () => {
           try {
