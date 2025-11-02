@@ -1567,15 +1567,15 @@ export class PrinterService {
       this.logger.log(`Printing budget: ${data.budget.id}`);
       
       const content = this.generateBudgetContent(data);
-      const success = await this.sendToPrinter(content, data.company.id);
+      const result = await this.sendToPrinter(content, data.company.id);
       
-      if (success) {
+      if (result.success) {
         this.logger.log(`Budget ${data.budget.id} printed successfully`);
       } else {
         this.logger.warn(`Failed to print budget ${data.budget.id}`);
       }
       
-      return success;
+      return result.success;
     } catch (error) {
       this.logger.error('Error printing budget:', error);
       return false;

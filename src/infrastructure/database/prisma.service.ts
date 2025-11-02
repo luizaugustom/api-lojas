@@ -132,7 +132,6 @@ export class PrismaService extends PrismaClient implements OnModuleInit, OnModul
 
   constructor(private readonly configService: ConfigService) {
     const logger = new Logger(PrismaService.name);
-    this.maxRetries = parseInt(configService.get<string>('DATABASE_RETRY_ATTEMPTS') || '3', 10);
     
     super({
       log: [
@@ -159,6 +158,8 @@ export class PrismaService extends PrismaClient implements OnModuleInit, OnModul
         },
       },
     });
+    
+    this.maxRetries = parseInt(configService.get<string>('DATABASE_RETRY_ATTEMPTS') || '3', 10);
 
     // TODO: Fix Prisma event types
     /*
