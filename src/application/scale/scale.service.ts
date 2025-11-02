@@ -5,6 +5,9 @@ import { ScaleDriverService } from '../../shared/services/scale-driver.service';
 @Injectable()
 export class ScaleService {
   private readonly logger = new Logger(ScaleService.name);
+  // Armazena dispositivos por computador (sem mexer no DB)
+  private clientDevices = new Map<string, { scales: any[]; lastUpdate: Date }>();
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly driver: ScaleDriverService,
@@ -31,8 +34,53 @@ export class ScaleService {
     });
   }
 
-  async detectAvailable() {
+  async detectAvailable(computerId?: string | null) {
+    // Se há um computerId, retorna dispositivos do cliente
+    if (computerId) {
+      const clientData = this.clientDevices.get(computerId);
+      if (clientData) {
+        this.logger.log(`Retornando ${clientData.scales.length} balança(s) do computador ${computerId}`);
+        return clientData.scales;
+      }
+      // Se não encontrou, retorna vazio (dispositivos ainda não foram detectados)
+      this.logger.warn(`Nenhuma balança encontrada para o computador ${computerId}`);
+      return [];
+    }
+    
+    // Comportamento antigo: detecta no servidor (para compatibilidade)
     return await this.driver.detectSystemScales();
+  }
+
+  async registerClientDevices(computerId: string, scales: any[]): Promise<{ success: boolean; message: string }> {
+    try {
+      // Normaliza dados das balanças
+      const normalizedScales = scales.map((s: any) => ({
+        name: s.name || s.Name || 'Balança Desconhecida',
+        port: s.port || s.Port || s.connectionInfo || '',
+        vendor: s.vendor || s.Vendor,
+        modelHint: s.modelHint || s.ModelHint || s.name,
+        connection: (s.connection || s.Connection || 'serial') as 'usb' | 'serial' | 'bluetooth' | 'hid',
+      }));
+
+      // Armazena em memória associado ao computerId
+      this.clientDevices.set(computerId, {
+        scales: normalizedScales,
+        lastUpdate: new Date(),
+      });
+
+      this.logger.log(`Balanças registradas para computador ${computerId}: ${normalizedScales.length} balança(s)`);
+      
+      return {
+        success: true,
+        message: `${normalizedScales.length} balança(s) registrada(s) para este computador`,
+      };
+    } catch (error) {
+      this.logger.error('Erro ao registrar balanças do cliente:', error);
+      return {
+        success: false,
+        message: 'Erro ao registrar balanças',
+      };
+    }
   }
 
   async discover() {

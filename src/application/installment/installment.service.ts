@@ -139,35 +139,41 @@ export class InstallmentService {
       where.customerId = customerId;
     }
 
-    const installments = await this.prisma.installment.findMany({
-      where,
-      include: {
-        sale: {
-          select: {
-            id: true,
-            total: true,
-            saleDate: true,
+    // Usar retry automático para evitar erros de conexão
+    const installments = await this.prisma.withRetry(
+      async () => {
+        return await this.prisma.installment.findMany({
+          where,
+          include: {
+            sale: {
+              select: {
+                id: true,
+                total: true,
+                saleDate: true,
+              },
+            },
+            customer: {
+              select: {
+                id: true,
+                name: true,
+                cpfCnpj: true,
+                phone: true,
+                email: true,
+              },
+            },
+            payments: {
+              orderBy: {
+                paymentDate: 'desc',
+              },
+            },
           },
-        },
-        customer: {
-          select: {
-            id: true,
-            name: true,
-            cpfCnpj: true,
-            phone: true,
-            email: true,
-          },
-        },
-        payments: {
           orderBy: {
-            paymentDate: 'desc',
+            dueDate: 'asc',
           },
-        },
+        });
       },
-      orderBy: {
-        dueDate: 'asc',
-      },
-    });
+      'InstallmentService.findOverdue'
+    );
 
     return installments;
   }

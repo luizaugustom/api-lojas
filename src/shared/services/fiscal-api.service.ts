@@ -111,28 +111,58 @@ export class FiscalApiService {
 
   /**
    * Buscar API Key do Focus NFe configurada pelo admin
+   * Prioridade: 1) Banco de dados (Admin), 2) Variável de ambiente
    */
   private async getFocusNfeApiKey(): Promise<string> {
-    const admin = await this.prisma.admin.findFirst({
-      select: {
-        focusNfeApiKey: true,
-      },
-    });
+    try {
+      const admin = await this.prisma.admin.findFirst({
+        select: {
+          focusNfeApiKey: true,
+        },
+      });
 
-    return admin?.focusNfeApiKey || this.config.apiKey || '';
+      const apiKey = admin?.focusNfeApiKey || this.config.apiKey || '';
+      
+      if (!apiKey || apiKey.trim() === '') {
+        this.logger.warn(
+          'API Key do Focus NFe não encontrada. ' +
+          'Configure em Configurações > Fiscal ou na variável de ambiente FOCUSNFE_API_KEY.'
+        );
+      }
+      
+      return apiKey;
+    } catch (error) {
+      this.logger.error('Erro ao buscar API Key do banco de dados:', error);
+      // Retornar API Key da variável de ambiente como fallback
+      return this.config.apiKey || '';
+    }
   }
 
   /**
    * Buscar ambiente configurado pelo admin
+   * Prioridade: 1) Banco de dados (Admin), 2) Variável de ambiente
    */
   private async getFocusNfeEnvironment(): Promise<'sandbox' | 'production'> {
-    const admin = await this.prisma.admin.findFirst({
-      select: {
-        focusNfeEnvironment: true,
-      },
-    });
+    try {
+      const admin = await this.prisma.admin.findFirst({
+        select: {
+          focusNfeEnvironment: true,
+        },
+      });
 
-    return (admin?.focusNfeEnvironment as 'sandbox' | 'production') || this.config.environment;
+      const environment = (admin?.focusNfeEnvironment as 'sandbox' | 'production') || this.config.environment;
+      
+      if (!environment || (environment !== 'sandbox' && environment !== 'production')) {
+        this.logger.warn(`Ambiente inválido: ${environment}. Usando padrão: ${this.config.environment}`);
+        return this.config.environment;
+      }
+      
+      return environment;
+    } catch (error) {
+      this.logger.error('Erro ao buscar ambiente do banco de dados:', error);
+      // Retornar ambiente da variável de ambiente como fallback
+      return this.config.environment;
+    }
   }
 
   private loadFiscalConfig(): FiscalApiConfig {
@@ -373,6 +403,53 @@ export class FiscalApiService {
   }
 
   private async generateNFCeFocusNFe(request: NFCeRequest): Promise<NFCeResponse> {
+    // Buscar API Key e ambiente do banco de dados (configuração do admin)
+    const apiKey = await this.getFocusNfeApiKey();
+    const environment = await this.getFocusNfeEnvironment();
+    
+    // Validar API Key
+    if (!apiKey || apiKey.trim() === '') {
+      const errorMsg = 'API Key do Focus NFe não configurada. Configure em Configurações > Fiscal ou na variável de ambiente FOCUSNFE_API_KEY.';
+      this.logger.error(errorMsg);
+      throw new BadRequestException(errorMsg);
+    }
+    
+    // Determinar URL base baseado no ambiente
+    const baseUrl = environment === 'production' 
+      ? 'https://api.focusnfe.com.br'
+      : 'https://homologacao.focusnfe.com.br';
+    
+    this.logger.log(`Usando Focus NFe - Ambiente: ${environment}, Base URL: ${baseUrl}`);
+    this.logger.debug(`API Key: ${apiKey.substring(0, 10)}...${apiKey.substring(apiKey.length - 4)}`);
+    
+    // Criar cliente HTTP dinâmico com a API Key do banco
+    const httpClient = axios.create({
+      baseURL: baseUrl,
+      timeout: 30000,
+      headers: {
+        'Content-Type': 'application/json',
+        'User-Agent': 'API-Lojas-SaaS/1.0',
+      },
+      auth: {
+        username: apiKey,
+        password: '',
+      },
+    });
+    
+    // Adicionar interceptor de resposta para melhor tratamento de erros
+    httpClient.interceptors.response.use(
+      (response) => response,
+      (error) => {
+        if (error.response?.status === 401) {
+          const errorMsg = `Erro de autenticação no Focus NFe. Verifique se a API Key está correta e válida. Ambiente: ${environment}`;
+          this.logger.error(errorMsg);
+          this.logger.error(`Detalhes: ${JSON.stringify(error.response?.data || error.message)}`);
+          throw new BadRequestException('Erro de autenticação no Focus NFe. Verifique a configuração da API Key.');
+        }
+        return Promise.reject(error);
+      }
+    );
+    
     const endpoint = `/v2/nfce?ref=${request.saleId}`;
 
     const payload = {
@@ -407,7 +484,7 @@ export class FiscalApiService {
       valor_total_nota: request.totalValue,
     };
 
-    const response: AxiosResponse = await this.httpClient.post(endpoint, payload);
+    const response: AxiosResponse = await httpClient.post(endpoint, payload);
 
     return {
       success: true,
@@ -578,6 +655,53 @@ export class FiscalApiService {
 
   private async generateNFeFocusNFe(request: NFeRequest, company: any): Promise<NFeResponse> {
     try {
+      // Buscar API Key e ambiente do banco de dados (configuração do admin)
+      const apiKey = company.admin.focusNfeApiKey || await this.getFocusNfeApiKey();
+      const environment = company.admin.focusNfeEnvironment || await this.getFocusNfeEnvironment();
+      
+      // Validar API Key
+      if (!apiKey || apiKey.trim() === '') {
+        const errorMsg = 'API Key do Focus NFe não configurada. Configure em Configurações > Fiscal ou na variável de ambiente FOCUSNFE_API_KEY.';
+        this.logger.error(errorMsg);
+        throw new BadRequestException(errorMsg);
+      }
+      
+      // Determinar URL base baseado no ambiente
+      const baseUrl = environment === 'production' 
+        ? 'https://api.focusnfe.com.br'
+        : 'https://homologacao.focusnfe.com.br';
+      
+      this.logger.log(`Usando Focus NFe - Ambiente: ${environment}, Base URL: ${baseUrl}`);
+      this.logger.debug(`API Key: ${apiKey.substring(0, 10)}...${apiKey.substring(apiKey.length - 4)}`);
+      
+      // Criar cliente HTTP dinâmico com a API Key do banco
+      const httpClient = axios.create({
+        baseURL: baseUrl,
+        timeout: 30000,
+        headers: {
+          'Content-Type': 'application/json',
+          'User-Agent': 'API-Lojas-SaaS/1.0',
+        },
+        auth: {
+          username: apiKey,
+          password: '',
+        },
+      });
+      
+      // Adicionar interceptor de resposta para melhor tratamento de erros
+      httpClient.interceptors.response.use(
+        (response) => response,
+        (error) => {
+          if (error.response?.status === 401) {
+            const errorMsg = `Erro de autenticação no Focus NFe. Verifique se a API Key está correta e válida. Ambiente: ${environment}`;
+            this.logger.error(errorMsg);
+            this.logger.error(`Detalhes: ${JSON.stringify(error.response?.data || error.message)}`);
+            throw new BadRequestException('Erro de autenticação no Focus NFe. Verifique a configuração da API Key.');
+          }
+          return Promise.reject(error);
+        }
+      );
+      
       // Endpoint do Focus NFe para NF-e
       const ref = request.referenceId || `nfe_${Date.now()}`;
       const endpoint = `/v2/nfe?ref=${ref}`;
@@ -676,22 +800,9 @@ export class FiscalApiService {
         ...(request.additionalInfo && { informacoes_complementares: request.additionalInfo }),
       };
 
-      // Configurar client HTTP com credenciais do Focus NFe
-      const baseUrl = company.admin.focusNfeEnvironment === 'production'
-        ? 'https://api.focusnfe.com.br'
-        : 'https://homologacao.focusnfe.com.br';
-
-      const response = await axios.post(
-        `${baseUrl}${endpoint}`,
-        payload,
-        {
-          headers: {
-            'Authorization': `Basic ${Buffer.from(company.admin.focusNfeApiKey + ':').toString('base64')}`,
-            'Content-Type': 'application/json',
-          },
-          timeout: 60000, // 60 segundos (NF-e pode demorar mais que NFC-e)
-        }
-      );
+      // Usar httpClient criado no início do método (com timeout maior para NF-e)
+      httpClient.defaults.timeout = 60000; // 60 segundos (NF-e pode demorar mais que NFC-e)
+      const response: AxiosResponse = await httpClient.post(endpoint, payload);
 
       this.logger.log('NFe generated successfully via Focus NFe');
 

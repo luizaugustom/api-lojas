@@ -1,11 +1,139 @@
 import { Injectable, OnModuleInit, OnModuleDestroy, Logger } from '@nestjs/common';
 import { PrismaClient } from '@prisma/client';
+import { ConfigService } from '@nestjs/config';
+import { PrismaClientKnownRequestError } from '@prisma/client/runtime/library';
+
+/**
+ * Obtém a URL do banco de dados com configuração de connection pooling
+ * Adiciona connection_limit para limitar o número de conexões simultâneas
+ * Para connection pooling em produção, recomenda-se usar:
+ * - PgBouncer (connection pooling externo)
+ * - Prisma Data Proxy (Prisma Accelerate)
+ */
+function getDatabaseUrlWithPooling(configService: ConfigService, logger: Logger): string {
+  const databaseUrl = configService.get<string>('DATABASE_URL') || '';
+  
+  if (!databaseUrl) {
+    throw new Error('DATABASE_URL não está configurada');
+  }
+
+  // Se a URL já contém parâmetros de pooling ou é uma URL de proxy, usa diretamente
+  try {
+    const url = new URL(databaseUrl);
+    
+    // Verifica se já tem configurações de pooling ou é um proxy
+    const hasPooling = url.searchParams.has('pgbouncer') || 
+                       url.hostname.includes('pooler') || 
+                       url.hostname.includes('proxy') ||
+                       url.hostname.includes('prisma.net');
+    
+    if (hasPooling) {
+      logger.log('Usando DATABASE_URL com connection pooling configurado');
+      return databaseUrl;
+    }
+    
+    // Configurar connection_limit para PostgreSQL
+    // Valor padrão: 10 conexões (ajuste conforme necessário)
+    const connectionLimit = configService.get<string>('DATABASE_CONNECTION_LIMIT') || '10';
+    
+    // Apenas adiciona connection_limit se não existir e for PostgreSQL
+    if (url.protocol === 'postgresql:' || url.protocol === 'postgres:') {
+      if (!url.searchParams.has('connection_limit')) {
+        url.searchParams.set('connection_limit', connectionLimit);
+        logger.log(`Connection pooling configurado: connection_limit=${connectionLimit}`);
+      }
+      
+      // Adicionar pool_timeout se não existir
+      if (!url.searchParams.has('pool_timeout')) {
+        url.searchParams.set('pool_timeout', '10');
+      }
+      
+      // Adicionar connect_timeout
+      if (!url.searchParams.has('connect_timeout')) {
+        url.searchParams.set('connect_timeout', '10');
+      }
+    }
+    
+    return url.toString();
+  } catch (error) {
+    // URL pode ser de um formato especial (ex: Prisma Data Proxy)
+    logger.log('Usando DATABASE_URL fornecida (formato especial detectado)');
+    return databaseUrl;
+  }
+}
+
+/**
+ * Verifica se o erro é relacionado a conexões do banco de dados
+ */
+function isConnectionError(error: unknown): boolean {
+  if (!(error instanceof Error)) {
+    return false;
+  }
+  
+  const errorMessage = error.message.toLowerCase();
+  const connectionErrorKeywords = [
+    'too many database connections',
+    'remaining connection slots',
+    'connection',
+    'timeout',
+    'econnreset',
+    'enotfound',
+    'etimedout',
+    'socket',
+    'network',
+  ];
+  
+  return connectionErrorKeywords.some(keyword => errorMessage.includes(keyword)) ||
+         (error instanceof PrismaClientKnownRequestError && 
+          (error.code === 'P1001' || error.code === 'P1017'));
+}
+
+/**
+ * Função auxiliar para retry de operações com backoff exponencial
+ */
+async function retryWithBackoff<T>(
+  operation: () => Promise<T>,
+  maxRetries: number,
+  logger: Logger,
+  operationName: string = 'Operation'
+): Promise<T> {
+  let lastError: Error;
+  
+  for (let attempt = 1; attempt <= maxRetries; attempt++) {
+    try {
+      return await operation();
+    } catch (error) {
+      lastError = error as Error;
+      
+      if (isConnectionError(error)) {
+        if (attempt < maxRetries) {
+          const waitTime = Math.min(attempt * 1000, 5000); // Max 5 segundos
+          logger.warn(
+            `${operationName}: Erro de conexão (tentativa ${attempt}/${maxRetries}). ` +
+            `Tentando novamente em ${waitTime}ms...`
+          );
+          await new Promise(resolve => setTimeout(resolve, waitTime));
+          continue;
+        }
+      }
+      
+      // Se não for erro de conexão ou excedeu tentativas, relança o erro
+      throw error;
+    }
+  }
+  
+  throw lastError!;
+}
 
 @Injectable()
 export class PrismaService extends PrismaClient implements OnModuleInit, OnModuleDestroy {
   private readonly logger = new Logger(PrismaService.name);
+  private readonly maxRetries: number;
 
-  constructor() {
+  constructor(private readonly configService: ConfigService) {
+    const logger = new Logger(PrismaService.name);
+    this.maxRetries = parseInt(configService.get<string>('DATABASE_RETRY_ATTEMPTS') || '3', 10);
+    
     super({
       log: [
         {
@@ -25,6 +153,11 @@ export class PrismaService extends PrismaClient implements OnModuleInit, OnModul
           level: 'warn',
         },
       ],
+      datasources: {
+        db: {
+          url: getDatabaseUrlWithPooling(configService, logger),
+        },
+      },
     });
 
     // TODO: Fix Prisma event types
@@ -53,17 +186,94 @@ export class PrismaService extends PrismaClient implements OnModuleInit, OnModul
 
   async onModuleInit() {
     try {
-      await this.$connect();
+      // Tentar conectar com retry automático
+      await retryWithBackoff(
+        async () => {
+          await this.$connect();
+          return true;
+        },
+        this.maxRetries,
+        this.logger,
+        'Conexão inicial ao banco de dados'
+      );
+      
       this.logger.log('Database connected successfully');
+      
+      // Configurar tratamento de erros de conexão
+      this.setupConnectionErrorHandling();
     } catch (error) {
-      this.logger.error('Failed to connect to database:', error);
+      this.logger.error('Failed to connect to database after retries:', error);
+      
+      // Tentar reconectar após 10 segundos em caso de falha inicial
+      if (isConnectionError(error)) {
+        this.logger.warn('Tentando reconectar ao banco de dados em 10 segundos...');
+        setTimeout(async () => {
+          try {
+            await retryWithBackoff(
+              async () => {
+                await this.$connect();
+                return true;
+              },
+              this.maxRetries,
+              this.logger,
+              'Reconexão ao banco de dados'
+            );
+            this.logger.log('Reconexão ao banco de dados bem-sucedida');
+          } catch (retryError) {
+            this.logger.error('Falha na reconexão ao banco de dados:', retryError);
+          }
+        }, 10000);
+      }
+      
       throw error;
     }
   }
 
+  private setupConnectionErrorHandling() {
+    // Interceptar erros de conexão e tentar reconectar
+    process.on('SIGINT', async () => {
+      await this.$disconnect();
+    });
+    
+    process.on('SIGTERM', async () => {
+      await this.$disconnect();
+    });
+  }
+
   async onModuleDestroy() {
-    await this.$disconnect();
-    this.logger.log('Database disconnected');
+    try {
+      await this.$disconnect();
+      this.logger.log('Database disconnected');
+    } catch (error) {
+      this.logger.error('Error disconnecting from database:', error);
+    }
+  }
+  
+  /**
+   * Método auxiliar para executar queries com retry automático
+   * em caso de erro de conexão. Usa retry logic com backoff exponencial.
+   */
+  async $executeRawWithRetry<T>(
+    query: string,
+    ...values: any[]
+  ): Promise<T> {
+    return retryWithBackoff(
+      () => this.$executeRawUnsafe(query, ...values) as Promise<T>,
+      this.maxRetries,
+      this.logger,
+      `$executeRaw: ${query.substring(0, 50)}...`
+    );
+  }
+  
+  /**
+   * Wrapper para operações do Prisma com retry automático
+   * Use este método quando precisar de retry explícito em operações críticas
+   */
+  async withRetry<T>(
+    operation: () => Promise<T>,
+    operationName: string = 'Operação do banco de dados'
+  ): Promise<T> {
+    return retryWithBackoff(operation, this.maxRetries, this.logger, operationName);
   }
 
   async cleanDatabase() {

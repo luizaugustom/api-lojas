@@ -103,6 +103,17 @@ export interface CashClosureReportData {
   }>;
 }
 
+export interface PrintResult {
+  success: boolean;
+  error?: string;
+  details?: {
+    printerName?: string;
+    printerSource?: string;
+    status?: string;
+    reason?: string;
+  };
+}
+
 @Injectable()
 export class PrinterService {
   private readonly logger = new Logger(PrinterService.name);
@@ -110,6 +121,8 @@ export class PrinterService {
   private readonly printerRetryAttempts: number;
   private lastPrinterCheck: Date | null = null;
   private availablePrinters: SystemPrinter[] = [];
+  // Armazena dispositivos por computador (sem mexer no DB)
+  private clientDevices = new Map<string, { printers: SystemPrinter[]; lastUpdate: Date }>();
 
   constructor(
     private readonly configService: ConfigService,
@@ -259,16 +272,163 @@ export class PrinterService {
 
   /**
    * Obtém impressoras disponíveis no sistema
+   * Se computerId for fornecido, retorna dispositivos do computador do cliente
+   * Se companyId for fornecido, também retorna impressoras do banco de dados da empresa
    */
-  async getAvailablePrinters(): Promise<SystemPrinter[]> {
-    // Se não verificou recentemente, redetecta
-    if (!this.lastPrinterCheck || 
-        (new Date().getTime() - this.lastPrinterCheck.getTime()) > 60000) {
-      this.availablePrinters = await this.driverService.detectSystemPrinters();
-      this.lastPrinterCheck = new Date();
+  async getAvailablePrinters(computerId?: string | null, companyId?: string): Promise<SystemPrinter[]> {
+    const printers: SystemPrinter[] = [];
+    
+    // Se há um computerId, retorna dispositivos do cliente (em memória)
+    if (computerId) {
+      const clientData = this.clientDevices.get(computerId);
+      if (clientData && clientData.printers.length > 0) {
+        this.logger.log(`Retornando ${clientData.printers.length} impressora(s) do computador ${computerId}`);
+        printers.push(...clientData.printers);
+      }
     }
     
-    return this.availablePrinters;
+    // Se há companyId, também busca impressoras do banco de dados
+    if (companyId) {
+      try {
+        const dbPrinters = await this.prisma.printer.findMany({
+          where: { companyId },
+          select: {
+            name: true,
+            type: true,
+            connectionInfo: true,
+            isConnected: true,
+          },
+        });
+        
+        // Converte impressoras do banco para formato SystemPrinter
+        const dbSystemPrinters: SystemPrinter[] = dbPrinters.map(p => ({
+          name: p.name,
+          driver: 'Database',
+          port: p.connectionInfo || 'Unknown',
+          status: p.isConnected ? 'online' : 'offline',
+          isDefault: false,
+          connection: (p.type || 'usb') as 'usb' | 'network' | 'bluetooth',
+        }));
+        
+        // Adiciona apenas impressoras que não estão já na lista (evita duplicatas)
+        for (const dbPrinter of dbSystemPrinters) {
+          if (!printers.find(p => p.name === dbPrinter.name)) {
+            printers.push(dbPrinter);
+          }
+        }
+        
+        this.logger.log(`Adicionadas ${dbSystemPrinters.length} impressora(s) do banco de dados para empresa ${companyId}`);
+      } catch (error) {
+        this.logger.warn('Erro ao buscar impressoras do banco:', error);
+      }
+    }
+    
+    // Se não encontrou nenhuma impressora e não há computerId/companyId, detecta no servidor
+    if (printers.length === 0 && !computerId && !companyId) {
+      if (!this.lastPrinterCheck || 
+          (new Date().getTime() - this.lastPrinterCheck.getTime()) > 60000) {
+        this.availablePrinters = await this.driverService.detectSystemPrinters();
+        this.lastPrinterCheck = new Date();
+      }
+      return this.availablePrinters;
+    }
+    
+    // Se não encontrou nenhuma impressora e há computerId, avisa
+    if (printers.length === 0 && computerId) {
+      this.logger.warn(`Nenhum dispositivo encontrado para o computador ${computerId}`);
+    }
+    
+    return printers;
+  }
+
+  /**
+   * Registra dispositivos detectados do computador do cliente
+   * Se companyId for fornecido, salva as impressoras no banco de dados
+   */
+  async registerClientDevices(
+    computerId: string, 
+    printers: any[], 
+    companyId?: string
+  ): Promise<{ success: boolean; message: string; printersCreated?: number }> {
+    try {
+      // Converte para formato SystemPrinter
+      const systemPrinters: SystemPrinter[] = printers.map((p: any) => ({
+        name: p.name || p.Name || 'Impressora Desconhecida',
+        driver: p.driver || p.DriverName || 'Unknown',
+        port: p.port || p.PortName || p.connectionInfo || 'Unknown',
+        status: p.status === 'online' || p.PrinterStatus === 0 ? 'online' : 'offline',
+        isDefault: p.isDefault || false,
+        connection: (p.connection || p.type || 'usb') as 'usb' | 'network' | 'bluetooth',
+      }));
+
+      // Armazena em memória associado ao computerId
+      this.clientDevices.set(computerId, {
+        printers: systemPrinters,
+        lastUpdate: new Date(),
+      });
+
+      let printersCreated = 0;
+
+      // Se companyId foi fornecido, salva as impressoras no banco de dados
+      if (companyId) {
+        for (const printer of systemPrinters) {
+          try {
+            // Verifica se já existe uma impressora com esse nome para essa empresa
+            const existing = await this.prisma.printer.findFirst({
+              where: {
+                name: printer.name,
+                companyId,
+              },
+            });
+
+            if (!existing) {
+              // Cria nova impressora no banco
+              await this.prisma.printer.create({
+                data: {
+                  name: printer.name,
+                  type: printer.connection,
+                  connectionInfo: printer.port,
+                  companyId,
+                  isConnected: printer.status === 'online',
+                  paperStatus: printer.status === 'online' ? 'OK' : 'ERROR',
+                },
+              });
+              printersCreated++;
+              this.logger.log(`Impressora "${printer.name}" salva no banco de dados para empresa ${companyId}`);
+            } else {
+              // Atualiza status da impressora existente
+              await this.prisma.printer.update({
+                where: { id: existing.id },
+                data: {
+                  isConnected: printer.status === 'online',
+                  paperStatus: printer.status === 'online' ? 'OK' : 'ERROR',
+                  lastStatusCheck: new Date(),
+                  connectionInfo: printer.port, // Atualiza porta se mudou
+                },
+              });
+              this.logger.log(`Status da impressora "${printer.name}" atualizado no banco`);
+            }
+          } catch (dbError) {
+            this.logger.warn(`Erro ao salvar impressora "${printer.name}" no banco:`, dbError);
+            // Continua processando outras impressoras mesmo se uma falhar
+          }
+        }
+      }
+
+      this.logger.log(`Dispositivos registrados para computador ${computerId}: ${systemPrinters.length} impressora(s)${companyId ? `, ${printersCreated} nova(s) salva(s) no banco` : ''}`);
+      
+      return {
+        success: true,
+        message: `${systemPrinters.length} impressora(s) registrada(s)${companyId ? `. ${printersCreated} nova(s) salva(s) no banco de dados` : ' em memória'}`,
+        printersCreated,
+      };
+    } catch (error) {
+      this.logger.error('Erro ao registrar dispositivos do cliente:', error);
+      return {
+        success: false,
+        message: 'Erro ao registrar dispositivos',
+      };
+    }
   }
 
   /**
@@ -445,59 +605,145 @@ export class PrinterService {
     });
   }
 
-  async printReceipt(receiptData: ReceiptData, companyId?: string): Promise<boolean> {
+  async printReceipt(receiptData: ReceiptData, companyId?: string): Promise<PrintResult> {
     try {
       const receipt = this.generateReceiptContent(receiptData);
-      const success = await this.sendToPrinter(receipt, companyId);
+      const result = await this.sendToPrinter(receipt, companyId);
       
-      if (success) {
+      if (result.success) {
         this.logger.log(`Receipt printed successfully for sale: ${receiptData.sale.id}`);
       } else {
-        this.logger.warn(`Receipt printing failed for sale: ${receiptData.sale.id}`);
+        this.logger.warn(`Receipt printing failed for sale: ${receiptData.sale.id}: ${result.error}`);
       }
       
-      return success;
+      return result;
     } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : String(error);
       this.logger.error('Error printing receipt:', error);
-      return false;
+      return {
+        success: false,
+        error: `Erro ao imprimir cupom: ${errorMessage}`,
+        details: {
+          reason: `Erro inesperado durante a impressão do cupom: ${errorMessage}`,
+        },
+      };
     }
   }
 
-  async printCashClosureReport(reportData: CashClosureReportData, companyId?: string): Promise<boolean> {
+  async printCashClosureReport(reportData: CashClosureReportData, companyId?: string): Promise<PrintResult> {
     try {
       const report = this.generateCashClosureReport(reportData);
-      const success = await this.sendToPrinter(report, companyId);
+      const result = await this.sendToPrinter(report, companyId);
       
-      if (success) {
+      if (result.success) {
         this.logger.log('Cash closure report printed successfully');
       } else {
-        this.logger.warn('Cash closure report printing failed');
+        this.logger.warn(`Cash closure report printing failed: ${result.error}`);
       }
       
-      return success;
+      return result;
     } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : String(error);
       this.logger.error('Error printing cash closure report:', error);
-      return false;
+      return {
+        success: false,
+        error: `Erro ao imprimir relatório: ${errorMessage}`,
+        details: {
+          reason: `Erro inesperado durante a impressão do relatório de fechamento: ${errorMessage}`,
+        },
+      };
     }
   }
 
-  async printNFCe(nfceData: NFCePrintData, companyId?: string): Promise<boolean> {
+  async printNonFiscalReceipt(receiptData: ReceiptData, companyId?: string, isMocked: boolean = false): Promise<PrintResult> {
+    try {
+      this.logger.log(`Iniciando impressão de cupom não fiscal para venda: ${receiptData.sale.id}${isMocked ? ' (DADOS MOCKADOS)' : ''}`);
+      
+      const receipt = this.generateNonFiscalReceiptContent(receiptData, isMocked);
+      const result = await this.sendToPrinter(receipt, companyId);
+      
+      if (result.success) {
+        this.logger.log(`✅ Cupom não fiscal impresso com sucesso para venda: ${receiptData.sale.id}`);
+      } else {
+        this.logger.warn(`⚠️ Falha ao imprimir cupom não fiscal para venda: ${receiptData.sale.id}. ${result.error}`);
+      }
+      
+      return result;
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      this.logger.error(`❌ Erro ao imprimir cupom não fiscal para venda ${receiptData.sale.id}:`, error);
+      return {
+        success: false,
+        error: `Erro ao imprimir cupom não fiscal: ${errorMessage}`,
+        details: {
+          reason: `Erro inesperado durante a impressão do cupom não fiscal: ${errorMessage}`,
+        },
+      };
+    }
+  }
+
+  async printNFCe(nfceData: NFCePrintData, companyId?: string): Promise<PrintResult> {
     try {
       this.logger.log(`Iniciando impressão de NFCe para venda: ${nfceData.sale.id}`);
       
-      const nfce = await this.generateNFCeContent(nfceData);
-      const success = await this.sendToPrinter(nfce, companyId);
+      // Verificar se é mock (status MOCK ou flag isMock)
+      const isMock = nfceData.fiscal.status === 'MOCK' || (nfceData.fiscal as any).isMock === true;
       
-      if (success) {
-        this.logger.log(`✅ NFCe impressa com sucesso para venda: ${nfceData.sale.id}`);
-      } else {
-        this.logger.warn(`⚠️ Falha ao imprimir NFCe para venda: ${nfceData.sale.id}. Verifique status da impressora.`);
+      if (isMock) {
+        // Se for mock, imprimir cupom não fiscal ao invés de NFCe
+        this.logger.warn(`⚠️ NFCe mockada detectada. Imprimindo cupom não fiscal para venda: ${nfceData.sale.id}`);
+        
+        const receiptData: ReceiptData = {
+          company: {
+            name: nfceData.company.name,
+            cnpj: nfceData.company.cnpj,
+            address: nfceData.company.address,
+          },
+          sale: {
+            id: nfceData.sale.id,
+            date: nfceData.sale.saleDate,
+            total: nfceData.sale.total,
+            paymentMethods: nfceData.sale.paymentMethod,
+            change: nfceData.sale.change,
+          },
+          items: nfceData.items.map(item => ({
+            name: item.productName,
+            quantity: item.quantity,
+            unitPrice: item.unitPrice,
+            totalPrice: item.totalPrice,
+          })),
+          seller: {
+            name: nfceData.sale.sellerName,
+          },
+          client: {
+            name: nfceData.sale.clientName,
+            cpfCnpj: nfceData.sale.clientCpfCnpj,
+          },
+        };
+        
+        return await this.printNonFiscalReceipt(receiptData, companyId, true);
       }
       
-      return success;
+      const nfce = await this.generateNFCeContent(nfceData);
+      const result = await this.sendToPrinter(nfce, companyId);
+      
+      if (result.success) {
+        this.logger.log(`✅ NFCe impressa com sucesso para venda: ${nfceData.sale.id}`);
+      } else {
+        this.logger.warn(`⚠️ Falha ao imprimir NFCe para venda: ${nfceData.sale.id}. ${result.error}`);
+      }
+      
+      return result;
     } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : String(error);
       this.logger.error(`❌ Erro ao imprimir NFCe para venda ${nfceData.sale.id}:`, error);
-      return false;
+      return {
+        success: false,
+        error: `Erro ao imprimir NFC-e: ${errorMessage}`,
+        details: {
+          reason: `Erro inesperado durante a impressão da NFC-e: ${errorMessage}`,
+        },
+      };
     }
   }
 
@@ -560,6 +806,92 @@ export class PrinterService {
     }
     
     receipt += this.centerText('--------------------------------') + '\n\n\n';
+    
+    return receipt;
+  }
+
+  private generateNonFiscalReceiptContent(data: ReceiptData, isMocked: boolean = false): string {
+    const { company, sale, items, seller, client } = data;
+    
+    let receipt = '';
+    
+    // Header
+    receipt += this.centerText(company.name) + '\n';
+    receipt += this.centerText(`CNPJ: ${company.cnpj}`) + '\n';
+    if (company.address) {
+      receipt += this.centerText(company.address) + '\n';
+    }
+    receipt += this.centerText('================================') + '\n';
+    
+    // Aviso importante quando mockado
+    if (isMocked) {
+      receipt += this.centerText('⚠️ AVISO IMPORTANTE ⚠️') + '\n';
+      receipt += this.centerText('================================') + '\n';
+      receipt += this.wrapText('EMPRESA NÃO POSSUI CONFIGURAÇÃO FISCAL COMPLETA PARA EMISSÃO DE NFCe', 32);
+      receipt += this.wrapText('Este é um CUPOM NÃO FISCAL', 32);
+      receipt += this.wrapText('Configure os dados fiscais nas configurações para emitir NFCe válida', 32);
+      receipt += this.centerText('================================') + '\n\n';
+    }
+    
+    receipt += this.centerText('CUPOM NÃO FISCAL') + '\n';
+    receipt += this.centerText('================================') + '\n';
+    
+    // Sale info
+    receipt += `Venda: ${sale.id}\n`;
+    receipt += `Data: ${this.formatDate(sale.date)}\n`;
+    receipt += `Vendedor: ${seller.name}\n`;
+    
+    if (client?.name) {
+      receipt += `Cliente: ${client.name}\n`;
+    }
+    if (client?.cpfCnpj) {
+      receipt += `CPF/CNPJ: ${client.cpfCnpj}\n`;
+    }
+    
+    receipt += this.centerText('================================') + '\n';
+    
+    // Items
+    receipt += 'ITEM DESCRIÇÃO           QTD  V.UNIT  TOTAL\n';
+    receipt += '----------------------------------------\n';
+    
+    items.forEach((item, index) => {
+      const itemNumber = (index + 1).toString().padStart(3);
+      const description = item.name.substring(0, 20).padEnd(20);
+      const quantity = item.quantity.toString().padStart(3);
+      const unitPrice = this.formatCurrency(item.unitPrice).padStart(7);
+      const total = this.formatCurrency(item.totalPrice).padStart(8);
+      
+      receipt += `${itemNumber} ${description} ${quantity} ${unitPrice} ${total}\n`;
+    });
+    
+    receipt += '----------------------------------------\n';
+    
+    // Totals
+    receipt += `TOTAL: ${this.formatCurrency(sale.total).padStart(40)}\n`;
+    
+    // Payment methods
+    receipt += 'FORMAS DE PAGAMENTO:\n';
+    sale.paymentMethods.forEach(method => {
+      receipt += `- ${this.getPaymentMethodName(method)}\n`;
+    });
+    
+    if (sale.change > 0) {
+      receipt += `TROCO: ${this.formatCurrency(sale.change)}\n`;
+    }
+    
+    receipt += this.centerText('================================') + '\n';
+    
+    if (isMocked) {
+      receipt += this.wrapText('NÃO É DOCUMENTO FISCAL', 32);
+      receipt += this.wrapText('Configure dados fiscais para emissão de NFCe', 32);
+      receipt += this.centerText('================================') + '\n';
+    }
+    
+    receipt += this.centerText('OBRIGADO PELA PREFERÊNCIA!') + '\n';
+    receipt += this.centerText('VOLTE SEMPRE!') + '\n';
+    receipt += this.centerText('================================') + '\n';
+    receipt += this.centerText('Sistema: MontShop') + '\n';
+    receipt += '\n\n\n';
     
     return receipt;
   }
@@ -807,7 +1139,7 @@ export class PrinterService {
   /**
    * Envia conteúdo para impressão real
    */
-  private async sendToPrinter(content: string, companyId?: string): Promise<boolean> {
+  private async sendToPrinter(content: string, companyId?: string): Promise<PrintResult> {
     try {
       // Obtém impressora padrão da empresa ou do sistema
       let printerName: string | null = null;
@@ -838,7 +1170,13 @@ export class PrinterService {
         
         if (systemPrinters.length === 0) {
           this.logger.warn('⚠️ Nenhuma impressora detectada no sistema');
-          return false;
+          return {
+            success: false,
+            error: 'Nenhuma impressora detectada no sistema',
+            details: {
+              reason: 'Nenhuma impressora foi encontrada no sistema operacional. Verifique se a impressora está conectada e instalada corretamente.',
+            },
+          };
         }
         
         const defaultPrinter = systemPrinters.find(p => p.isDefault && p.status === 'online');
@@ -856,7 +1194,13 @@ export class PrinterService {
       if (!printerName) {
         this.logger.error('❌ Nenhuma impressora disponível para impressão');
         this.logger.warn('💡 Dica: Cadastre uma impressora em Impressoras ou conecte uma impressora ao sistema');
-        return false;
+        return {
+          success: false,
+          error: 'Nenhuma impressora disponível',
+          details: {
+            reason: 'Nenhuma impressora online foi encontrada. Verifique se existe uma impressora cadastrada no sistema ou conecte uma impressora ao computador.',
+          },
+        };
       }
       
       this.logger.log(`📄 Enviando para impressora: ${printerName} (${printerSource})`);
@@ -865,13 +1209,32 @@ export class PrinterService {
       const status = await this.thermalPrinter.checkPrinterStatus(printerName);
       
       if (!status.online) {
-        this.logger.warn(`⚠️ Impressora ${printerName} está offline: ${status.message}`);
-        return false;
+        const errorMessage = status.message || 'Status desconhecido';
+        this.logger.warn(`⚠️ Impressora ${printerName} está offline: ${errorMessage}`);
+        return {
+          success: false,
+          error: `Impressora "${printerName}" está offline`,
+          details: {
+            printerName,
+            printerSource,
+            status: 'offline',
+            reason: `A impressora "${printerName}" não está disponível. Verifique se ela está ligada, conectada ao computador e configurada corretamente. Erro: ${errorMessage}`,
+          },
+        };
       }
       
-      if (!status.paperOk) {
+      if (!status.paperOk && status.error) {
         this.logger.warn(`⚠️ Problema com papel na impressora ${printerName}`);
-        // Tenta imprimir mesmo assim, pois algumas impressoras não reportam status de papel corretamente
+        return {
+          success: false,
+          error: `Problema detectado na impressora "${printerName}"`,
+          details: {
+            printerName,
+            printerSource,
+            status: 'paper-error',
+            reason: `A impressora "${printerName}" está reportando problemas com papel ou erro de hardware. Verifique se há papel suficiente e se a impressora não está com tampa aberta ou outro erro.`,
+          },
+        };
       }
       
       // Envia para impressão real
@@ -888,15 +1251,40 @@ export class PrinterService {
             data: { lastStatusCheck: new Date() },
           }).catch(err => this.logger.warn('Erro ao atualizar timestamp:', err));
         }
+        
+        return {
+          success: true,
+          details: {
+            printerName,
+            printerSource,
+            status: 'printed',
+          },
+        };
       } else {
         this.logger.error('❌ Falha ao enviar impressão');
+        return {
+          success: false,
+          error: `Falha ao enviar comando de impressão para "${printerName}"`,
+          details: {
+            printerName,
+            printerSource,
+            status: 'print-failed',
+            reason: `O comando de impressão falhou. Pode ser um problema de driver, permissões ou comunicação com a impressora "${printerName}". Verifique se o driver da impressora está instalado corretamente.`,
+          },
+        };
       }
-      
-      return success;
     } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : String(error);
       this.logger.error('❌ Erro ao enviar para impressora:', error);
-      this.logger.error('Stack:', error.stack);
-      return false;
+      this.logger.error('Stack:', error instanceof Error ? error.stack : '');
+      
+      return {
+        success: false,
+        error: `Erro inesperado ao imprimir: ${errorMessage}`,
+        details: {
+          reason: `Ocorreu um erro inesperado durante a impressão: ${errorMessage}. Verifique os logs do sistema para mais detalhes.`,
+        },
+      };
     }
   }
 
@@ -1014,7 +1402,7 @@ export class PrinterService {
     }
   }
 
-  async testPrinter(id: string): Promise<boolean> {
+  async testPrinter(id: string): Promise<PrintResult> {
     try {
       const printer = await this.prisma.printer.findUnique({
         where: { id },
@@ -1025,19 +1413,26 @@ export class PrinterService {
       }
 
       const testContent = this.generateTestContent();
-      const success = await this.sendToPrinter(testContent);
+      const result = await this.sendToPrinter(testContent, printer.companyId);
       
-      if (success) {
+      if (result.success) {
         await this.updatePrinterStatus(id, {
           isConnected: true,
           paperStatus: 'OK',
         });
       }
       
-      return success;
+      return result;
     } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : String(error);
       this.logger.error('Error testing printer:', error);
-      return false;
+      return {
+        success: false,
+        error: `Erro ao testar impressora: ${errorMessage}`,
+        details: {
+          reason: `Erro ao executar teste de impressão: ${errorMessage}`,
+        },
+      };
     }
   }
 

@@ -205,9 +205,115 @@ export class FiscalService {
     }
   }
 
+  /**
+   * Verifica se a empresa tem configuração fiscal válida para emissão de NFCe
+   */
+  async hasValidFiscalConfig(companyId: string): Promise<boolean> {
+    try {
+      const company = await this.prisma.company.findUnique({
+        where: { id: companyId },
+        select: {
+          cnpj: true,
+          stateRegistration: true,
+          certificatePassword: true,
+          nfceSerie: true,
+          municipioIbge: true,
+          csc: true,
+          idTokenCsc: true,
+          state: true,
+          city: true,
+        },
+      });
+
+      if (!company) {
+        return false;
+      }
+
+      // Verificar campos obrigatórios para emissão de NFCe
+      const hasRequiredFields = !!(
+        company.cnpj &&
+        company.stateRegistration &&
+        company.certificatePassword &&
+        company.nfceSerie &&
+        company.municipioIbge &&
+        company.csc &&
+        company.idTokenCsc &&
+        company.state &&
+        company.city
+      );
+
+      return hasRequiredFields;
+    } catch (error) {
+      this.logger.error('Error checking fiscal config:', error);
+      return false;
+    }
+  }
+
+  /**
+   * Gera dados mockados de NFCe quando a empresa não tem configuração válida
+   */
+  async generateMockNFCe(nfceData: NFCeData): Promise<any> {
+    try {
+      this.logger.log(`Generating MOCK NFCe for sale: ${nfceData.saleId} (empresa sem configuração fiscal)`);
+
+      // Get company data
+      const company = await this.prisma.company.findUnique({
+        where: { id: nfceData.companyId },
+      });
+
+      if (!company) {
+        throw new NotFoundException('Empresa não encontrada');
+      }
+
+      // Gerar número de documento mockado
+      const mockDocumentNumber = Math.floor(Math.random() * 900000) + 100000; // 6 dígitos
+      const mockAccessKey = this.generateMockAccessKey();
+      const mockSerieNumber = company.nfceSerie || '1';
+
+      // Criar documento fiscal mockado (não salva no banco como documento oficial)
+      const mockFiscalDocument = {
+        documentType: 'NFCe',
+        documentNumber: mockDocumentNumber.toString(),
+        accessKey: mockAccessKey,
+        status: 'MOCK',
+        emissionDate: new Date(),
+        serieNumber: mockSerieNumber,
+        qrCodeUrl: null,
+        protocol: null,
+        isMock: true, // Flag para identificar como mock
+      };
+
+      this.logger.log(`Mock NFCe generated successfully for sale: ${nfceData.saleId}`);
+      return mockFiscalDocument;
+    } catch (error) {
+      this.logger.error('Error generating mock NFCe:', error);
+      throw new BadRequestException('Erro ao gerar NFCe mockado');
+    }
+  }
+
+  /**
+   * Gera uma chave de acesso mockada (44 dígitos)
+   */
+  private generateMockAccessKey(): string {
+    // Formato: 44 dígitos numéricos (similar à chave real)
+    let key = '';
+    for (let i = 0; i < 44; i++) {
+      key += Math.floor(Math.random() * 10);
+    }
+    return key;
+  }
+
   async generateNFCe(nfceData: NFCeData): Promise<any> {
     try {
       this.logger.log(`Generating NFCe for sale: ${nfceData.saleId}`);
+
+      // Verificar se a empresa tem configuração fiscal válida
+      const hasValidConfig = await this.hasValidFiscalConfig(nfceData.companyId);
+
+      if (!hasValidConfig) {
+        this.logger.warn(`Empresa ${nfceData.companyId} não tem configuração fiscal válida. Gerando NFCe mockado.`);
+        return await this.generateMockNFCe(nfceData);
+      }
 
       // Get company data
       const company = await this.prisma.company.findUnique({

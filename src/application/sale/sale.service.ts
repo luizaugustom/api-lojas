@@ -250,93 +250,168 @@ export class SaleService {
       // Generate and print NFCe (only if not skipped)
       if (!createSaleDto.skipPrint) {
       try {
-        // Generate NFCe
-        const nfceData: NFCeData = {
-          companyId,
-          clientCpfCnpj: createSaleDto.clientCpfCnpj,
-          clientName: createSaleDto.clientName,
-          items: completeSale.items.map(item => ({
-            productId: item.product.id,
-            productName: item.product.name,
-            barcode: item.product.barcode,
-            quantity: item.quantity,
-            unitPrice: Number(item.unitPrice),
-            totalPrice: Number(item.totalPrice),
-          })),
-          totalValue: Number(completeSale.total),
-          paymentMethod: completeSale.paymentMethods.map(pm => pm.method),
-          saleId: completeSale.id,
-          sellerName: completeSale.seller.name,
-        };
+        // Verificar se a empresa tem configuração fiscal válida ANTES de tentar gerar NFCe
+        const hasValidFiscalConfig = await this.fiscalService.hasValidFiscalConfig(companyId);
+        
+        if (!hasValidFiscalConfig) {
+          // Se não tiver configuração válida, imprimir cupom não fiscal diretamente
+          this.logger.warn(`⚠️ Empresa ${companyId} não tem configuração fiscal válida. Emitindo cupom não fiscal.`);
+          
+          const receiptData: any = {
+            company: {
+              name: completeSale.company.name,
+              cnpj: completeSale.company.cnpj || '',
+              address: `${completeSale.company.street || ''}, ${completeSale.company.number || ''} - ${completeSale.company.district || ''}`,
+            },
+            sale: {
+              id: completeSale.id,
+              date: completeSale.saleDate,
+              total: Number(completeSale.total),
+              paymentMethods: completeSale.paymentMethods.map(pm => pm.method),
+              change: Number(completeSale.change),
+            },
+            items: completeSale.items.map(item => ({
+              name: item.product.name,
+              quantity: item.quantity,
+              unitPrice: Number(item.unitPrice),
+              totalPrice: Number(item.totalPrice),
+            })),
+            seller: {
+              name: completeSale.seller.name,
+            },
+            client: completeSale.clientName || completeSale.clientCpfCnpj ? {
+              name: completeSale.clientName || undefined,
+              cpfCnpj: completeSale.clientCpfCnpj || undefined,
+            } : undefined,
+          };
 
-        const fiscalDocument = await this.fiscalService.generateNFCe(nfceData);
-
-        // Calcular tributos usando IBPT
-        let totalTaxes = 0;
-        try {
-          const taxCalculations = await Promise.all(
-            completeSale.items.map(item =>
-              this.ibptService.calculateProductTax(
-                item.product.ncm || '99999999',
-                Number(item.totalPrice),
-                completeSale.company.state || 'SC'
-              )
-            )
-          );
-          totalTaxes = taxCalculations.reduce((sum, calc) => sum + calc.taxValue, 0);
-          this.logger.log(`Tributos calculados via IBPT: R$ ${totalTaxes.toFixed(2)}`);
-        } catch (error) {
-          this.logger.warn('Erro ao calcular tributos via IBPT, usando estimativa:', error);
-          totalTaxes = Number(completeSale.total) * 0.1665; // Fallback
-        }
-
-        // Print NFCe
-        const nfcePrintData = {
-          company: {
-            name: completeSale.company.name,
-            cnpj: completeSale.company.cnpj,
-            inscricaoEstadual: completeSale.company.stateRegistration,
-            address: `${completeSale.company.street || ''}, ${completeSale.company.number || ''} - ${completeSale.company.district || ''}`,
-            phone: completeSale.company.phone,
-            email: completeSale.company.email,
-          },
-          fiscal: {
-            documentNumber: fiscalDocument.documentNumber,
-            accessKey: fiscalDocument.accessKey,
-            emissionDate: fiscalDocument.emissionDate,
-            status: fiscalDocument.status,
-            protocol: fiscalDocument.protocol || undefined,
-            qrCodeUrl: fiscalDocument.qrCodeUrl || undefined,
-            serieNumber: fiscalDocument.serieNumber || '1',
-          },
-          sale: {
-            id: completeSale.id,
-            total: Number(completeSale.total),
-            clientName: completeSale.clientName,
-            clientCpfCnpj: completeSale.clientCpfCnpj,
+          const printResult = await this.printerService.printNonFiscalReceipt(receiptData, companyId, true);
+          
+          if (!printResult.success) {
+            this.logger.warn(`⚠️ Falha na impressão do cupom não fiscal para venda: ${completeSale.id}`);
+            this.logger.warn(`Erro: ${printResult.error}`);
+          } else {
+            this.logger.log(`✅ Cupom não fiscal impresso com sucesso para venda: ${completeSale.id}`);
+          }
+          
+          // Adicionar aviso na resposta da venda
+          (completeSale as any).warning = 'Cupom não fiscal emitido. Configure os dados fiscais para emitir NFCe válida.';
+        } else {
+          // Se tiver configuração válida, proceder com a geração de NFCe
+          // Generate NFCe
+          const nfceData: NFCeData = {
+            companyId,
+            clientCpfCnpj: createSaleDto.clientCpfCnpj,
+            clientName: createSaleDto.clientName,
+            items: completeSale.items.map(item => ({
+              productId: item.product.id,
+              productName: item.product.name,
+              barcode: item.product.barcode,
+              quantity: item.quantity,
+              unitPrice: Number(item.unitPrice),
+              totalPrice: Number(item.totalPrice),
+            })),
+            totalValue: Number(completeSale.total),
             paymentMethod: completeSale.paymentMethods.map(pm => pm.method),
-            change: Number(completeSale.change),
-            saleDate: completeSale.saleDate,
+            saleId: completeSale.id,
             sellerName: completeSale.seller.name,
-            totalTaxes: totalTaxes,
-          },
-          items: completeSale.items.map(item => ({
-            productName: item.product.name,
-            barcode: item.product.barcode,
-            quantity: item.quantity,
-            unitPrice: Number(item.unitPrice),
-            totalPrice: Number(item.totalPrice),
-            ncm: item.product.ncm || '99999999',
-            cfop: item.product.cfop || '5102',
-          })),
-          customFooter: completeSale.company.customFooter,
-        };
+          };
 
-        await this.printerService.printNFCe(nfcePrintData, companyId);
-        this.logger.log(`NFCe printed successfully for sale: ${completeSale.id}`);
+          const fiscalDocument = await this.fiscalService.generateNFCe(nfceData);
+
+          // Verificar se é mock (status MOCK ou flag isMock)
+          const isMocked = fiscalDocument.status === 'MOCK' || (fiscalDocument as any).isMock === true;
+
+          // Calcular tributos usando IBPT
+          let totalTaxes = 0;
+          try {
+            const taxCalculations = await Promise.all(
+              completeSale.items.map(item =>
+                this.ibptService.calculateProductTax(
+                  item.product.ncm || '99999999',
+                  Number(item.totalPrice),
+                  completeSale.company.state || 'SC'
+                )
+              )
+            );
+            totalTaxes = taxCalculations.reduce((sum, calc) => sum + calc.taxValue, 0);
+            this.logger.log(`Tributos calculados via IBPT: R$ ${totalTaxes.toFixed(2)}`);
+          } catch (error) {
+            this.logger.warn('Erro ao calcular tributos via IBPT, usando estimativa:', error);
+            totalTaxes = Number(completeSale.total) * 0.1665; // Fallback
+          }
+
+          // Print NFCe (ou cupom não fiscal se mockado)
+          const nfcePrintData = {
+            company: {
+              name: completeSale.company.name,
+              cnpj: completeSale.company.cnpj,
+              inscricaoEstadual: completeSale.company.stateRegistration,
+              address: `${completeSale.company.street || ''}, ${completeSale.company.number || ''} - ${completeSale.company.district || ''}`,
+              phone: completeSale.company.phone,
+              email: completeSale.company.email,
+            },
+            fiscal: {
+              documentNumber: fiscalDocument.documentNumber,
+              accessKey: fiscalDocument.accessKey,
+              emissionDate: fiscalDocument.emissionDate,
+              status: fiscalDocument.status,
+              protocol: fiscalDocument.protocol || undefined,
+              qrCodeUrl: fiscalDocument.qrCodeUrl || undefined,
+              serieNumber: fiscalDocument.serieNumber || '1',
+              isMock: isMocked, // Flag para identificar como mock
+            },
+            sale: {
+              id: completeSale.id,
+              total: Number(completeSale.total),
+              clientName: completeSale.clientName,
+              clientCpfCnpj: completeSale.clientCpfCnpj,
+              paymentMethod: completeSale.paymentMethods.map(pm => pm.method),
+              change: Number(completeSale.change),
+              saleDate: completeSale.saleDate,
+              sellerName: completeSale.seller.name,
+              totalTaxes: totalTaxes,
+            },
+            items: completeSale.items.map(item => ({
+              productName: item.product.name,
+              barcode: item.product.barcode,
+              quantity: item.quantity,
+              unitPrice: Number(item.unitPrice),
+              totalPrice: Number(item.totalPrice),
+              ncm: item.product.ncm || '99999999',
+              cfop: item.product.cfop || '5102',
+            })),
+            customFooter: completeSale.company.customFooter,
+          };
+
+          const printResult = await this.printerService.printNFCe(nfcePrintData, companyId);
+          
+          if (!printResult.success) {
+            this.logger.warn(`⚠️ Falha na impressão para venda: ${completeSale.id}`);
+            this.logger.warn(`Erro: ${printResult.error}`);
+            if (printResult.details?.reason) {
+              this.logger.warn(`Detalhes: ${printResult.details.reason}`);
+            }
+            // Continue with sale even if printing fails, but store the error for response
+            throw new BadRequestException(
+              printResult.details?.reason || printResult.error || 'Erro ao imprimir NFC-e'
+            );
+          }
+          
+          if (isMocked) {
+            this.logger.warn(`⚠️ Cupom não fiscal impresso para venda: ${completeSale.id} (empresa sem configuração fiscal)`);
+            (completeSale as any).warning = 'Cupom não fiscal emitido. Configure os dados fiscais para emitir NFCe válida.';
+          } else {
+            this.logger.log(`NFCe printed successfully for sale: ${completeSale.id}`);
+          }
+        }
       } catch (fiscalError) {
+        // Se for erro de impressão (BadRequestException), propaga com a mensagem detalhada
+        if (fiscalError instanceof BadRequestException) {
+          throw fiscalError;
+        }
         this.logger.warn('Failed to generate or print NFCe:', fiscalError);
-        // Continue with sale even if NFCe fails
+        // Continue with sale even if NFCe fails (mas não propaga o erro)
         }
       } else {
         this.logger.log(`NFCe printing skipped for sale: ${completeSale.id} (skipPrint=true)`);
@@ -778,11 +853,61 @@ export class SaleService {
         },
       });
 
-      // Se não houver documento fiscal, gerar um novo
-      if (!fiscalDocument) {
-        this.logger.warn(`No fiscal document found for sale ${id}, attempting to generate new NFCe`);
+      // Verificar se a empresa tem configuração fiscal válida ANTES de tentar gerar NFCe
+      const hasValidFiscalConfig = await this.fiscalService.hasValidFiscalConfig(sale.companyId);
+      
+      // Se não houver documento fiscal ou não tiver configuração válida, gerar cupom não fiscal
+      if (!fiscalDocument || !hasValidFiscalConfig) {
+        if (!hasValidFiscalConfig) {
+          this.logger.warn(`⚠️ Empresa ${sale.companyId} não tem configuração fiscal válida. Emitindo cupom não fiscal para reimpressão.`);
+        } else {
+          this.logger.warn(`No fiscal document found for sale ${id}, attempting to generate new NFCe`);
+        }
         
-        // Gerar NFCe
+        // Se não tiver configuração válida, imprimir cupom não fiscal diretamente
+        if (!hasValidFiscalConfig) {
+          const receiptData: any = {
+            company: {
+              name: sale.company.name,
+              cnpj: sale.company.cnpj || '',
+              address: `${sale.company.street || ''}, ${sale.company.number || ''} - ${sale.company.district || ''}`,
+            },
+            sale: {
+              id: sale.id,
+              date: sale.saleDate,
+              total: Number(sale.total),
+              paymentMethods: sale.paymentMethods.map(pm => pm.method),
+              change: Number(sale.change),
+            },
+            items: sale.items.map(item => ({
+              name: item.product.name,
+              quantity: item.quantity,
+              unitPrice: Number(item.unitPrice),
+              totalPrice: Number(item.totalPrice),
+            })),
+            seller: {
+              name: sale.seller.name,
+            },
+            client: sale.clientName || sale.clientCpfCnpj ? {
+              name: sale.clientName || undefined,
+              cpfCnpj: sale.clientCpfCnpj || undefined,
+            } : undefined,
+          };
+
+          const printResult = await this.printerService.printNonFiscalReceipt(receiptData, sale.companyId, true);
+          
+          if (!printResult.success) {
+            this.logger.warn(`⚠️ Falha na reimpressão do cupom não fiscal para venda: ${sale.id}`);
+            throw new BadRequestException(printResult.error || 'Erro ao reimprimir cupom não fiscal');
+          }
+          
+          return { 
+            message: 'Cupom não fiscal reimpresso com sucesso',
+            warning: 'Cupom não fiscal emitido. Configure os dados fiscais para emitir NFCe válida.'
+          };
+        }
+        
+        // Gerar NFCe (se tiver configuração válida mas não tiver documento)
         const nfceData: NFCeData = {
           companyId: sale.companyId,
           clientCpfCnpj: sale.clientCpfCnpj,
@@ -803,6 +928,9 @@ export class SaleService {
 
         const newFiscalDocument = await this.fiscalService.generateNFCe(nfceData);
         
+        // Verificar se é mock
+        const isMocked = newFiscalDocument.status === 'MOCK' || (newFiscalDocument as any).isMock === true;
+        
         // Imprimir NFCe
         const nfcePrintData = {
           company: {
@@ -821,6 +949,7 @@ export class SaleService {
             protocol: newFiscalDocument.protocol || undefined,
             qrCodeUrl: newFiscalDocument.qrCodeUrl || undefined,
             serieNumber: newFiscalDocument.serieNumber || '1',
+            isMock: isMocked, // Flag para identificar como mock
           },
           sale: {
             id: sale.id,
@@ -845,8 +974,17 @@ export class SaleService {
           customFooter: sale.company.customFooter,
         };
 
-        await this.printerService.printNFCe(nfcePrintData, sale.companyId);
+        const printResult = await this.printerService.printNFCe(nfcePrintData, sale.companyId);
+        
+        if (!printResult.success) {
+          const errorMessage = printResult.details?.reason || printResult.error || 'Erro ao reimprimir NFC-e';
+          this.logger.error(`Erro ao reimprimir NFC-e para venda ${sale.id}: ${errorMessage}`);
+          throw new BadRequestException(errorMessage);
+        }
       } else {
+        // Verificar se é mock
+        const isMocked = fiscalDocument.status === 'MOCK' || (fiscalDocument as any).isMock === true;
+
         // Imprimir com documento fiscal existente
         const nfcePrintData = {
           company: {
@@ -865,6 +1003,7 @@ export class SaleService {
             protocol: fiscalDocument.protocol || undefined,
             qrCodeUrl: fiscalDocument.qrCodeUrl || undefined,
             serieNumber: fiscalDocument.serieNumber || '1',
+            isMock: isMocked, // Flag para identificar como mock
           },
           sale: {
             id: sale.id,
@@ -889,14 +1028,26 @@ export class SaleService {
           customFooter: sale.company.customFooter,
         };
 
-        await this.printerService.printNFCe(nfcePrintData, sale.companyId);
+        const printResult = await this.printerService.printNFCe(nfcePrintData, sale.companyId);
+        
+        if (!printResult.success) {
+          const errorMessage = printResult.details?.reason || printResult.error || 'Erro ao reimprimir NFC-e';
+          this.logger.error(`Erro ao reimprimir NFC-e para venda ${sale.id}: ${errorMessage}`);
+          throw new BadRequestException(errorMessage);
+        }
       }
 
       this.logger.log(`NFCe reprinted successfully for sale: ${sale.id}`);
       return { message: 'NFC-e reimpresso com sucesso' };
     } catch (error) {
+      // Se já é BadRequestException (erro detalhado de impressão), apenas propaga
+      if (error instanceof BadRequestException) {
+        throw error;
+      }
+      // Caso contrário, cria uma mensagem genérica
+      const errorMessage = error instanceof Error ? error.message : 'Erro desconhecido';
       this.logger.error('Error reprinting NFCe:', error);
-      throw new BadRequestException('Erro ao reimprimir NFC-e');
+      throw new BadRequestException(`Erro ao reimprimir NFC-e: ${errorMessage}`);
     }
   }
 }

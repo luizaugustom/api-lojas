@@ -1,4 +1,5 @@
-import { Controller, Get, Post, Body, Param, UseGuards } from '@nestjs/common';
+import { Controller, Get, Post, Body, Param, UseGuards, Req, BadRequestException } from '@nestjs/common';
+import { Request } from 'express';
 import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../../shared/guards/jwt-auth.guard';
 import { RolesGuard } from '../../shared/guards/roles.guard';
@@ -31,8 +32,25 @@ export class ScaleController {
   @Get('available')
   @Roles(UserRole.ADMIN, UserRole.COMPANY)
   @ApiOperation({ summary: 'Listar balanças disponíveis no sistema' })
-  async available() {
-    return this.scaleService.detectAvailable();
+  async available(@CurrentUser() user: any, @Req() req: Request) {
+    const computerId = (req.headers['x-computer-id'] as string) || (req.query.computerId as string) || null;
+    return this.scaleService.detectAvailable(computerId);
+  }
+
+  @Post('register-devices')
+  @Roles(UserRole.ADMIN, UserRole.COMPANY)
+  @ApiOperation({ summary: 'Registrar balanças detectadas do computador do cliente' })
+  @ApiResponse({ status: 200, description: 'Balanças registradas com sucesso' })
+  async registerDevices(
+    @CurrentUser() user: any,
+    @Body() body: { computerId: string; scales: any[] },
+    @Req() req: Request,
+  ) {
+    const computerId = body.computerId || (req.headers['x-computer-id'] as string);
+    if (!computerId) {
+      throw new BadRequestException('Identificador do computador é obrigatório');
+    }
+    return this.scaleService.registerClientDevices(computerId, body.scales || []);
   }
 
   @Post('discover')

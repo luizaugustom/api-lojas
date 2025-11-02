@@ -78,8 +78,12 @@ export class PrinterController {
   @ApiOperation({ summary: 'Testar impressora' })
   @ApiResponse({ status: 200, description: 'Teste realizado com sucesso' })
   async testPrinter(@Param('id', UuidValidationPipe) id: string) {
-    const success = await this.printerService.testPrinter(id);
-    return { success, message: success ? 'Teste realizado com sucesso' : 'Falha no teste da impressora' };
+    const result = await this.printerService.testPrinter(id);
+    if (result.success) {
+      return { success: true, message: 'Teste realizado com sucesso' };
+    } else {
+      throw new BadRequestException(result.details?.reason || result.error || 'Falha no teste da impressora');
+    }
   }
 
   @Post('custom-footer')
@@ -107,8 +111,32 @@ export class PrinterController {
   @Roles(UserRole.ADMIN, UserRole.COMPANY)
   @ApiOperation({ summary: 'Listar impressoras disponíveis no sistema' })
   @ApiResponse({ status: 200, description: 'Lista de impressoras do sistema' })
-  async getAvailablePrinters() {
-    return await this.printerService.getAvailablePrinters();
+  async getAvailablePrinters(@CurrentUser() user: any) {
+    // Retorna impressoras do computador do cliente (se houver) e do banco de dados
+    const computerId = (user as any).computerId;
+    const companyId = user.role === UserRole.ADMIN ? undefined : user.companyId;
+    return await this.printerService.getAvailablePrinters(computerId, companyId);
+  }
+
+  @Post('register-devices')
+  @Roles(UserRole.ADMIN, UserRole.COMPANY)
+  @ApiOperation({ summary: 'Registra impressoras detectadas do computador do cliente' })
+  @ApiResponse({ status: 200, description: 'Impressoras registradas com sucesso' })
+  async registerDevices(
+    @CurrentUser() user: any,
+    @Body() body: { computerId: string; printers: any[] },
+  ) {
+    if (!user.companyId) {
+      throw new BadRequestException('Usuário não possui empresa associada');
+    }
+    
+    const result = await this.printerService.registerClientDevices(
+      body.computerId,
+      body.printers,
+      user.companyId,
+    );
+    
+    return result;
   }
 
   @Get('check-drivers')
@@ -150,15 +178,6 @@ export class PrinterController {
   @ApiResponse({ status: 200, description: 'Fila de impressão' })
   async getPrintQueue(@Param('id', UuidValidationPipe) id: string) {
     return await this.printerService.getPrintQueue(id);
-  }
-
-  @Get(':id/logs')
-  @Roles(UserRole.ADMIN, UserRole.COMPANY)
-  @ApiOperation({ summary: 'Obter logs recentes da impressora' })
-  @ApiResponse({ status: 200, description: 'Logs de impressora' })
-  async getPrinterLogs(@Param('id', UuidValidationPipe) id: string) {
-    const logs = await this.printerService.getPrinterLogs(id);
-    return { logs };
   }
 
   @Delete(':id')

@@ -185,6 +185,15 @@ export class CompanyController {
     return this.companyService.getFiscalConfig(user.companyId);
   }
 
+  @Get('my-company/fiscal-config/valid')
+  @Roles(UserRole.COMPANY)
+  @ApiOperation({ summary: 'Verificar se a empresa tem configuração fiscal válida para emissão de NFCe' })
+  @ApiResponse({ status: 200, description: 'Status da configuração fiscal' })
+  async hasValidFiscalConfig(@CurrentUser() user: any) {
+    const isValid = await this.companyService.hasValidFiscalConfig(user.companyId);
+    return { hasValidConfig: isValid };
+  }
+
   @Post('my-company/upload-certificate')
   @Roles(UserRole.COMPANY)
   @UseInterceptors(FileInterceptor('certificate'))

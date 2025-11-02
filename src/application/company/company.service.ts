@@ -487,6 +487,50 @@ export class CompanyService {
   }
 
   /**
+   * Verifica se a empresa tem configuração fiscal válida para emissão de NFCe
+   */
+  async hasValidFiscalConfig(companyId: string): Promise<boolean> {
+    try {
+      const company = await this.prisma.company.findUnique({
+        where: { id: companyId },
+        select: {
+          cnpj: true,
+          stateRegistration: true,
+          certificatePassword: true,
+          nfceSerie: true,
+          municipioIbge: true,
+          csc: true,
+          idTokenCsc: true,
+          state: true,
+          city: true,
+        },
+      });
+
+      if (!company) {
+        return false;
+      }
+
+      // Verificar campos obrigatórios para emissão de NFCe
+      const hasRequiredFields = !!(
+        company.cnpj &&
+        company.stateRegistration &&
+        company.certificatePassword &&
+        company.nfceSerie &&
+        company.municipioIbge &&
+        company.csc &&
+        company.idTokenCsc &&
+        company.state &&
+        company.city
+      );
+
+      return hasRequiredFields;
+    } catch (error) {
+      this.logger.error('Error checking fiscal config:', error);
+      return false;
+    }
+  }
+
+  /**
    * Upload do certificado digital para o Focus NFe
    */
   async uploadCertificateToFocusNfe(companyId: string, file: Express.Multer.File) {
