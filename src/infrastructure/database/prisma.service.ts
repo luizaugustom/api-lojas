@@ -33,9 +33,10 @@ function getDatabaseUrlWithPooling(configService: ConfigService, logger: Logger)
     }
     
     // Configurar connection_limit para PostgreSQL
-    // Valor padrão: 5 conexões (conservador para evitar esgotamento)
+    // Valor padrão: 2 conexões (muito conservador para evitar esgotamento)
     // Ajuste conforme necessário através da variável DATABASE_CONNECTION_LIMIT
-    const connectionLimit = configService.get<string>('DATABASE_CONNECTION_LIMIT') || '5';
+    // Para ambientes com limite muito restritivo, use DATABASE_CONNECTION_LIMIT=1
+    const connectionLimit = configService.get<string>('DATABASE_CONNECTION_LIMIT') || '2';
     
     // Apenas adiciona connection_limit se não existir e for PostgreSQL
     if (url.protocol === 'postgresql:' || url.protocol === 'postgres:') {
@@ -231,13 +232,20 @@ export class PrismaService extends PrismaClient implements OnModuleInit, OnModul
     } catch (error) {
       this.logger.error('Failed to connect to database after retries:', error);
       
-      // Se for erro de "too many connections", aguardar mais tempo antes de tentar novamente
+      // Se for erro de "too many connections", não bloquear a inicialização
+      // Permitir que a aplicação inicie e Prisma conecte de forma lazy (on-demand)
       if (isTooManyConnectionsError(error)) {
         const waitTime = 30000; // 30 segundos para aguardar que conexões sejam liberadas
         this.logger.warn(
-          `Erro de muitas conexões detectado. Aguardando ${waitTime / 1000} segundos antes de tentar novamente...`
+          `Erro de muitas conexões detectado. A aplicação iniciará em modo lazy connection. ` +
+          `Prisma conectará automaticamente quando necessário. ` +
+          `Tentando reconectar em background em ${waitTime / 1000} segundos...`
         );
         
+        // Configurar tratamento de erros mesmo sem conexão inicial
+        this.setupConnectionErrorHandling();
+        
+        // Tentar reconectar em background
         setTimeout(async () => {
           try {
             await retryWithBackoff(
@@ -251,12 +259,27 @@ export class PrismaService extends PrismaClient implements OnModuleInit, OnModul
             );
             this.logger.log('Reconexão ao banco de dados bem-sucedida');
           } catch (retryError) {
-            this.logger.error('Falha na reconexão ao banco de dados:', retryError);
+            this.logger.warn(
+              'Falha na reconexão ao banco de dados. Prisma continuará em modo lazy connection.'
+            );
           }
         }, waitTime);
-      } else if (isConnectionError(error)) {
-        // Para outros erros de conexão, tentar reconectar após 10 segundos
-        this.logger.warn('Tentando reconectar ao banco de dados em 10 segundos...');
+        
+        // NÃO fazer throw - permite que a aplicação inicie em modo lazy
+        // O Prisma conectará automaticamente quando a primeira query for executada
+        return;
+      }
+      
+      // Para outros erros de conexão, tentar reconectar mas não bloquear
+      if (isConnectionError(error)) {
+        this.logger.warn(
+          'Erro de conexão detectado. A aplicação iniciará e tentará reconectar em background...'
+        );
+        
+        // Configurar tratamento de erros
+        this.setupConnectionErrorHandling();
+        
+        // Tentar reconectar em background após 10 segundos
         setTimeout(async () => {
           try {
             await retryWithBackoff(
@@ -270,11 +293,17 @@ export class PrismaService extends PrismaClient implements OnModuleInit, OnModul
             );
             this.logger.log('Reconexão ao banco de dados bem-sucedida');
           } catch (retryError) {
-            this.logger.error('Falha na reconexão ao banco de dados:', retryError);
+            this.logger.warn(
+              'Falha na reconexão ao banco de dados. Prisma continuará em modo lazy connection.'
+            );
           }
         }, 10000);
+        
+        // NÃO fazer throw para erros de conexão - permite modo lazy
+        return;
       }
       
+      // Para erros não relacionados a conexão, fazer throw normalmente
       throw error;
     }
   }
