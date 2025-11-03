@@ -201,7 +201,7 @@ export class PrinterService {
    * @deprecated - Removida verificação automática. Use checkPrintersStatus() manualmente quando necessário.
    */
   // @Cron(CronExpression.EVERY_30_SECONDS) // DESABILITADO - verificação agora é manual
-  async checkPrintersStatus() {
+  async checkPrintersStatus(companyId?: string) {
     try {
       this.logger.debug('Verificando status das impressoras...');
       
@@ -209,8 +209,9 @@ export class PrinterService {
       this.availablePrinters = await this.driverService.detectSystemPrinters();
       this.lastPrinterCheck = new Date();
       
-      // Atualiza status no banco
-      const dbPrinters = await this.prisma.printer.findMany();
+      // Atualiza status no banco (filtra por companyId se fornecido)
+      const where = companyId ? { companyId } : {};
+      const dbPrinters = await this.prisma.printer.findMany({ where });
       
       for (const dbPrinter of dbPrinters) {
         const sysPrinter = this.availablePrinters.find(p => p.name === dbPrinter.name);

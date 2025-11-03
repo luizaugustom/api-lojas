@@ -165,6 +165,17 @@ export class PrinterController {
     return await this.printerService.installDrivers();
   }
 
+  @Post('check-status')
+  @Roles(UserRole.ADMIN, UserRole.COMPANY)
+  @ApiOperation({ summary: 'Verificar status real de todas as impressoras' })
+  @ApiResponse({ status: 200, description: 'Status das impressoras atualizado' })
+  async checkPrintersStatus(@CurrentUser() user: any) {
+    const companyId = user.role === UserRole.ADMIN ? undefined : user.companyId;
+    await this.printerService.checkPrintersStatus(companyId);
+    // Retorna as impressoras atualizadas
+    return this.printerService.getPrinters(companyId);
+  }
+
   @Post('check-drivers')
   @Roles(UserRole.ADMIN, UserRole.COMPANY)
   @ApiOperation({ summary: 'Verificar e instalar drivers de impressora (DEPRECATED)' })
