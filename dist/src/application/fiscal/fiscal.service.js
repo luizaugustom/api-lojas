@@ -14,13 +14,15 @@ exports.FiscalService = void 0;
 const common_1 = require("@nestjs/common");
 const config_1 = require("@nestjs/config");
 const prisma_service_1 = require("../../infrastructure/database/prisma.service");
+const validation_service_1 = require("../../shared/services/validation.service");
 const fiscal_api_service_1 = require("../../shared/services/fiscal-api.service");
 const xml2js = require("xml2js");
 let FiscalService = FiscalService_1 = class FiscalService {
-    constructor(configService, prisma, fiscalApiService) {
+    constructor(configService, prisma, fiscalApiService, validationService) {
         this.configService = configService;
         this.prisma = prisma;
         this.fiscalApiService = fiscalApiService;
+        this.validationService = validationService;
         this.logger = new common_1.Logger(FiscalService_1.name);
     }
     async generateNFe(nfeData) {
@@ -51,6 +53,15 @@ let FiscalService = FiscalService_1 = class FiscalService {
                 if (!sale.clientCpfCnpj || !sale.clientName) {
                     throw new common_1.BadRequestException('Venda não possui dados de cliente (CPF/CNPJ e Nome são obrigatórios)');
                 }
+                this.validationService.validateCPFOrCNPJ(sale.clientCpfCnpj);
+                for (const item of sale.items) {
+                    if (item.product.ncm && !item.product.ncm.startsWith('99999999')) {
+                        this.validationService.validateNCM(item.product.ncm);
+                    }
+                    if (item.product.cfop) {
+                        this.validationService.validateCFOP(item.product.cfop);
+                    }
+                }
                 nfeRequest = {
                     companyId: nfeData.companyId,
                     recipient: {
@@ -74,6 +85,13 @@ let FiscalService = FiscalService_1 = class FiscalService {
                 saleReference = sale.id;
             }
             else {
+                this.validationService.validateCPFOrCNPJ(nfeData.recipient.document);
+                for (const item of nfeData.items) {
+                    if (item.ncm && !item.ncm.startsWith('99999999')) {
+                        this.validationService.validateNCM(item.ncm);
+                    }
+                    this.validationService.validateCFOP(item.cfop);
+                }
                 nfeRequest = {
                     companyId: nfeData.companyId,
                     recipient: {
@@ -125,14 +143,95 @@ let FiscalService = FiscalService_1 = class FiscalService {
             throw new common_1.BadRequestException('Erro ao gerar NF-e');
         }
     }
-    async generateNFCe(nfceData) {
+    async hasValidFiscalConfig(companyId) {
         try {
-            this.logger.log(`Generating NFCe for sale: ${nfceData.saleId}`);
+            const company = await this.prisma.company.findUnique({
+                where: { id: companyId },
+                select: {
+                    cnpj: true,
+                    stateRegistration: true,
+                    certificatePassword: true,
+                    nfceSerie: true,
+                    municipioIbge: true,
+                    csc: true,
+                    idTokenCsc: true,
+                    state: true,
+                    city: true,
+                },
+            });
+            if (!company) {
+                return false;
+            }
+            const hasRequiredFields = !!(company.cnpj &&
+                company.stateRegistration &&
+                company.certificatePassword &&
+                company.nfceSerie &&
+                company.municipioIbge &&
+                company.csc &&
+                company.idTokenCsc &&
+                company.state &&
+                company.city);
+            return hasRequiredFields;
+        }
+        catch (error) {
+            this.logger.error('Error checking fiscal config:', error);
+            return false;
+        }
+    }
+    async generateMockNFCe(nfceData) {
+        try {
+            this.logger.log(`Generating MOCK NFCe for sale: ${nfceData.saleId} (empresa sem configuração fiscal)`);
             const company = await this.prisma.company.findUnique({
                 where: { id: nfceData.companyId },
             });
             if (!company) {
                 throw new common_1.NotFoundException('Empresa não encontrada');
+            }
+            const mockDocumentNumber = Math.floor(Math.random() * 900000) + 100000;
+            const mockAccessKey = this.generateMockAccessKey();
+            const mockSerieNumber = company.nfceSerie || '1';
+            const mockFiscalDocument = {
+                documentType: 'NFCe',
+                documentNumber: mockDocumentNumber.toString(),
+                accessKey: mockAccessKey,
+                status: 'MOCK',
+                emissionDate: new Date(),
+                serieNumber: mockSerieNumber,
+                qrCodeUrl: null,
+                protocol: null,
+                isMock: true,
+            };
+            this.logger.log(`Mock NFCe generated successfully for sale: ${nfceData.saleId}`);
+            return mockFiscalDocument;
+        }
+        catch (error) {
+            this.logger.error('Error generating mock NFCe:', error);
+            throw new common_1.BadRequestException('Erro ao gerar NFCe mockado');
+        }
+    }
+    generateMockAccessKey() {
+        let key = '';
+        for (let i = 0; i < 44; i++) {
+            key += Math.floor(Math.random() * 10);
+        }
+        return key;
+    }
+    async generateNFCe(nfceData) {
+        try {
+            this.logger.log(`Generating NFCe for sale: ${nfceData.saleId}`);
+            const hasValidConfig = await this.hasValidFiscalConfig(nfceData.companyId);
+            if (!hasValidConfig) {
+                this.logger.warn(`Empresa ${nfceData.companyId} não tem configuração fiscal válida. Gerando NFCe mockado.`);
+                return await this.generateMockNFCe(nfceData);
+            }
+            const company = await this.prisma.company.findUnique({
+                where: { id: nfceData.companyId },
+            });
+            if (!company) {
+                throw new common_1.NotFoundException('Empresa não encontrada');
+            }
+            if (nfceData.clientCpfCnpj) {
+                this.validationService.validateCPFOrCNPJ(nfceData.clientCpfCnpj);
             }
             const nfceRequest = {
                 companyId: nfceData.companyId,
@@ -760,6 +859,7 @@ exports.FiscalService = FiscalService = FiscalService_1 = __decorate([
     (0, common_1.Injectable)(),
     __metadata("design:paramtypes", [config_1.ConfigService,
         prisma_service_1.PrismaService,
-        fiscal_api_service_1.FiscalApiService])
+        fiscal_api_service_1.FiscalApiService,
+        validation_service_1.ValidationService])
 ], FiscalService);
 //# sourceMappingURL=fiscal.service.js.map

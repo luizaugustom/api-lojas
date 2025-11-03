@@ -4,12 +4,14 @@ import { FiscalController } from './fiscal.controller';
 import { PrismaModule } from '../../infrastructure/database/prisma.module';
 import { ConfigModule } from '@nestjs/config';
 import { FiscalApiService } from '../../shared/services/fiscal-api.service';
+import { ValidationModule } from '../../shared/services/validation.module';
 import { MulterModule } from '@nestjs/platform-express';
 
 @Module({
   imports: [
     PrismaModule, 
     ConfigModule,
+    ValidationModule,
     MulterModule.register({
       limits: {
         fileSize: 10 * 1024 * 1024, // 10MB

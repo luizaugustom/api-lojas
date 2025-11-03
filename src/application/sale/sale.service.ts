@@ -1050,4 +1050,155 @@ export class SaleService {
       throw new BadRequestException(`Erro ao reimprimir NFC-e: ${errorMessage}`);
     }
   }
+
+  /**
+   * Gera conteúdo de impressão para venda (para impressão local no cliente)
+   */
+  async getPrintContent(id: string, companyId?: string): Promise<{ content: string; isMock: boolean }> {
+    // Buscar venda com todas as relações necessárias
+    const sale = await this.prisma.sale.findUnique({
+      where: { id },
+      include: {
+        items: {
+          include: {
+            product: true,
+          },
+        },
+        paymentMethods: true,
+        seller: true,
+        company: true,
+      },
+    });
+
+    if (!sale) {
+      throw new BadRequestException('Venda não encontrada');
+    }
+
+    if (companyId && sale.companyId !== companyId) {
+      throw new BadRequestException('Venda não pertence à empresa');
+    }
+    
+    try {
+      // Buscar documento fiscal associado à venda
+      const fiscalDocument = await this.prisma.fiscalDocument.findFirst({
+        where: {
+          companyId: sale.companyId,
+        },
+        orderBy: {
+          createdAt: 'desc',
+        },
+      });
+
+      // Verificar se a empresa tem configuração fiscal válida
+      const hasValidFiscalConfig = await this.fiscalService.hasValidFiscalConfig(sale.companyId);
+      
+      // Se não houver documento fiscal ou não tiver configuração válida, gerar cupom não fiscal
+      if (!fiscalDocument || !hasValidFiscalConfig) {
+        const receiptData: any = {
+          company: {
+            name: sale.company.name,
+            cnpj: sale.company.cnpj || '',
+            address: `${sale.company.street || ''}, ${sale.company.number || ''} - ${sale.company.district || ''}`,
+          },
+          sale: {
+            id: sale.id,
+            date: sale.saleDate,
+            total: Number(sale.total),
+            paymentMethods: sale.paymentMethods.map(pm => pm.method),
+            change: Number(sale.change),
+          },
+          items: sale.items.map(item => ({
+            name: item.product.name,
+            quantity: item.quantity,
+            unitPrice: Number(item.unitPrice),
+            totalPrice: Number(item.totalPrice),
+          })),
+          seller: {
+            name: sale.seller.name,
+          },
+          client: sale.clientName || sale.clientCpfCnpj ? {
+            name: sale.clientName || undefined,
+            cpfCnpj: sale.clientCpfCnpj || undefined,
+          } : undefined,
+        };
+
+        const content = await this.printerService.getNFCeContent({
+          company: receiptData.company,
+          fiscal: { status: 'MOCK', documentNumber: '', accessKey: '', emissionDate: new Date(), isMock: true },
+          sale: {
+            id: receiptData.sale.id,
+            total: receiptData.sale.total,
+            clientName: receiptData.client?.name,
+            clientCpfCnpj: receiptData.client?.cpfCnpj,
+            paymentMethod: receiptData.sale.paymentMethods,
+            change: receiptData.sale.change,
+            saleDate: receiptData.sale.date,
+            sellerName: receiptData.seller.name,
+          },
+          items: receiptData.items.map((item: any) => ({
+            productName: item.name,
+            barcode: '',
+            quantity: item.quantity,
+            unitPrice: item.unitPrice,
+            totalPrice: item.totalPrice,
+          })),
+        });
+        
+        return { content, isMock: true };
+      }
+
+      // Verificar se é mock
+      const isMocked = fiscalDocument.status === 'MOCK' || (fiscalDocument as any).isMock === true;
+
+      // Gerar conteúdo com documento fiscal existente
+      const nfcePrintData = {
+        company: {
+          name: sale.company.name,
+          cnpj: sale.company.cnpj,
+          inscricaoEstadual: sale.company.stateRegistration,
+          address: `${sale.company.street || ''}, ${sale.company.number || ''} - ${sale.company.district || ''}`,
+          phone: sale.company.phone,
+          email: sale.company.email,
+        },
+        fiscal: {
+          documentNumber: fiscalDocument.documentNumber,
+          accessKey: fiscalDocument.accessKey,
+          emissionDate: fiscalDocument.emissionDate || new Date(),
+          status: fiscalDocument.status,
+          protocol: fiscalDocument.protocol || undefined,
+          qrCodeUrl: fiscalDocument.qrCodeUrl || undefined,
+          serieNumber: fiscalDocument.serieNumber || '1',
+          isMock: isMocked,
+        },
+        sale: {
+          id: sale.id,
+          total: Number(sale.total),
+          clientName: sale.clientName,
+          clientCpfCnpj: sale.clientCpfCnpj,
+          paymentMethod: sale.paymentMethods.map(pm => pm.method),
+          change: Number(sale.change),
+          saleDate: sale.saleDate,
+          sellerName: sale.seller.name,
+          totalTaxes: Number(sale.total) * 0.1665,
+        },
+        items: sale.items.map(item => ({
+          productName: item.product.name,
+          barcode: item.product.barcode,
+          quantity: item.quantity,
+          unitPrice: Number(item.unitPrice),
+          totalPrice: Number(item.totalPrice),
+          ncm: item.product.ncm || '99999999',
+          cfop: item.product.cfop || '5102',
+        })),
+        customFooter: sale.company.customFooter,
+      };
+
+      const content = await this.printerService.getNFCeContent(nfcePrintData);
+      return { content, isMock: isMocked };
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Erro desconhecido';
+      this.logger.error('Error generating print content:', error);
+      throw new BadRequestException(`Erro ao gerar conteúdo de impressão: ${errorMessage}`);
+    }
+  }
 }

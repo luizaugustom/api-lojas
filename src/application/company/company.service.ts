@@ -2,6 +2,7 @@ import { Injectable, ConflictException, NotFoundException, Logger, BadRequestExc
 import { PrismaService } from '../../infrastructure/database/prisma.service';
 import { HashService } from '../../shared/services/hash.service';
 import { EncryptionService } from '../../shared/services/encryption.service';
+import { ValidationService } from '../../shared/services/validation.service';
 import { UploadService } from '../upload/upload.service';
 import { CreateCompanyDto } from './dto/create-company.dto';
 import { UpdateCompanyDto } from './dto/update-company.dto';
@@ -21,11 +22,15 @@ export class CompanyService {
     private readonly prisma: PrismaService,
     private readonly hashService: HashService,
     private readonly encryptionService: EncryptionService,
+    private readonly validationService: ValidationService,
     private readonly uploadService: UploadService,
   ) {}
 
   async create(adminId: string, createCompanyDto: CreateCompanyDto) {
     try {
+      // Validar CNPJ com dígitos verificadores
+      this.validationService.validateCNPJ(createCompanyDto.cnpj);
+      
       const hashedPassword = await this.hashService.hashPassword(createCompanyDto.password);
 
       const company = await this.prisma.company.create({
@@ -169,6 +174,11 @@ export class CompanyService {
 
       if (!existingCompany) {
         throw new NotFoundException('Empresa não encontrada');
+      }
+
+      // Validar CNPJ se fornecido
+      if (updateCompanyDto.cnpj) {
+        this.validationService.validateCNPJ(updateCompanyDto.cnpj);
       }
 
       const updateData: any = { ...updateCompanyDto };
@@ -366,6 +376,16 @@ export class CompanyService {
 
       if (!company) {
         throw new NotFoundException('Empresa não encontrada');
+      }
+
+      // Validar CNAE se fornecido
+      if (updateFiscalConfigDto.cnae) {
+        this.validationService.validateCNAE(updateFiscalConfigDto.cnae);
+      }
+
+      // Validar código IBGE se fornecido
+      if (updateFiscalConfigDto.municipioIbge) {
+        this.validationService.validateMunicipioIBGE(updateFiscalConfigDto.municipioIbge);
       }
 
       // Preparar dados para atualização

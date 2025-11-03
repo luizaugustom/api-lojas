@@ -132,7 +132,7 @@ export class AuthService {
       companyId: user.companyId,
     };
 
-    const access_token = this.jwtService.sign(payload, { expiresIn: this.configService.get('JWT_EXPIRES_IN', '15m') });
+    const access_token = this.jwtService.sign(payload, { expiresIn: this.configService.get('JWT_EXPIRES_IN', '22h') });
 
     // Generate refresh token (random string) and persist its hash
     const refreshToken = this.generateRandomToken();
@@ -207,7 +207,7 @@ export class AuthService {
       companyId: (user.companyId as string) || undefined,
     };
 
-    const access_token = this.jwtService.sign(payload, { expiresIn: this.configService.get('JWT_EXPIRES_IN', '15m') });
+    const access_token = this.jwtService.sign(payload, { expiresIn: this.configService.get('JWT_EXPIRES_IN', '22h') });
 
     // Optional: rotate refresh token. We'll issue a new one and revoke the old
     const newRefresh = this.generateRandomToken();

@@ -10,7 +10,6 @@ exports.BudgetModule = void 0;
 const common_1 = require("@nestjs/common");
 const budget_service_1 = require("./budget.service");
 const budget_controller_1 = require("./budget.controller");
-const prisma_service_1 = require("../../infrastructure/database/prisma.service");
 const printer_module_1 = require("../printer/printer.module");
 const sale_module_1 = require("../sale/sale.module");
 let BudgetModule = class BudgetModule {
@@ -20,7 +19,7 @@ exports.BudgetModule = BudgetModule = __decorate([
     (0, common_1.Module)({
         imports: [printer_module_1.PrinterModule, (0, common_1.forwardRef)(() => sale_module_1.SaleModule)],
         controllers: [budget_controller_1.BudgetController],
-        providers: [budget_service_1.BudgetService, prisma_service_1.PrismaService],
+        providers: [budget_service_1.BudgetService],
         exports: [budget_service_1.BudgetService],
     })
 ], BudgetModule);

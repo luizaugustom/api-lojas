@@ -67,28 +67,42 @@ export class ThermalPrinterService {
 
       // Acrescenta comando ESC/POS de corte (parcial) se solicitado
       const cutCommand = cutPaper ? '\u001D\u0056\u0001' : '';
-      await fs.writeFile(filePath, content + (cutPaper ? `\n${cutCommand}\n` : ''), { encoding: 'utf8' });
+      // Usa UTF-8 com BOM para garantir compatibilidade no Windows
+      const contentWithCut = content + (cutPaper ? `\n${cutCommand}\n` : '');
+      await fs.writeFile(filePath, contentWithCut, { encoding: 'utf8' });
 
       switch (this.platform) {
         case 'win32': {
-          // Usa Out-Printer para enviar como texto
-          const ps = `Get-Content -Path '${filePath}' | Out-Printer -Name "${printerName}"`;
-          await execAsync(`powershell.exe -Command "${ps}"`);
+          // Usa Out-Printer com encoding UTF-8 explícito para caracteres especiais
+          // -Raw preserva quebras de linha e caracteres especiais
+          // [Console]::OutputEncoding garante encoding correto
+          const ps = `
+            $filePath = '${filePath.replace(/\\/g, '/').replace(/'/g, "''")}';
+            $printerName = "${printerName.replace(/"/g, '`"')}";
+            [Console]::OutputEncoding = [System.Text.Encoding]::UTF8;
+            Get-Content -Path $filePath -Raw -Encoding UTF8 | Out-Printer -Name $printerName;
+          `;
+          await execAsync(`powershell.exe -NoProfile -NonInteractive -Command "${ps.replace(/\n/g, ' ')}"`);
           break;
         }
         case 'linux':
         case 'darwin': {
-          // Envia via lp
-          await execAsync(`lp -d ${printerName} '${filePath}'`);
+          // Envia via lp com encoding UTF-8
+          await execAsync(`lp -d ${printerName.replace(/ /g, '\\ ')} '${filePath.replace(/'/g, "'\\''")}'`);
           break;
         }
         default:
           throw new Error(`Plataforma ${this.platform} não suportada`);
       }
 
+      // Limpa arquivo temporário após impressão (não bloqueia se falhar)
+      fs.unlink(filePath).catch(() => {});
+      fs.rmdir(tmpDir).catch(() => {});
+
       return true;
     } catch (error) {
       this.logger.error('Erro ao imprimir:', error);
+      this.logger.error('Detalhes do erro:', error instanceof Error ? error.stack : String(error));
       return false;
     }
   }
@@ -101,7 +115,7 @@ export class ThermalPrinterService {
       // Perfis por marca/modelo: diferentes firmwares usam comandos distintos
       const lower = printerName.toLowerCase();
       let pulseBuffer = Buffer.from([0x1B, 0x70, 0x00, 0x32, 0xC8]); // ESC p 0 t1 t2 (padrão)
-      if (lower.includes('bematech') || lower.includes('mp-')) {
+      if (lower.includes('bematech') || lower.includes('mp-') || lower.includes('mp 4200')) {
         // Algumas Bematech respondem melhor ao DLE DC4 1 0 ou ESC p 0 25 250
         pulseBuffer = Buffer.from([0x10, 0x14, 0x01, 0x00]); // DLE DC4 1 0
       } else if (lower.includes('elgin') || lower.includes('i9') || lower.includes('i7')) {

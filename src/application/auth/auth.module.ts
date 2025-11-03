@@ -17,7 +17,7 @@ import { SellerModule } from '../seller/seller.module';
       inject: [ConfigService],
       useFactory: (configService: ConfigService) => ({
         secret: configService.get('JWT_SECRET'),
-        signOptions: { expiresIn: configService.get('JWT_EXPIRES_IN', '24h') },
+        signOptions: { expiresIn: configService.get('JWT_EXPIRES_IN', '22h') },
       }),
     }),
   forwardRef(() => AdminModule),

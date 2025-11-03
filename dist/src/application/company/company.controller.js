@@ -77,6 +77,10 @@ let CompanyController = class CompanyController {
     getFiscalConfig(user) {
         return this.companyService.getFiscalConfig(user.companyId);
     }
+    async hasValidFiscalConfig(user) {
+        const isValid = await this.companyService.hasValidFiscalConfig(user.companyId);
+        return { hasValidConfig: isValid };
+    }
     uploadCertificate(user, file) {
         return this.companyService.uploadCertificateToFocusNfe(user.companyId, file);
     }
@@ -263,6 +267,16 @@ __decorate([
     __metadata("design:paramtypes", [Object]),
     __metadata("design:returntype", void 0)
 ], CompanyController.prototype, "getFiscalConfig", null);
+__decorate([
+    (0, common_1.Get)('my-company/fiscal-config/valid'),
+    (0, roles_decorator_1.Roles)(roles_decorator_1.UserRole.COMPANY),
+    (0, swagger_1.ApiOperation)({ summary: 'Verificar se a empresa tem configuração fiscal válida para emissão de NFCe' }),
+    (0, swagger_1.ApiResponse)({ status: 200, description: 'Status da configuração fiscal' }),
+    __param(0, (0, current_user_decorator_1.CurrentUser)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [Object]),
+    __metadata("design:returntype", Promise)
+], CompanyController.prototype, "hasValidFiscalConfig", null);
 __decorate([
     (0, common_1.Post)('my-company/upload-certificate'),
     (0, roles_decorator_1.Roles)(roles_decorator_1.UserRole.COMPANY),

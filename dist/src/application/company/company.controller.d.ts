@@ -233,6 +233,9 @@ export declare class CompanyController {
         cscMasked: string;
         idTokenCsc: string;
     }>;
+    hasValidFiscalConfig(user: any): Promise<{
+        hasValidConfig: boolean;
+    }>;
     uploadCertificate(user: any, file: Express.Multer.File): Promise<{
         message: string;
         status: string;

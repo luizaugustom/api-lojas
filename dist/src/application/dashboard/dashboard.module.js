@@ -10,14 +10,13 @@ exports.DashboardModule = void 0;
 const common_1 = require("@nestjs/common");
 const dashboard_controller_1 = require("./dashboard.controller");
 const dashboard_service_1 = require("./dashboard.service");
-const prisma_service_1 = require("../../infrastructure/database/prisma.service");
 let DashboardModule = class DashboardModule {
 };
 exports.DashboardModule = DashboardModule;
 exports.DashboardModule = DashboardModule = __decorate([
     (0, common_1.Module)({
         controllers: [dashboard_controller_1.DashboardController],
-        providers: [dashboard_service_1.DashboardService, prisma_service_1.PrismaService],
+        providers: [dashboard_service_1.DashboardService],
         exports: [dashboard_service_1.DashboardService],
     })
 ], DashboardModule);

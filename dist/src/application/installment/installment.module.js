@@ -11,7 +11,6 @@ const common_1 = require("@nestjs/common");
 const installment_service_1 = require("./installment.service");
 const installment_controller_1 = require("./installment.controller");
 const installment_messaging_service_1 = require("./installment-messaging.service");
-const prisma_service_1 = require("../../infrastructure/database/prisma.service");
 const whatsapp_module_1 = require("../whatsapp/whatsapp.module");
 let InstallmentModule = class InstallmentModule {
 };
@@ -20,7 +19,7 @@ exports.InstallmentModule = InstallmentModule = __decorate([
     (0, common_1.Module)({
         imports: [whatsapp_module_1.WhatsappModule],
         controllers: [installment_controller_1.InstallmentController],
-        providers: [installment_service_1.InstallmentService, installment_messaging_service_1.InstallmentMessagingService, prisma_service_1.PrismaService],
+        providers: [installment_service_1.InstallmentService, installment_messaging_service_1.InstallmentMessagingService],
         exports: [installment_service_1.InstallmentService, installment_messaging_service_1.InstallmentMessagingService],
     })
 ], InstallmentModule);

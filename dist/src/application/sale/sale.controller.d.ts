@@ -247,6 +247,10 @@ export declare class SaleController {
     }>;
     reprintReceipt(id: string, user: any): Promise<{
         message: string;
+        warning: string;
+    } | {
+        message: string;
+        warning?: undefined;
     }>;
     update(id: string, updateSaleDto: UpdateSaleDto, user: any): Promise<{
         seller: {

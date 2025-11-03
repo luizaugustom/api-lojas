@@ -15,6 +15,7 @@ const common_1 = require("@nestjs/common");
 const prisma_service_1 = require("../../infrastructure/database/prisma.service");
 const hash_service_1 = require("../../shared/services/hash.service");
 const encryption_service_1 = require("../../shared/services/encryption.service");
+const validation_service_1 = require("../../shared/services/validation.service");
 const upload_service_1 = require("../upload/upload.service");
 const client_1 = require("@prisma/client");
 const axios_1 = require("axios");
@@ -22,15 +23,17 @@ const FormData = require("form-data");
 const fs = require("fs");
 const path = require("path");
 let CompanyService = CompanyService_1 = class CompanyService {
-    constructor(prisma, hashService, encryptionService, uploadService) {
+    constructor(prisma, hashService, encryptionService, validationService, uploadService) {
         this.prisma = prisma;
         this.hashService = hashService;
         this.encryptionService = encryptionService;
+        this.validationService = validationService;
         this.uploadService = uploadService;
         this.logger = new common_1.Logger(CompanyService_1.name);
     }
     async create(adminId, createCompanyDto) {
         try {
+            this.validationService.validateCNPJ(createCompanyDto.cnpj);
             const hashedPassword = await this.hashService.hashPassword(createCompanyDto.password);
             const company = await this.prisma.company.create({
                 data: {
@@ -163,6 +166,9 @@ let CompanyService = CompanyService_1 = class CompanyService {
             });
             if (!existingCompany) {
                 throw new common_1.NotFoundException('Empresa não encontrada');
+            }
+            if (updateCompanyDto.cnpj) {
+                this.validationService.validateCNPJ(updateCompanyDto.cnpj);
             }
             const updateData = { ...updateCompanyDto };
             if (!updateCompanyDto.password || updateCompanyDto.password.trim() === '') {
@@ -337,6 +343,12 @@ let CompanyService = CompanyService_1 = class CompanyService {
             if (!company) {
                 throw new common_1.NotFoundException('Empresa não encontrada');
             }
+            if (updateFiscalConfigDto.cnae) {
+                this.validationService.validateCNAE(updateFiscalConfigDto.cnae);
+            }
+            if (updateFiscalConfigDto.municipioIbge) {
+                this.validationService.validateMunicipioIBGE(updateFiscalConfigDto.municipioIbge);
+            }
             const updateData = {};
             if (updateFiscalConfigDto.taxRegime !== undefined) {
                 updateData.taxRegime = updateFiscalConfigDto.taxRegime;
@@ -431,6 +443,41 @@ let CompanyService = CompanyService_1 = class CompanyService {
         catch (error) {
             this.logger.error('Error getting fiscal config:', error);
             throw error;
+        }
+    }
+    async hasValidFiscalConfig(companyId) {
+        try {
+            const company = await this.prisma.company.findUnique({
+                where: { id: companyId },
+                select: {
+                    cnpj: true,
+                    stateRegistration: true,
+                    certificatePassword: true,
+                    nfceSerie: true,
+                    municipioIbge: true,
+                    csc: true,
+                    idTokenCsc: true,
+                    state: true,
+                    city: true,
+                },
+            });
+            if (!company) {
+                return false;
+            }
+            const hasRequiredFields = !!(company.cnpj &&
+                company.stateRegistration &&
+                company.certificatePassword &&
+                company.nfceSerie &&
+                company.municipioIbge &&
+                company.csc &&
+                company.idTokenCsc &&
+                company.state &&
+                company.city);
+            return hasRequiredFields;
+        }
+        catch (error) {
+            this.logger.error('Error checking fiscal config:', error);
+            return false;
         }
     }
     async uploadCertificateToFocusNfe(companyId, file) {
@@ -816,6 +863,7 @@ exports.CompanyService = CompanyService = CompanyService_1 = __decorate([
     __metadata("design:paramtypes", [prisma_service_1.PrismaService,
         hash_service_1.HashService,
         encryption_service_1.EncryptionService,
+        validation_service_1.ValidationService,
         upload_service_1.UploadService])
 ], CompanyService);
 //# sourceMappingURL=company.service.js.map

@@ -52,7 +52,15 @@ export declare class PrinterController {
     getCustomFooter(user: any): Promise<{
         customFooter: string;
     }>;
-    getAvailablePrinters(): Promise<import("../../shared/services/printer-driver.service").SystemPrinter[]>;
+    getAvailablePrinters(user: any): Promise<import("../../shared/services/printer-driver.service").SystemPrinter[]>;
+    registerDevices(user: any, body: {
+        computerId: string;
+        printers: any[];
+    }): Promise<{
+        success: boolean;
+        message: string;
+        printersCreated?: number;
+    }>;
     checkDrivers(): Promise<{
         allInstalled: boolean;
         drivers: any[];
@@ -73,9 +81,6 @@ export declare class PrinterController {
         message: string;
     }>;
     getPrintQueue(id: string): Promise<any[]>;
-    getPrinterLogs(id: string): Promise<{
-        logs: string[];
-    }>;
     deletePrinter(user: any, id: string): Promise<{
         success: boolean;
         deletedId: string;

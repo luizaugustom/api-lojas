@@ -1,6 +1,7 @@
 import { Injectable, Logger, BadRequestException, NotFoundException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { PrismaService } from '../../infrastructure/database/prisma.service';
+import { ValidationService } from '../../shared/services/validation.service';
 import { 
   FiscalApiService, 
   NFCeRequest, 
@@ -78,6 +79,7 @@ export class FiscalService {
     private readonly configService: ConfigService,
     private readonly prisma: PrismaService,
     private readonly fiscalApiService: FiscalApiService,
+    private readonly validationService: ValidationService,
   ) {}
 
   async generateNFe(nfeData: NFeData): Promise<any> {
@@ -117,6 +119,19 @@ export class FiscalService {
           throw new BadRequestException('Venda não possui dados de cliente (CPF/CNPJ e Nome são obrigatórios)');
         }
 
+        // Validar CPF/CNPJ do cliente
+        this.validationService.validateCPFOrCNPJ(sale.clientCpfCnpj);
+
+        // Validar NCM e CFOP dos itens
+        for (const item of sale.items) {
+          if (item.product.ncm && !item.product.ncm.startsWith('99999999')) {
+            this.validationService.validateNCM(item.product.ncm);
+          }
+          if (item.product.cfop) {
+            this.validationService.validateCFOP(item.product.cfop);
+          }
+        }
+
         // Montar request a partir da venda
         nfeRequest = {
           companyId: nfeData.companyId,
@@ -143,6 +158,18 @@ export class FiscalService {
         saleReference = sale.id;
       } else {
         // Modo 2: Emissão manual
+        
+        // Validar CPF/CNPJ do destinatário
+        this.validationService.validateCPFOrCNPJ(nfeData.recipient.document);
+
+        // Validar NCM e CFOP dos itens
+        for (const item of nfeData.items) {
+          if (item.ncm && !item.ncm.startsWith('99999999')) {
+            this.validationService.validateNCM(item.ncm);
+          }
+          this.validationService.validateCFOP(item.cfop);
+        }
+
         nfeRequest = {
           companyId: nfeData.companyId,
           recipient: {
@@ -322,6 +349,11 @@ export class FiscalService {
 
       if (!company) {
         throw new NotFoundException('Empresa não encontrada');
+      }
+
+      // Validar CPF/CNPJ do cliente se fornecido
+      if (nfceData.clientCpfCnpj) {
+        this.validationService.validateCPFOrCNPJ(nfceData.clientCpfCnpj);
       }
 
       // Prepare NFCe request for fiscal API

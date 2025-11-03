@@ -46,8 +46,13 @@ let PrinterController = class PrinterController {
         return this.printerService.getPrinterStatus(id);
     }
     async testPrinter(id) {
-        const success = await this.printerService.testPrinter(id);
-        return { success, message: success ? 'Teste realizado com sucesso' : 'Falha no teste da impressora' };
+        const result = await this.printerService.testPrinter(id);
+        if (result.success) {
+            return { success: true, message: 'Teste realizado com sucesso' };
+        }
+        else {
+            throw new common_1.BadRequestException(result.details?.reason || result.error || 'Falha no teste da impressora');
+        }
     }
     async updateCustomFooter(user, updateCustomFooterDto) {
         await this.printerService.updateCustomFooter(user.companyId, updateCustomFooterDto.customFooter || '');
@@ -57,8 +62,17 @@ let PrinterController = class PrinterController {
         const customFooter = await this.printerService.getCustomFooter(user.companyId);
         return { customFooter };
     }
-    async getAvailablePrinters() {
-        return await this.printerService.getAvailablePrinters();
+    async getAvailablePrinters(user) {
+        const computerId = user.computerId;
+        const companyId = user.role === roles_decorator_1.UserRole.ADMIN ? undefined : user.companyId;
+        return await this.printerService.getAvailablePrinters(computerId, companyId);
+    }
+    async registerDevices(user, body) {
+        if (!user.companyId) {
+            throw new common_1.BadRequestException('Usuário não possui empresa associada');
+        }
+        const result = await this.printerService.registerClientDevices(body.computerId, body.printers, user.companyId);
+        return result;
     }
     async checkDrivers() {
         return await this.printerService.checkDrivers();
@@ -75,10 +89,6 @@ let PrinterController = class PrinterController {
     }
     async getPrintQueue(id) {
         return await this.printerService.getPrintQueue(id);
-    }
-    async getPrinterLogs(id) {
-        const logs = await this.printerService.getPrinterLogs(id);
-        return { logs };
     }
     async deletePrinter(user, id) {
         if (!id)
@@ -164,10 +174,22 @@ __decorate([
     (0, roles_decorator_1.Roles)(roles_decorator_1.UserRole.ADMIN, roles_decorator_1.UserRole.COMPANY),
     (0, swagger_1.ApiOperation)({ summary: 'Listar impressoras disponíveis no sistema' }),
     (0, swagger_1.ApiResponse)({ status: 200, description: 'Lista de impressoras do sistema' }),
+    __param(0, (0, current_user_decorator_1.CurrentUser)()),
     __metadata("design:type", Function),
-    __metadata("design:paramtypes", []),
+    __metadata("design:paramtypes", [Object]),
     __metadata("design:returntype", Promise)
 ], PrinterController.prototype, "getAvailablePrinters", null);
+__decorate([
+    (0, common_1.Post)('register-devices'),
+    (0, roles_decorator_1.Roles)(roles_decorator_1.UserRole.ADMIN, roles_decorator_1.UserRole.COMPANY),
+    (0, swagger_1.ApiOperation)({ summary: 'Registra impressoras detectadas do computador do cliente' }),
+    (0, swagger_1.ApiResponse)({ status: 200, description: 'Impressoras registradas com sucesso' }),
+    __param(0, (0, current_user_decorator_1.CurrentUser)()),
+    __param(1, (0, common_1.Body)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [Object, Object]),
+    __metadata("design:returntype", Promise)
+], PrinterController.prototype, "registerDevices", null);
 __decorate([
     (0, common_1.Get)('check-drivers'),
     (0, roles_decorator_1.Roles)(roles_decorator_1.UserRole.ADMIN, roles_decorator_1.UserRole.COMPANY),
@@ -215,16 +237,6 @@ __decorate([
     __metadata("design:paramtypes", [String]),
     __metadata("design:returntype", Promise)
 ], PrinterController.prototype, "getPrintQueue", null);
-__decorate([
-    (0, common_1.Get)(':id/logs'),
-    (0, roles_decorator_1.Roles)(roles_decorator_1.UserRole.ADMIN, roles_decorator_1.UserRole.COMPANY),
-    (0, swagger_1.ApiOperation)({ summary: 'Obter logs recentes da impressora' }),
-    (0, swagger_1.ApiResponse)({ status: 200, description: 'Logs de impressora' }),
-    __param(0, (0, common_1.Param)('id', uuid_validation_pipe_1.UuidValidationPipe)),
-    __metadata("design:type", Function),
-    __metadata("design:paramtypes", [String]),
-    __metadata("design:returntype", Promise)
-], PrinterController.prototype, "getPrinterLogs", null);
 __decorate([
     (0, common_1.Delete)(':id'),
     (0, roles_decorator_1.Roles)(roles_decorator_1.UserRole.ADMIN, roles_decorator_1.UserRole.COMPANY),

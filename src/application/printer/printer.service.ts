@@ -682,6 +682,59 @@ export class PrinterService {
     }
   }
 
+  /**
+   * Gera o conteúdo de NFCe sem imprimir (para impressão local no cliente)
+   */
+  async getNFCeContent(nfceData: NFCePrintData): Promise<string> {
+    try {
+      this.logger.log(`Gerando conteúdo de NFCe para venda: ${nfceData.sale.id}`);
+      
+      // Verificar se é mock (status MOCK ou flag isMock)
+      const isMock = nfceData.fiscal.status === 'MOCK' || (nfceData.fiscal as any).isMock === true;
+      
+      if (isMock) {
+        // Se for mock, gerar cupom não fiscal ao invés de NFCe
+        this.logger.warn(`⚠️ NFCe mockada detectada. Gerando cupom não fiscal para venda: ${nfceData.sale.id}`);
+        
+        const receiptData: ReceiptData = {
+          company: {
+            name: nfceData.company.name,
+            cnpj: nfceData.company.cnpj,
+            address: nfceData.company.address,
+          },
+          sale: {
+            id: nfceData.sale.id,
+            date: nfceData.sale.saleDate,
+            total: nfceData.sale.total,
+            paymentMethods: nfceData.sale.paymentMethod,
+            change: nfceData.sale.change,
+          },
+          items: nfceData.items.map(item => ({
+            name: item.productName,
+            quantity: item.quantity,
+            unitPrice: item.unitPrice,
+            totalPrice: item.totalPrice,
+          })),
+          seller: {
+            name: nfceData.sale.sellerName,
+          },
+          client: {
+            name: nfceData.sale.clientName,
+            cpfCnpj: nfceData.sale.clientCpfCnpj,
+          },
+        };
+        
+        return this.generateNonFiscalReceiptContent(receiptData, true);
+      }
+      
+      return await this.generateNFCeContent(nfceData);
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      this.logger.error(`❌ Erro ao gerar conteúdo de NFCe para venda ${nfceData.sale.id}:`, error);
+      throw new Error(`Erro ao gerar conteúdo NFC-e: ${errorMessage}`);
+    }
+  }
+
   async printNFCe(nfceData: NFCePrintData, companyId?: string): Promise<PrintResult> {
     try {
       this.logger.log(`Iniciando impressão de NFCe para venda: ${nfceData.sale.id}`);
@@ -890,7 +943,7 @@ export class PrinterService {
     receipt += this.centerText('OBRIGADO PELA PREFERÊNCIA!') + '\n';
     receipt += this.centerText('VOLTE SEMPRE!') + '\n';
     receipt += this.centerText('================================') + '\n';
-    receipt += this.centerText('Sistema: MontShop') + '\n';
+    receipt += this.centerText('🚀SISTEMA MONTSHOP! 🚀') + '\n';
     receipt += '\n\n\n';
     
     return receipt;
@@ -1129,7 +1182,7 @@ export class PrinterService {
     nfce += this.centerText('OBRIGADO PELA PREFERÊNCIA!') + '\n';
     nfce += this.centerText('VOLTE SEMPRE!') + '\n';
     nfce += this.centerText('================================') + '\n';
-    nfce += this.centerText('Sistema: MontShop') + '\n';
+    nfce += this.centerText('🚀SISTEMA MONTSHOP! 🚀') + '\n';
     nfce += this.centerText(this.formatDate(new Date())) + '\n';
     nfce += '\n\n\n';
     
@@ -1166,7 +1219,8 @@ export class PrinterService {
       // Se não encontrou impressora cadastrada, usa a padrão do sistema
       if (!printerName) {
         this.logger.log('Buscando impressora padrão do sistema...');
-        const systemPrinters = await this.getAvailablePrinters();
+        // Busca impressoras disponíveis considerando companyId se disponível
+        const systemPrinters = await this.getAvailablePrinters(null, companyId);
         
         if (systemPrinters.length === 0) {
           this.logger.warn('⚠️ Nenhuma impressora detectada no sistema');
@@ -1179,6 +1233,7 @@ export class PrinterService {
           };
         }
         
+        // Prioriza impressora padrão online, depois qualquer impressora online
         const defaultPrinter = systemPrinters.find(p => p.isDefault && p.status === 'online');
         const anyOnlinePrinter = systemPrinters.find(p => p.status === 'online');
         
@@ -1695,7 +1750,7 @@ export class PrinterService {
     content += '\n';
     content += this.centerText('OBRIGADO PELA PREFERÊNCIA!') + '\n';
     content += this.centerText('================================') + '\n';
-    content += this.centerText('Sistema: MontShop') + '\n';
+    content += this.centerText('🚀SISTEMA MONTSHOP! 🚀') + '\n';
     content += this.centerText(this.formatDate(new Date())) + '\n';
     content += '\n\n\n';
     

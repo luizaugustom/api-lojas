@@ -36,9 +36,6 @@ __decorate([
     }),
     (0, class_validator_1.IsOptional)(),
     (0, class_validator_1.IsString)(),
-    (0, class_validator_1.Matches)(/^\(\d{2}\) \d{4,5}-\d{4}$/, {
-        message: 'Telefone deve estar no formato (XX) XXXXX-XXXX',
-    }),
     __metadata("design:type", String)
 ], CreateCustomerDto.prototype, "phone", void 0);
 __decorate([
@@ -48,9 +45,7 @@ __decorate([
         required: false,
     }),
     (0, class_validator_1.IsOptional)(),
-    (0, class_validator_1.IsEmail)({}, {
-        message: 'Email deve ter um formato válido',
-    }),
+    (0, class_validator_1.IsString)(),
     __metadata("design:type", String)
 ], CreateCustomerDto.prototype, "email", void 0);
 __decorate([
@@ -71,9 +66,6 @@ __decorate([
     }),
     (0, class_validator_1.IsOptional)(),
     (0, class_validator_1.IsString)(),
-    (0, class_validator_1.Matches)(/^\d{5}-\d{3}$/, {
-        message: 'CEP deve estar no formato XXXXX-XXX',
-    }),
     __metadata("design:type", String)
 ], CreateCustomerDto.prototype, "zipCode", void 0);
 __decorate([

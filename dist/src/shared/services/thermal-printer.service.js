@@ -59,25 +59,34 @@ let ThermalPrinterService = ThermalPrinterService_1 = class ThermalPrinterServic
             const tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), 'montshop-print-'));
             const filePath = path.join(tmpDir, 'print.txt');
             const cutCommand = cutPaper ? '\u001D\u0056\u0001' : '';
-            await fs.writeFile(filePath, content + (cutPaper ? `\n${cutCommand}\n` : ''), { encoding: 'utf8' });
+            const contentWithCut = content + (cutPaper ? `\n${cutCommand}\n` : '');
+            await fs.writeFile(filePath, contentWithCut, { encoding: 'utf8' });
             switch (this.platform) {
                 case 'win32': {
-                    const ps = `Get-Content -Path '${filePath}' | Out-Printer -Name "${printerName}"`;
-                    await execAsync(`powershell.exe -Command "${ps}"`);
+                    const ps = `
+            $filePath = '${filePath.replace(/\\/g, '/').replace(/'/g, "''")}';
+            $printerName = "${printerName.replace(/"/g, '`"')}";
+            [Console]::OutputEncoding = [System.Text.Encoding]::UTF8;
+            Get-Content -Path $filePath -Raw -Encoding UTF8 | Out-Printer -Name $printerName;
+          `;
+                    await execAsync(`powershell.exe -NoProfile -NonInteractive -Command "${ps.replace(/\n/g, ' ')}"`);
                     break;
                 }
                 case 'linux':
                 case 'darwin': {
-                    await execAsync(`lp -d ${printerName} '${filePath}'`);
+                    await execAsync(`lp -d ${printerName.replace(/ /g, '\\ ')} '${filePath.replace(/'/g, "'\\''")}'`);
                     break;
                 }
                 default:
                     throw new Error(`Plataforma ${this.platform} não suportada`);
             }
+            fs.unlink(filePath).catch(() => { });
+            fs.rmdir(tmpDir).catch(() => { });
             return true;
         }
         catch (error) {
             this.logger.error('Erro ao imprimir:', error);
+            this.logger.error('Detalhes do erro:', error instanceof Error ? error.stack : String(error));
             return false;
         }
     }
@@ -85,7 +94,7 @@ let ThermalPrinterService = ThermalPrinterService_1 = class ThermalPrinterServic
         try {
             const lower = printerName.toLowerCase();
             let pulseBuffer = Buffer.from([0x1B, 0x70, 0x00, 0x32, 0xC8]);
-            if (lower.includes('bematech') || lower.includes('mp-')) {
+            if (lower.includes('bematech') || lower.includes('mp-') || lower.includes('mp 4200')) {
                 pulseBuffer = Buffer.from([0x10, 0x14, 0x01, 0x00]);
             }
             else if (lower.includes('elgin') || lower.includes('i9') || lower.includes('i7')) {

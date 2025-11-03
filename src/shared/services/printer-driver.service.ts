@@ -217,6 +217,7 @@ export class PrinterDriverService {
       'Elgin i9',
       'Elgin i7',
       'Bematech MP-4200',
+      'Bematech MP 4200 HS',
       'Daruma DR700',
       'Zebra ZDesigner',
     ];

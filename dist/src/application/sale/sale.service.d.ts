@@ -242,5 +242,9 @@ export declare class SaleService {
     }>;
     reprintReceipt(id: string, companyId?: string): Promise<{
         message: string;
+        warning: string;
+    } | {
+        message: string;
+        warning?: undefined;
     }>;
 }

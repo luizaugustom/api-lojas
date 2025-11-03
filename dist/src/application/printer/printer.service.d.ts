@@ -95,6 +95,16 @@ export interface CashClosureReportData {
         paymentMethods: string[];
     }>;
 }
+export interface PrintResult {
+    success: boolean;
+    error?: string;
+    details?: {
+        printerName?: string;
+        printerSource?: string;
+        status?: string;
+        reason?: string;
+    };
+}
 export declare class PrinterService {
     private readonly configService;
     private readonly prisma;
@@ -105,12 +115,18 @@ export declare class PrinterService {
     private readonly printerRetryAttempts;
     private lastPrinterCheck;
     private availablePrinters;
+    private clientDevices;
     constructor(configService: ConfigService, prisma: PrismaService, driverService: PrinterDriverService, thermalPrinter: ThermalPrinterService);
     private initializePrinters;
     private syncPrintersWithDatabase;
     checkPrintersStatus(): Promise<void>;
     discoverPrinters(): Promise<PrinterConfig[]>;
-    getAvailablePrinters(): Promise<SystemPrinter[]>;
+    getAvailablePrinters(computerId?: string | null, companyId?: string): Promise<SystemPrinter[]>;
+    registerClientDevices(computerId: string, printers: any[], companyId?: string): Promise<{
+        success: boolean;
+        message: string;
+        printersCreated?: number;
+    }>;
     checkDrivers(): Promise<{
         allInstalled: boolean;
         drivers: any[];
@@ -182,10 +198,12 @@ export declare class PrinterService {
         paperStatus: string;
         lastStatusCheck: Date | null;
     }>;
-    printReceipt(receiptData: ReceiptData, companyId?: string): Promise<boolean>;
-    printCashClosureReport(reportData: CashClosureReportData, companyId?: string): Promise<boolean>;
-    printNFCe(nfceData: NFCePrintData, companyId?: string): Promise<boolean>;
+    printReceipt(receiptData: ReceiptData, companyId?: string): Promise<PrintResult>;
+    printCashClosureReport(reportData: CashClosureReportData, companyId?: string): Promise<PrintResult>;
+    printNonFiscalReceipt(receiptData: ReceiptData, companyId?: string, isMocked?: boolean): Promise<PrintResult>;
+    printNFCe(nfceData: NFCePrintData, companyId?: string): Promise<PrintResult>;
     private generateReceiptContent;
+    private generateNonFiscalReceiptContent;
     private generateCashClosureReport;
     private generateNFCeContent;
     private sendToPrinter;
@@ -198,7 +216,7 @@ export declare class PrinterService {
     private formatAccessKey;
     private wrapText;
     private generateQRCodeAscii;
-    testPrinter(id: string): Promise<boolean>;
+    testPrinter(id: string): Promise<PrintResult>;
     private generateTestContent;
     getPrinterStatus(id: string): Promise<{
         id: string;

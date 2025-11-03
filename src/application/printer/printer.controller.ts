@@ -7,7 +7,9 @@ import {
   Param,
   UseGuards,
   BadRequestException,
+  Req,
 } from '@nestjs/common';
+import { Request } from 'express';
 import {
   ApiTags,
   ApiOperation,
@@ -111,9 +113,10 @@ export class PrinterController {
   @Roles(UserRole.ADMIN, UserRole.COMPANY)
   @ApiOperation({ summary: 'Listar impressoras disponíveis no sistema' })
   @ApiResponse({ status: 200, description: 'Lista de impressoras do sistema' })
-  async getAvailablePrinters(@CurrentUser() user: any) {
+  async getAvailablePrinters(@CurrentUser() user: any, @Req() req: Request) {
     // Retorna impressoras do computador do cliente (se houver) e do banco de dados
-    const computerId = (user as any).computerId;
+    // Lê o computerId do header x-computer-id (enviado pelo cliente desktop)
+    const computerId = (req.headers['x-computer-id'] as string) || (req.query.computerId as string) || null;
     const companyId = user.role === UserRole.ADMIN ? undefined : user.companyId;
     return await this.printerService.getAvailablePrinters(computerId, companyId);
   }
@@ -125,13 +128,20 @@ export class PrinterController {
   async registerDevices(
     @CurrentUser() user: any,
     @Body() body: { computerId: string; printers: any[] },
+    @Req() req: Request,
   ) {
     if (!user.companyId) {
       throw new BadRequestException('Usuário não possui empresa associada');
     }
     
+    // Usa computerId do body ou do header como fallback
+    const computerId = body.computerId || (req.headers['x-computer-id'] as string);
+    if (!computerId) {
+      throw new BadRequestException('Identificador do computador é obrigatório');
+    }
+    
     const result = await this.printerService.registerClientDevices(
-      body.computerId,
+      computerId,
       body.printers,
       user.companyId,
     );
@@ -170,6 +180,15 @@ export class PrinterController {
   async openCashDrawer(@Param('id', UuidValidationPipe) id: string) {
     const success = await this.printerService.openCashDrawer(id);
     return { success, message: success ? 'Gaveta aberta com sucesso' : 'Falha ao abrir gaveta' };
+  }
+
+  @Post('generate-content')
+  @Roles(UserRole.ADMIN, UserRole.COMPANY, UserRole.SELLER)
+  @ApiOperation({ summary: 'Gerar conteúdo de impressão NFCe (para impressão local)' })
+  @ApiResponse({ status: 200, description: 'Conteúdo de impressão gerado com sucesso' })
+  async generatePrintContent(@Body() nfceData: any, @CurrentUser() user: any) {
+    const content = await this.printerService.getNFCeContent(nfceData);
+    return { content, success: true };
   }
 
   @Get(':id/queue')

@@ -1,6 +1,7 @@
 import { PrismaService } from '../../infrastructure/database/prisma.service';
 import { HashService } from '../../shared/services/hash.service';
 import { EncryptionService } from '../../shared/services/encryption.service';
+import { ValidationService } from '../../shared/services/validation.service';
 import { UploadService } from '../upload/upload.service';
 import { CreateCompanyDto } from './dto/create-company.dto';
 import { UpdateCompanyDto } from './dto/update-company.dto';
@@ -10,9 +11,10 @@ export declare class CompanyService {
     private readonly prisma;
     private readonly hashService;
     private readonly encryptionService;
+    private readonly validationService;
     private readonly uploadService;
     private readonly logger;
-    constructor(prisma: PrismaService, hashService: HashService, encryptionService: EncryptionService, uploadService: UploadService);
+    constructor(prisma: PrismaService, hashService: HashService, encryptionService: EncryptionService, validationService: ValidationService, uploadService: UploadService);
     create(adminId: string, createCompanyDto: CreateCompanyDto): Promise<{
         id: string;
         login: string;
@@ -158,6 +160,7 @@ export declare class CompanyService {
         cscMasked: string;
         idTokenCsc: string;
     }>;
+    hasValidFiscalConfig(companyId: string): Promise<boolean>;
     uploadCertificateToFocusNfe(companyId: string, file: Express.Multer.File): Promise<{
         message: string;
         status: string;

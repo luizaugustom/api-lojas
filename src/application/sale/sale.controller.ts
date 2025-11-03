@@ -163,6 +163,19 @@ export class SaleController {
     return this.saleService.reprintReceipt(id, companyId);
   }
 
+  @Get(':id/print-content')
+  @Roles(UserRole.ADMIN, UserRole.COMPANY, UserRole.SELLER)
+  @ApiOperation({ summary: 'Obter conteúdo de impressão para venda (para impressão local)' })
+  @ApiResponse({ status: 200, description: 'Conteúdo de impressão gerado com sucesso' })
+  @ApiResponse({ status: 400, description: 'ID inválido ou erro ao gerar conteúdo' })
+  getPrintContent(
+    @Param('id', UuidValidationPipe) id: string,
+    @CurrentUser() user: any,
+  ) {
+    const companyId = user.role === UserRole.ADMIN ? undefined : user.companyId;
+    return this.saleService.getPrintContent(id, companyId);
+  }
+
   @Patch(':id')
   @Roles(UserRole.ADMIN, UserRole.COMPANY)
   @ApiOperation({ summary: 'Atualizar venda' })

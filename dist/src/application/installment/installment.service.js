@@ -131,35 +131,37 @@ let InstallmentService = InstallmentService_1 = class InstallmentService {
         if (customerId) {
             where.customerId = customerId;
         }
-        const installments = await this.prisma.installment.findMany({
-            where,
-            include: {
-                sale: {
-                    select: {
-                        id: true,
-                        total: true,
-                        saleDate: true,
+        const installments = await this.prisma.withRetry(async () => {
+            return await this.prisma.installment.findMany({
+                where,
+                include: {
+                    sale: {
+                        select: {
+                            id: true,
+                            total: true,
+                            saleDate: true,
+                        },
+                    },
+                    customer: {
+                        select: {
+                            id: true,
+                            name: true,
+                            cpfCnpj: true,
+                            phone: true,
+                            email: true,
+                        },
+                    },
+                    payments: {
+                        orderBy: {
+                            paymentDate: 'desc',
+                        },
                     },
                 },
-                customer: {
-                    select: {
-                        id: true,
-                        name: true,
-                        cpfCnpj: true,
-                        phone: true,
-                        email: true,
-                    },
+                orderBy: {
+                    dueDate: 'asc',
                 },
-                payments: {
-                    orderBy: {
-                        paymentDate: 'desc',
-                    },
-                },
-            },
-            orderBy: {
-                dueDate: 'asc',
-            },
-        });
+            });
+        }, 'InstallmentService.findOverdue');
         return installments;
     }
     async findOne(id, companyId) {
