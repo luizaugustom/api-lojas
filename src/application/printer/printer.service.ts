@@ -57,6 +57,7 @@ export interface NFCePrintData {
     protocol?: string;
     qrCodeUrl?: string;
     serieNumber?: string;
+    isMock?: boolean;
   };
   sale: {
     id: string;
