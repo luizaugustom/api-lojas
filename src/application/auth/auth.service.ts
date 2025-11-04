@@ -85,6 +85,14 @@ export class AuthService {
         return null;
       }
 
+      // Verificar se empresa está ativa (para login de empresa)
+      if (role === 'company') {
+        if (!(user as any).isActive) {
+          this.logger.warn(`Login bloqueado: Empresa ${user.login} está desativada`);
+          return null;
+        }
+      }
+
       // Mapear companyId para cada role
       let mappedCompanyId: string | null = null;
       let plan: string | undefined = undefined;
@@ -94,13 +102,20 @@ export class AuthService {
         plan = (user as any).plan; // Incluir o plano da empresa
       } else if (role === 'seller') {
         mappedCompanyId = user.companyId || null;
-        // Se for vendedor, buscar o plano da empresa associada
+        // Se for vendedor, buscar o plano e verificar se a empresa está ativa
         if (mappedCompanyId) {
           const company = await this.prisma.company.findUnique({
             where: { id: mappedCompanyId },
-            select: { plan: true },
+            select: { plan: true, isActive: true },
           });
-          plan = company?.plan;
+          
+          // Bloquear login se a empresa estiver desativada
+          if (!company || !company.isActive) {
+            this.logger.warn(`Login bloqueado: Vendedor ${user.login} pertence à empresa ${mappedCompanyId} que está desativada`);
+            return null;
+          }
+          
+          plan = company.plan;
         }
       }
 
@@ -200,6 +215,27 @@ export class AuthService {
       throw new UnauthorizedException('User not found');
     }
 
+    // Verificar se empresa está ativa (para refresh de empresa)
+    if (tokenRecord.role === 'company') {
+      if (!(user as any).isActive) {
+        this.logger.warn(`Refresh bloqueado: Empresa ${user.login} está desativada`);
+        throw new UnauthorizedException('Empresa desativada');
+      }
+    }
+
+    // Verificar se empresa está ativa (para refresh de vendedor)
+    if (tokenRecord.role === 'seller' && user.companyId) {
+      const company = await this.prisma.company.findUnique({
+        where: { id: user.companyId as string },
+        select: { isActive: true },
+      });
+      
+      if (!company || !company.isActive) {
+        this.logger.warn(`Refresh bloqueado: Vendedor ${user.login} pertence à empresa ${user.companyId} que está desativada`);
+        throw new UnauthorizedException('Empresa desativada');
+      }
+    }
+
     const payload: JwtPayload = {
       sub: user.id,
       login: user.login,
@@ -231,7 +267,7 @@ export class AuthService {
     } else if (tokenRecord.role === 'seller' && user.companyId) {
       const company = await this.prisma.company.findUnique({
         where: { id: user.companyId as string },
-        select: { plan: true },
+        select: { plan: true, isActive: true },
       });
       plan = company?.plan;
     }
@@ -287,6 +323,14 @@ export class AuthService {
         return null;
       }
 
+      // Verificar se empresa está ativa (para validação de token JWT de empresa)
+      if (payload.role === 'company') {
+        if (!(user as any).isActive) {
+          this.logger.warn(`Validação JWT bloqueada: Empresa ${user.login} está desativada`);
+          return null;
+        }
+      }
+
       // Ajustar companyId no objeto do usuário retornado ao request
       let mappedCompanyId: string | null = null;
       let plan: string | undefined = undefined;
@@ -296,13 +340,20 @@ export class AuthService {
         plan = (user as any).plan; // Incluir o plano da empresa
       } else if (payload.role === 'seller') {
         mappedCompanyId = user.companyId || null;
-        // Se for vendedor, buscar o plano da empresa associada
+        // Se for vendedor, buscar o plano e verificar se a empresa está ativa
         if (mappedCompanyId) {
           const company = await this.prisma.company.findUnique({
             where: { id: mappedCompanyId },
-            select: { plan: true },
+            select: { plan: true, isActive: true },
           });
-          plan = company?.plan;
+          
+          // Bloquear acesso se a empresa estiver desativada
+          if (!company || !company.isActive) {
+            this.logger.warn(`Validação JWT bloqueada: Vendedor ${user.login} pertence à empresa ${mappedCompanyId} que está desativada`);
+            return null;
+          }
+          
+          plan = company.plan;
         }
       }
 
