@@ -1111,6 +1111,7 @@ export class SaleService {
             printContent: printContent || undefined,
             printType: 'nfce',
           };
+      }
     } catch (error) {
       // Se já é BadRequestException (erro detalhado de impressão), apenas propaga
       if (error instanceof BadRequestException) {
