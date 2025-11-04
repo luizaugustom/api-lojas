@@ -285,13 +285,33 @@ export class SaleService {
             } : undefined,
           };
 
-          const printResult = await this.printerService.printNonFiscalReceipt(receiptData, companyId, true);
-          
-          if (!printResult.success) {
-            this.logger.warn(`⚠️ Falha na impressão do cupom não fiscal para venda: ${completeSale.id}`);
-            this.logger.warn(`Erro: ${printResult.error}`);
-          } else {
-            this.logger.log(`✅ Cupom não fiscal impresso com sucesso para venda: ${completeSale.id}`);
+          // Gerar conteúdo de impressão para retornar ao cliente
+          let printContent: string | null = null;
+          try {
+            printContent = await this.printerService.getNonFiscalReceiptContent(receiptData, true);
+          } catch (generateError) {
+            this.logger.warn('Erro ao gerar conteúdo de cupom não fiscal, continuando sem conteúdo:', generateError);
+          }
+
+          // Tentar imprimir no servidor (opcional)
+          try {
+            const printResult = await this.printerService.printNonFiscalReceipt(receiptData, companyId, true, computerId);
+            if (!printResult.success) {
+              this.logger.warn(`⚠️ Falha na impressão do cupom não fiscal no servidor para venda: ${completeSale.id}`);
+              this.logger.warn(`Erro: ${printResult.error}`);
+              // Não falha a venda, apenas registra o aviso
+            } else {
+              this.logger.log(`✅ Cupom não fiscal impresso no servidor para venda: ${completeSale.id}`);
+            }
+          } catch (printError) {
+            // Erro de impressão no servidor não deve falhar a venda
+            this.logger.warn('Erro ao imprimir cupom não fiscal no servidor (continuando):', printError);
+          }
+
+          // Adicionar conteúdo de impressão à resposta
+          if (printContent) {
+            (completeSale as any).printContent = printContent;
+            (completeSale as any).printType = 'non-fiscal';
           }
           
           // Adicionar aviso na resposta da venda
@@ -384,25 +404,40 @@ export class SaleService {
             customFooter: completeSale.company.customFooter,
           };
 
-          const printResult = await this.printerService.printNFCe(nfcePrintData, companyId, computerId);
-          
-          if (!printResult.success) {
-            this.logger.warn(`⚠️ Falha na impressão para venda: ${completeSale.id}`);
-            this.logger.warn(`Erro: ${printResult.error}`);
-            if (printResult.details?.reason) {
-              this.logger.warn(`Detalhes: ${printResult.details.reason}`);
+          // Gerar conteúdo de impressão para retornar ao cliente
+          let printContent: string | null = null;
+          try {
+            printContent = await this.printerService.generatePrintContent(nfcePrintData, companyId);
+          } catch (generateError) {
+            this.logger.warn('Erro ao gerar conteúdo de impressão, continuando sem conteúdo:', generateError);
+          }
+
+          // Tentar imprimir no servidor (opcional, pode falhar se não houver impressora)
+          try {
+            const printResult = await this.printerService.printNFCe(nfcePrintData, companyId, computerId);
+            if (!printResult.success) {
+              this.logger.warn(`⚠️ Falha na impressão no servidor para venda: ${completeSale.id}`);
+              this.logger.warn(`Erro: ${printResult.error}`);
+              // Não falha a venda, apenas registra o aviso
+            } else {
+              this.logger.log(`✅ NFCe impressa no servidor para venda: ${completeSale.id}`);
             }
-            // Continue with sale even if printing fails, but store the error for response
-            throw new BadRequestException(
-              printResult.details?.reason || printResult.error || 'Erro ao imprimir NFC-e'
-            );
+          } catch (printError) {
+            // Erro de impressão no servidor não deve falhar a venda
+            this.logger.warn('Erro ao imprimir no servidor (continuando):', printError);
+          }
+
+          // Adicionar conteúdo de impressão à resposta
+          if (printContent) {
+            (completeSale as any).printContent = printContent;
+            (completeSale as any).printType = isMocked ? 'non-fiscal' : 'nfce';
           }
           
           if (isMocked) {
-            this.logger.warn(`⚠️ Cupom não fiscal impresso para venda: ${completeSale.id} (empresa sem configuração fiscal)`);
+            this.logger.warn(`⚠️ Cupom não fiscal gerado para venda: ${completeSale.id} (empresa sem configuração fiscal)`);
             (completeSale as any).warning = 'Cupom não fiscal emitido. Configure os dados fiscais para emitir NFCe válida.';
           } else {
-            this.logger.log(`NFCe printed successfully for sale: ${completeSale.id}`);
+            this.logger.log(`✅ NFCe gerada com sucesso para venda: ${completeSale.id}`);
           }
         }
       } catch (fiscalError) {
@@ -894,16 +929,35 @@ export class SaleService {
             } : undefined,
           };
 
-          const printResult = await this.printerService.printNonFiscalReceipt(receiptData, sale.companyId, true, computerId);
-          
-          if (!printResult.success) {
-            this.logger.warn(`⚠️ Falha na reimpressão do cupom não fiscal para venda: ${sale.id}`);
-            throw new BadRequestException(printResult.error || 'Erro ao reimprimir cupom não fiscal');
+          // Gerar conteúdo de impressão para retornar ao cliente
+          let printContent: string | null = null;
+          try {
+            printContent = await this.printerService.getNonFiscalReceiptContent(receiptData, true);
+          } catch (generateError) {
+            this.logger.warn('Erro ao gerar conteúdo de cupom não fiscal para reprint, continuando sem conteúdo:', generateError);
           }
-          
+
+          // Tentar imprimir no servidor (opcional)
+          try {
+            const printResult = await this.printerService.printNonFiscalReceipt(receiptData, sale.companyId, true, computerId);
+            if (!printResult.success) {
+              // Não falha se a impressão no servidor falhar, apenas registra
+              this.logger.warn(`⚠️ Falha na reimpressão do cupom não fiscal no servidor para venda: ${sale.id}`);
+              this.logger.warn(`Erro: ${printResult.error}`);
+            } else {
+              this.logger.log(`✅ Cupom não fiscal reimpresso no servidor para venda: ${sale.id}`);
+            }
+          } catch (printError) {
+            // Não falha se a impressão no servidor falhar, apenas registra
+            this.logger.warn('Erro ao reimprimir cupom não fiscal no servidor (continuando):', printError);
+          }
+
+          this.logger.log(`✅ Conteúdo de cupom não fiscal gerado para reprint da venda: ${sale.id}`);
           return { 
             message: 'Cupom não fiscal reimpresso com sucesso',
-            warning: 'Cupom não fiscal emitido. Configure os dados fiscais para emitir NFCe válida.'
+            warning: 'Cupom não fiscal emitido. Configure os dados fiscais para emitir NFCe válida.',
+            printContent: printContent || undefined,
+            printType: 'non-fiscal',
           };
         }
         
@@ -1028,17 +1082,35 @@ export class SaleService {
           customFooter: sale.company.customFooter,
         };
 
-        const printResult = await this.printerService.printNFCe(nfcePrintData, sale.companyId, computerId);
-        
-        if (!printResult.success) {
-          const errorMessage = printResult.details?.reason || printResult.error || 'Erro ao reimprimir NFC-e';
-          this.logger.error(`Erro ao reimprimir NFC-e para venda ${sale.id}: ${errorMessage}`);
-          throw new BadRequestException(errorMessage);
-        }
-      }
+                  // Gerar conteúdo de impressão para retornar ao cliente
+          let printContent: string | null = null;
+          try {
+            printContent = await this.printerService.generatePrintContent(nfcePrintData, sale.companyId);
+          } catch (generateError) {
+            this.logger.warn('Erro ao gerar conteúdo de impressão para reprint, continuando sem conteúdo:', generateError);
+          }
 
-      this.logger.log(`NFCe reprinted successfully for sale: ${sale.id}`);
-      return { message: 'NFC-e reimpresso com sucesso' };
+          // Tentar imprimir no servidor (opcional)
+          try {
+            const printResult = await this.printerService.printNFCe(nfcePrintData, sale.companyId, computerId);
+            if (!printResult.success) {
+              // Não falha se a impressão no servidor falhar, apenas registra
+              const errorMessage = printResult.details?.reason || printResult.error || 'Erro ao reimprimir NFC-e no servidor';
+              this.logger.warn(`Aviso ao reimprimir NFC-e no servidor para venda ${sale.id}: ${errorMessage}`);
+            } else {
+              this.logger.log(`✅ NFCe reimpressa no servidor para venda: ${sale.id}`);
+            }
+          } catch (printError) {
+            // Não falha se a impressão no servidor falhar, apenas registra
+            this.logger.warn('Erro ao reimprimir NFC-e no servidor (continuando):', printError);
+          }
+
+          this.logger.log(`✅ Conteúdo de impressão gerado para reprint da venda: ${sale.id}`);
+          return { 
+            message: 'NFC-e reimpresso com sucesso',
+            printContent: printContent || undefined,
+            printType: 'nfce',
+          };
     } catch (error) {
       // Se já é BadRequestException (erro detalhado de impressão), apenas propaga
       if (error instanceof BadRequestException) {

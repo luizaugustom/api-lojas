@@ -25,9 +25,10 @@ async function getPrinters() {
   try {
     switch (platform) {
       case 'win32':
-        const { stdout } = await execAsync('powershell.exe -Command "Get-Printer | Select-Object Name | ConvertTo-Json"');
-        const printers = JSON.parse(stdout);
-        return Array.isArray(printers) ? printers.map(p => p.Name) : [printers.Name];
+  const { stdout } = await execAsync('powershell.exe -Command "Get-Printer | Select Name, PrinterStatus, WorkOffline, PortName | ConvertTo-Json"');
+  const printers = JSON.parse(stdout);
+  // Retorna array de objetos com status
+  return Array.isArray(printers) ? printers : [printers];
       
       case 'linux':
       case 'darwin':
@@ -205,18 +206,20 @@ async function main() {
   if (!printerName) {
     console.log('📋 Listando impressoras disponíveis...\n');
     const printers = await getPrinters();
-    
     if (printers.length === 0) {
       console.error('❌ Nenhuma impressora encontrada');
       console.log('\n💡 Dica: Conecte uma impressora e tente novamente\n');
       process.exit(1);
     }
-    
     console.log('Impressoras encontradas:');
     printers.forEach((printer, index) => {
-      console.log(`  ${index + 1}. ${printer}`);
+      // Mostra status detalhado
+      const status = typeof printer === 'object'
+        ? `Status: ${printer.PrinterStatus} | Offline: ${printer.WorkOffline} | Porta: ${printer.PortName}`
+        : '';
+      const name = typeof printer === 'object' ? printer.Name : printer;
+      console.log(`  ${index + 1}. ${name} ${status}`);
     });
-    
     console.log('\n🔧 Uso: node scripts/test-printer.js "Nome da Impressora"');
     console.log('   Exemplo: node scripts/test-printer.js "EPSON TM-T20"\n');
     process.exit(0);
@@ -245,6 +248,7 @@ async function main() {
 }
 
 main();
+
 
 
 

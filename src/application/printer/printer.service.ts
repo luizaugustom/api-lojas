@@ -1858,4 +1858,32 @@ export class PrinterService {
     
     return statusMap[status] || status;
   }
+
+  /**
+   * Gera conteúdo de impressão NFCe sem enviar para impressora
+   * Retorna o texto formatado para impressão no cliente
+   */
+  async generatePrintContent(nfceData: NFCePrintData, companyId?: string): Promise<string> {
+    try {
+      const content = await this.generateNFCeContent(nfceData);
+      return content;
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      this.logger.error('Erro ao gerar conteúdo de impressão:', error);
+      throw new Error(`Erro ao gerar conteúdo de impressão: ${errorMessage}`);
+    }
+  }
+
+  /**
+   * Gera conteúdo de cupom não fiscal sem enviar para impressora (método público)
+   */
+  async getNonFiscalReceiptContent(receiptData: ReceiptData, isMocked: boolean = false): Promise<string> {
+    try {
+      return this.generateNonFiscalReceiptContent(receiptData, isMocked);
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      this.logger.error('Erro ao gerar conteúdo de cupom não fiscal:', error);
+      throw new Error(`Erro ao gerar conteúdo de cupom não fiscal: ${errorMessage}`);
+    }
+  }
 }

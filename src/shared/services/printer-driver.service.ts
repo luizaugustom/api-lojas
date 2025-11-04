@@ -64,17 +64,50 @@ export class PrinterDriverService {
         $printers = Get-Printer | Select-Object Name, DriverName, PortName, PrinterStatus, @{Name='IsDefault';Expression={$_.IsDefault}}
         $result = @()
         foreach ($printer in $printers) {
-          $portInfo = Get-PrinterPort -Name $printer.PortName -ErrorAction SilentlyContinue
-          $portType = if ($portInfo) { $portInfo.PortType } else { $null }
-          $portAddress = if ($portInfo) { $portInfo.PrinterHostAddress } else { $null }
-          $result += @{
-            Name = $printer.Name
-            DriverName = $printer.DriverName
-            PortName = $printer.PortName
-            PortType = $portType
-            PortAddress = $portAddress
-            PrinterStatus = $printer.PrinterStatus
-            IsDefault = $printer.IsDefault
+          try {
+            $portInfo = Get-PrinterPort -Name $printer.PortName -ErrorAction SilentlyContinue
+            $portType = if ($portInfo) { $portInfo.PortType } else { $null }
+            $portAddress = if ($portInfo) { $portInfo.PrinterHostAddress } else { $null }
+            
+            # Verificar se a impressora está realmente acessível
+            $printerDetails = Get-Printer -Name $printer.Name -ErrorAction SilentlyContinue
+            $isAccessible = $printerDetails -ne $null
+            
+            # Se PrinterStatus for 0 (Other) ou 1 (Unknown), tentar determinar status real
+            $realStatus = $printer.PrinterStatus
+            if ($printer.PrinterStatus -eq 0 -or $printer.PrinterStatus -eq 1) {
+              try {
+                $testJob = Get-PrintJob -PrinterName $printer.Name -ErrorAction SilentlyContinue
+                if ($testJob -ne $null -or $isAccessible) {
+                  $realStatus = 2 # Idle
+                }
+              } catch {
+                # Manter status original
+              }
+            }
+            
+            $result += @{
+              Name = $printer.Name
+              DriverName = $printer.DriverName
+              PortName = $printer.PortName
+              PortType = $portType
+              PortAddress = $portAddress
+              PrinterStatus = $realStatus
+              IsDefault = $printer.IsDefault
+              IsAccessible = $isAccessible
+            }
+          } catch {
+            # Se houver erro, incluir impressora mesmo assim
+            $result += @{
+              Name = $printer.Name
+              DriverName = $printer.DriverName
+              PortName = $printer.PortName
+              PortType = $null
+              PortAddress = $null
+              PrinterStatus = $printer.PrinterStatus
+              IsDefault = $printer.IsDefault
+              IsAccessible = $false
+            }
           }
         }
         $result | ConvertTo-Json -Depth 3
@@ -119,11 +152,24 @@ export class PrinterDriverService {
             connection = this.detectConnectionType(portName, portAddress);
           }
 
+          // Determinar status real da impressora
+          let status = this.parseWindowsStatus(printer.PrinterStatus);
+          
+          // Se o status foi determinado como "Other" ou "Unknown" mas IsAccessible é true, considerar online
+          if ((printer.PrinterStatus === 0 || printer.PrinterStatus === 1) && printer.IsAccessible) {
+            status = 'online';
+          }
+          
+          // Se o status indica offline mas a impressora está acessível, reconsiderar
+          if (status === 'offline' && printer.IsAccessible) {
+            status = 'online';
+          }
+
           return {
             name: printer.Name,
             driver: printer.DriverName || 'Unknown',
             port: portName,
-            status: this.parseWindowsStatus(printer.PrinterStatus),
+            status,
             isDefault: printer.IsDefault || false,
             connection,
           };
@@ -601,21 +647,62 @@ export class PrinterDriverService {
 
   /**
    * Parse do status da impressora no Windows
+   * IMPORTANTE: Windows PrinterStatus enum:
+   * 0 = Other (Outro estado - pode estar online)
+   * 1 = Unknown (Desconhecido - geralmente offline)
+   * 2 = Idle (Ociosa - ONLINE)
+   * 3 = Printing (Imprimindo - ONLINE)
+   * 4 = Warming Up (Aquecendo - ONLINE)
+   * 5 = Stopped Printing (Parada - ERROR)
+   * 6 = Offline (Desconectada - OFFLINE)
+   * 7 = Paused (Pausada - ONLINE mas não operacional)
+   * 8 = Error (Erro - ERROR)
+   * 9 = Busy (Ocupada - ONLINE)
+   * 10 = Not Available (Não disponível - OFFLINE)
+   * 11 = Waiting (Aguardando - ONLINE)
+   * 12 = Processing (Processando - ONLINE)
+   * 13 = Initialization (Inicializando - ONLINE)
+   * 14 = Power Save (Economia de energia - pode estar online)
+   * 15 = Pending Deletion (Pendente de exclusão - OFFLINE)
    */
   private parseWindowsStatus(status: number): 'online' | 'offline' | 'error' | 'paper-empty' {
-    // Windows PrinterStatus: 0=Other, 1=Unknown, 2=Idle, 3=Printing, 4=Warming Up, 5=Stopped Printing, 6=Offline
-    switch (status) {
-      case 2:
-      case 3:
-      case 4:
-        return 'online';
-      case 6:
-        return 'offline';
-      case 5:
-        return 'error';
-      default:
-        return 'offline';
+    // Status que indicam impressora ONLINE e funcional
+    const onlineStatuses = [2, 3, 4, 9, 11, 12, 13]; // Idle, Printing, Warming Up, Busy, Waiting, Processing, Initialization
+    
+    // Status que indicam erro ou problema
+    const errorStatuses = [5, 8]; // Stopped Printing, Error
+    
+    // Status que indicam offline
+    const offlineStatuses = [6, 10, 15]; // Offline, Not Available, Pending Deletion
+    
+    // Status 0 (Other) e 1 (Unknown) podem estar online ou offline - vamos verificar pelo nome
+    // Status 7 (Paused) está online mas pausada
+    // Status 14 (Power Save) pode estar online
+    
+    if (onlineStatuses.includes(status)) {
+      return 'online';
     }
+    
+    if (errorStatuses.includes(status)) {
+      return 'error';
+    }
+    
+    if (offlineStatuses.includes(status)) {
+      return 'offline';
+    }
+    
+    // Para status 0 (Other), 1 (Unknown), 7 (Paused), 14 (Power Save)
+    // Assumimos online se não houver indicação contrária (será verificado depois)
+    if (status === 0 || status === 14) {
+      return 'online'; // Other e Power Save geralmente indicam que está conectada
+    }
+    
+    if (status === 7) {
+      return 'online'; // Paused está online mas pausada
+    }
+    
+    // Unknown (1) ou qualquer outro status desconhecido - assumir offline para ser seguro
+    return 'offline';
   }
 
   /**
