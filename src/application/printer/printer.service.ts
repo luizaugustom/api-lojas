@@ -274,23 +274,29 @@ export class PrinterService {
 
   /**
    * Obtém impressoras disponíveis no sistema
-   * Se computerId for fornecido, retorna dispositivos do computador do cliente
-   * Se companyId for fornecido, também retorna impressoras do banco de dados da empresa
+   * REGRA: Se computerId for fornecido, retorna APENAS impressoras que estão conectadas no computador do cliente
+   * As impressoras do banco de dados só aparecem se estiverem fisicamente conectadas no computador do usuário
    */
   async getAvailablePrinters(computerId?: string | null, companyId?: string): Promise<SystemPrinter[]> {
     const printers: SystemPrinter[] = [];
     
-    // Se há um computerId, retorna dispositivos do cliente (em memória)
+    // PRIORIDADE 1: Se há um computerId, busca impressoras do cliente (em memória)
+    // Essas são as impressoras detectadas no computador do usuário
+    let clientPrinters: SystemPrinter[] = [];
     if (computerId) {
       const clientData = this.clientDevices.get(computerId);
       if (clientData && clientData.printers.length > 0) {
-        this.logger.log(`Retornando ${clientData.printers.length} impressora(s) do computador ${computerId}`);
-        printers.push(...clientData.printers);
+        this.logger.log(`✅ Retornando ${clientData.printers.length} impressora(s) do computador ${computerId}`);
+        clientPrinters = clientData.printers;
+        printers.push(...clientPrinters);
+      } else {
+        this.logger.warn(`⚠️ Nenhuma impressora registrada em memória para o computador ${computerId}. O cliente deve fazer a descoberta primeiro.`);
       }
     }
     
-    // Se há companyId, também busca impressoras do banco de dados
-    if (companyId) {
+    // PRIORIDADE 2: Se há companyId E computerId, verifica quais impressoras do banco estão conectadas no computador
+    // Só adiciona impressoras do banco que estão fisicamente conectadas no computador do usuário
+    if (companyId && computerId && clientPrinters.length > 0) {
       try {
         const dbPrinters = await this.prisma.printer.findMany({
           where: { companyId },
@@ -302,7 +308,58 @@ export class PrinterService {
           },
         });
         
-        // Converte impressoras do banco para formato SystemPrinter
+        // Verifica quais impressoras do banco estão na lista do computador do cliente
+        const printerNames = new Set(clientPrinters.map(p => p.name.toLowerCase()));
+        const connectedDbPrinters = dbPrinters.filter(p => 
+          printerNames.has(p.name.toLowerCase()) && p.isConnected
+        );
+        
+        // Adiciona apenas impressoras do banco que estão conectadas no computador
+        for (const dbPrinter of connectedDbPrinters) {
+          // Verifica se já não está na lista (pode ter nomes ligeiramente diferentes)
+          const alreadyAdded = printers.some(p => 
+            p.name.toLowerCase() === dbPrinter.name.toLowerCase()
+          );
+          
+          if (!alreadyAdded) {
+            // Encontra a impressora correspondente no computador para usar dados atualizados
+            const clientPrinter = clientPrinters.find(p => 
+              p.name.toLowerCase() === dbPrinter.name.toLowerCase()
+            );
+            
+            if (clientPrinter) {
+              // Usa os dados do computador (mais atualizados) mas mantém referência do banco
+              printers.push({
+                ...clientPrinter,
+                // Mantém informações do banco se necessário
+              });
+            }
+          }
+        }
+        
+        if (connectedDbPrinters.length > 0) {
+          this.logger.log(`✅ ${connectedDbPrinters.length} impressora(s) do banco estão conectadas no computador ${computerId}`);
+        }
+      } catch (error) {
+        this.logger.warn('Erro ao buscar impressoras do banco:', error);
+      }
+    }
+    
+    // PRIORIDADE 3: Se não há computerId mas há companyId, busca impressoras do banco (fallback antigo)
+    // Isso só acontece quando não há contexto de computador (não recomendado)
+    if (printers.length === 0 && !computerId && companyId) {
+      this.logger.warn('⚠️ Buscando impressoras do banco sem computerId (não recomendado)');
+      try {
+        const dbPrinters = await this.prisma.printer.findMany({
+          where: { companyId, isConnected: true },
+          select: {
+            name: true,
+            type: true,
+            connectionInfo: true,
+            isConnected: true,
+          },
+        });
+        
         const dbSystemPrinters: SystemPrinter[] = dbPrinters.map(p => ({
           name: p.name,
           driver: 'Database',
@@ -312,21 +369,20 @@ export class PrinterService {
           connection: (p.type || 'usb') as 'usb' | 'network' | 'bluetooth',
         }));
         
-        // Adiciona apenas impressoras que não estão já na lista (evita duplicatas)
-        for (const dbPrinter of dbSystemPrinters) {
-          if (!printers.find(p => p.name === dbPrinter.name)) {
-            printers.push(dbPrinter);
-          }
-        }
+        printers.push(...dbSystemPrinters);
         
-        this.logger.log(`Adicionadas ${dbSystemPrinters.length} impressora(s) do banco de dados para empresa ${companyId}`);
+        if (dbSystemPrinters.length > 0) {
+          this.logger.log(`✅ Adicionadas ${dbSystemPrinters.length} impressora(s) do banco de dados para empresa ${companyId}`);
+        }
       } catch (error) {
         this.logger.warn('Erro ao buscar impressoras do banco:', error);
       }
     }
     
-    // Se não encontrou nenhuma impressora e não há computerId/companyId, detecta no servidor
+    // PRIORIDADE 4: Se não encontrou nenhuma impressora e não há computerId/companyId, detecta no servidor
+    // Isso é usado apenas quando não há contexto de cliente ou empresa (modo servidor)
     if (printers.length === 0 && !computerId && !companyId) {
+      this.logger.log('Detectando impressoras no servidor (sem contexto de cliente)...');
       if (!this.lastPrinterCheck || 
           (new Date().getTime() - this.lastPrinterCheck.getTime()) > 60000) {
         this.availablePrinters = await this.driverService.detectSystemPrinters();
@@ -335,9 +391,15 @@ export class PrinterService {
       return this.availablePrinters;
     }
     
-    // Se não encontrou nenhuma impressora e há computerId, avisa
-    if (printers.length === 0 && computerId) {
-      this.logger.warn(`Nenhum dispositivo encontrado para o computador ${computerId}`);
+    // Log final
+    if (printers.length === 0) {
+      if (computerId) {
+        this.logger.warn(`⚠️ Nenhuma impressora encontrada para o computador ${computerId}. O cliente deve fazer a descoberta de impressoras.`);
+      } else {
+        this.logger.warn('⚠️ Nenhuma impressora encontrada');
+      }
+    } else {
+      this.logger.log(`✅ Total de ${printers.length} impressora(s) disponível(is) - todas conectadas no computador do usuário`);
     }
     
     return printers;
@@ -607,10 +669,10 @@ export class PrinterService {
     });
   }
 
-  async printReceipt(receiptData: ReceiptData, companyId?: string): Promise<PrintResult> {
+  async printReceipt(receiptData: ReceiptData, companyId?: string, computerId?: string | null): Promise<PrintResult> {
     try {
       const receipt = this.generateReceiptContent(receiptData);
-      const result = await this.sendToPrinter(receipt, companyId);
+      const result = await this.sendToPrinter(receipt, companyId, computerId);
       
       if (result.success) {
         this.logger.log(`Receipt printed successfully for sale: ${receiptData.sale.id}`);
@@ -632,10 +694,10 @@ export class PrinterService {
     }
   }
 
-  async printCashClosureReport(reportData: CashClosureReportData, companyId?: string): Promise<PrintResult> {
+  async printCashClosureReport(reportData: CashClosureReportData, companyId?: string, computerId?: string | null): Promise<PrintResult> {
     try {
       const report = this.generateCashClosureReport(reportData);
-      const result = await this.sendToPrinter(report, companyId);
+      const result = await this.sendToPrinter(report, companyId, computerId);
       
       if (result.success) {
         this.logger.log('Cash closure report printed successfully');
@@ -657,12 +719,12 @@ export class PrinterService {
     }
   }
 
-  async printNonFiscalReceipt(receiptData: ReceiptData, companyId?: string, isMocked: boolean = false): Promise<PrintResult> {
+  async printNonFiscalReceipt(receiptData: ReceiptData, companyId?: string, isMocked: boolean = false, computerId?: string | null): Promise<PrintResult> {
     try {
-      this.logger.log(`Iniciando impressão de cupom não fiscal para venda: ${receiptData.sale.id}${isMocked ? ' (DADOS MOCKADOS)' : ''}`);
+      this.logger.log(`Iniciando impressão de cupom não fiscal para venda: ${receiptData.sale.id}${isMocked ? ' (DADOS MOCKADOS)' : ''}${computerId ? ` (computador: ${computerId})` : ''}`);
       
       const receipt = this.generateNonFiscalReceiptContent(receiptData, isMocked);
-      const result = await this.sendToPrinter(receipt, companyId);
+      const result = await this.sendToPrinter(receipt, companyId, computerId);
       
       if (result.success) {
         this.logger.log(`✅ Cupom não fiscal impresso com sucesso para venda: ${receiptData.sale.id}`);
@@ -737,9 +799,9 @@ export class PrinterService {
     }
   }
 
-  async printNFCe(nfceData: NFCePrintData, companyId?: string): Promise<PrintResult> {
+  async printNFCe(nfceData: NFCePrintData, companyId?: string, computerId?: string | null): Promise<PrintResult> {
     try {
-      this.logger.log(`Iniciando impressão de NFCe para venda: ${nfceData.sale.id}`);
+      this.logger.log(`Iniciando impressão de NFCe para venda: ${nfceData.sale.id}${computerId ? ` (computador: ${computerId})` : ''}`);
       
       // Verificar se é mock (status MOCK ou flag isMock)
       const isMock = nfceData.fiscal.status === 'MOCK' || (nfceData.fiscal as any).isMock === true;
@@ -776,11 +838,11 @@ export class PrinterService {
           },
         };
         
-        return await this.printNonFiscalReceipt(receiptData, companyId, true);
+        return await this.printNonFiscalReceipt(receiptData, companyId, true, computerId);
       }
       
       const nfce = await this.generateNFCeContent(nfceData);
-      const result = await this.sendToPrinter(nfce, companyId);
+      const result = await this.sendToPrinter(nfce, companyId, computerId);
       
       if (result.success) {
         this.logger.log(`✅ NFCe impressa com sucesso para venda: ${nfceData.sale.id}`);
@@ -1193,14 +1255,41 @@ export class PrinterService {
 
   /**
    * Envia conteúdo para impressão real
+   * PRIORIDADE: Se computerId for fornecido, usa impressoras do computador do cliente
    */
-  private async sendToPrinter(content: string, companyId?: string): Promise<PrintResult> {
+  private async sendToPrinter(content: string, companyId?: string, computerId?: string | null): Promise<PrintResult> {
     try {
       // Obtém impressora padrão da empresa ou do sistema
       let printerName: string | null = null;
       let printerSource = 'não encontrada';
       
-      if (companyId) {
+      // PRIORIDADE 1: Se há computerId, busca impressoras do computador do cliente primeiro
+      // Essas são as impressoras conectadas ao computador do usuário que está fazendo a impressão
+      if (computerId) {
+        this.logger.log(`🔍 Buscando impressoras do computador do cliente: ${computerId}`);
+        const clientPrinters = await this.getAvailablePrinters(computerId, companyId);
+        
+        if (clientPrinters.length > 0) {
+          // Prioriza impressora padrão online, depois qualquer impressora online
+          const defaultPrinter = clientPrinters.find(p => p.isDefault && p.status === 'online');
+          const anyOnlinePrinter = clientPrinters.find(p => p.status === 'online');
+          
+          if (defaultPrinter) {
+            printerName = defaultPrinter.name;
+            printerSource = `impressora padrão do computador ${computerId}`;
+            this.logger.log(`✅ Usando impressora padrão do cliente: ${printerName}`);
+          } else if (anyOnlinePrinter) {
+            printerName = anyOnlinePrinter.name;
+            printerSource = `impressora do computador ${computerId}`;
+            this.logger.log(`✅ Usando impressora do cliente: ${printerName}`);
+          }
+        } else {
+          this.logger.warn(`⚠️ Nenhuma impressora encontrada no computador ${computerId}. Tentando outras fontes...`);
+        }
+      }
+      
+      // PRIORIDADE 2: Se não encontrou impressora do cliente, busca no banco de dados da empresa
+      if (!printerName && companyId) {
         const dbPrinter = await this.prisma.printer.findFirst({
           where: {
             companyId,
@@ -1214,14 +1303,14 @@ export class PrinterService {
         if (dbPrinter) {
           printerName = dbPrinter.name;
           printerSource = 'banco de dados (empresa)';
-          this.logger.log(`Impressora encontrada no banco: ${printerName}`);
+          this.logger.log(`✅ Impressora encontrada no banco: ${printerName}`);
         }
       }
       
-      // Se não encontrou impressora cadastrada, usa a padrão do sistema
+      // PRIORIDADE 3: Se não encontrou impressora cadastrada, usa a padrão do sistema
       if (!printerName) {
-        this.logger.log('Buscando impressora padrão do sistema...');
-        // Busca impressoras disponíveis considerando companyId se disponível
+        this.logger.log('🔍 Buscando impressora padrão do sistema...');
+        // Busca impressoras disponíveis (sem computerId para buscar no servidor)
         const systemPrinters = await this.getAvailablePrinters(null, companyId);
         
         if (systemPrinters.length === 0) {
@@ -1230,7 +1319,7 @@ export class PrinterService {
             success: false,
             error: 'Nenhuma impressora detectada no sistema',
             details: {
-              reason: 'Nenhuma impressora foi encontrada no sistema operacional. Verifique se a impressora está conectada e instalada corretamente.',
+              reason: 'Nenhuma impressora foi encontrada no sistema operacional. Verifique se a impressora está conectada e instalada corretamente. Se estiver usando o aplicativo desktop, certifique-se de ter feito a descoberta de impressoras.',
             },
           };
         }
@@ -1459,7 +1548,7 @@ export class PrinterService {
     }
   }
 
-  async testPrinter(id: string): Promise<PrintResult> {
+  async testPrinter(id: string, computerId?: string | null): Promise<PrintResult> {
     try {
       const printer = await this.prisma.printer.findUnique({
         where: { id },
@@ -1470,7 +1559,7 @@ export class PrinterService {
       }
 
       const testContent = this.generateTestContent();
-      const result = await this.sendToPrinter(testContent, printer.companyId);
+      const result = await this.sendToPrinter(testContent, printer.companyId, computerId);
       
       if (result.success) {
         await this.updatePrinterStatus(id, {
@@ -1619,12 +1708,12 @@ export class PrinterService {
   /**
    * Imprime orçamento
    */
-  async printBudget(data: any): Promise<boolean> {
+  async printBudget(data: any, computerId?: string | null): Promise<boolean> {
     try {
-      this.logger.log(`Printing budget: ${data.budget.id}`);
+      this.logger.log(`Printing budget: ${data.budget.id}${computerId ? ` (computador: ${computerId})` : ''}`);
       
       const content = this.generateBudgetContent(data);
-      const result = await this.sendToPrinter(content, data.company.id);
+      const result = await this.sendToPrinter(content, data.company.id, computerId);
       
       if (result.success) {
         this.logger.log(`Budget ${data.budget.id} printed successfully`);

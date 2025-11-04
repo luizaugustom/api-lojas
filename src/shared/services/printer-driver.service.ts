@@ -55,29 +55,79 @@ export class PrinterDriverService {
 
   /**
    * Detecta impressoras no Windows
+   * Melhorado para detectar USB, Bluetooth e Rede corretamente
    */
   private async detectWindowsPrinters(): Promise<SystemPrinter[]> {
     try {
-      // PowerShell command para listar impressoras
+      // PowerShell command melhorado para obter mais informações sobre portas
       const psCommand = `
-        Get-Printer | Select-Object Name, DriverName, PortName, PrinterStatus, @{Name='IsDefault';Expression={$_.IsDefault}} | ConvertTo-Json
+        $printers = Get-Printer | Select-Object Name, DriverName, PortName, PrinterStatus, @{Name='IsDefault';Expression={$_.IsDefault}}
+        $result = @()
+        foreach ($printer in $printers) {
+          $portInfo = Get-PrinterPort -Name $printer.PortName -ErrorAction SilentlyContinue
+          $portType = if ($portInfo) { $portInfo.PortType } else { $null }
+          $portAddress = if ($portInfo) { $portInfo.PrinterHostAddress } else { $null }
+          $result += @{
+            Name = $printer.Name
+            DriverName = $printer.DriverName
+            PortName = $printer.PortName
+            PortType = $portType
+            PortAddress = $portAddress
+            PrinterStatus = $printer.PrinterStatus
+            IsDefault = $printer.IsDefault
+          }
+        }
+        $result | ConvertTo-Json -Depth 3
       `;
 
       const { stdout } = await execAsync(`powershell.exe -Command "${psCommand.replace(/\n/g, ' ')}"`);
       
+      if (!stdout || stdout.trim() === '' || stdout.trim() === 'null') {
+        this.logger.warn('Nenhuma impressora encontrada no Windows');
+        return [];
+      }
+
       let printersData = JSON.parse(stdout);
       if (!Array.isArray(printersData)) {
         printersData = [printersData];
       }
 
-      return printersData.map((printer: any) => ({
-        name: printer.Name,
-        driver: printer.DriverName || 'Unknown',
-        port: printer.PortName || 'Unknown',
-        status: this.parseWindowsStatus(printer.PrinterStatus),
-        isDefault: printer.IsDefault || false,
-        connection: this.detectConnectionType(printer.PortName),
-      }));
+      // Filtrar valores null e mapear
+      return printersData
+        .filter((p: any) => p && p.Name)
+        .map((printer: any) => {
+          const portName = printer.PortName || 'Unknown';
+          const portType = printer.PortType || null;
+          const portAddress = printer.PortAddress || null;
+          
+          // Determinar tipo de conexão com mais precisão
+          let connection: 'usb' | 'network' | 'bluetooth' | 'local' = 'local';
+          
+          if (portType) {
+            // PortType pode ser: TCP, USB, LPT, etc.
+            if (portType.toString().toUpperCase().includes('TCP') || portType.toString().toUpperCase().includes('IP')) {
+              connection = 'network';
+            } else if (portType.toString().toUpperCase().includes('USB')) {
+              connection = 'usb';
+            } else if (portType.toString().toUpperCase().includes('BLUETOOTH') || portType.toString().toUpperCase().includes('BT')) {
+              connection = 'bluetooth';
+            }
+          }
+          
+          // Fallback: usar detecção por nome da porta
+          if (connection === 'local') {
+            connection = this.detectConnectionType(portName, portAddress);
+          }
+
+          return {
+            name: printer.Name,
+            driver: printer.DriverName || 'Unknown',
+            port: portName,
+            status: this.parseWindowsStatus(printer.PrinterStatus),
+            isDefault: printer.IsDefault || false,
+            connection,
+          };
+        });
     } catch (error) {
       this.logger.error('Erro ao detectar impressoras Windows:', error);
       return [];
@@ -117,7 +167,7 @@ export class PrinterDriverService {
                 port,
                 status: status.includes('idle') ? 'online' : 'offline',
                 isDefault: name === defaultPrinter,
-                connection: this.detectConnectionType(port),
+                connection: this.detectConnectionType(port, null),
               });
             } catch (error) {
               this.logger.warn(`Erro ao obter detalhes da impressora ${name}:`, error);
@@ -165,7 +215,7 @@ export class PrinterDriverService {
                 port,
                 status: status.includes('idle') ? 'online' : 'offline',
                 isDefault: name === defaultPrinter,
-                connection: this.detectConnectionType(port),
+                connection: this.detectConnectionType(port, null),
               });
             } catch (error) {
               this.logger.warn(`Erro ao obter detalhes da impressora ${name}:`, error);
@@ -569,17 +619,50 @@ export class PrinterDriverService {
   }
 
   /**
-   * Detecta o tipo de conexão baseado na porta
+   * Detecta o tipo de conexão baseado na porta e endereço
+   * Melhorado para detectar USB, Bluetooth e Rede com mais precisão
    */
-  private detectConnectionType(port: string): 'usb' | 'network' | 'bluetooth' | 'local' {
+  private detectConnectionType(port: string, address?: string | null): 'usb' | 'network' | 'bluetooth' | 'local' {
     const portLower = port.toLowerCase();
+    const addressLower = address ? address.toLowerCase() : '';
+    const combined = `${portLower} ${addressLower}`;
     
-    if (portLower.includes('usb')) return 'usb';
-    if (portLower.includes('tcp') || portLower.includes('ip') || /\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}/.test(port)) {
+    // Detecção de USB
+    if (portLower.includes('usb') || 
+        portLower.match(/usb\d{3}/) || 
+        portLower.startsWith('usb') ||
+        portLower.includes('usbport')) {
+      return 'usb';
+    }
+    
+    // Detecção de Bluetooth
+    if (portLower.includes('bluetooth') || 
+        portLower.includes('bt') ||
+        portLower.includes('bth') ||
+        combined.includes('bluetooth') ||
+        combined.includes('_bt_')) {
+      return 'bluetooth';
+    }
+    
+    // Detecção de Rede (TCP/IP)
+    if (portLower.includes('tcp') || 
+        portLower.includes('ip_') ||
+        portLower.includes('ipp') ||
+        portLower.includes('http') ||
+        portLower.includes('https') ||
+        portLower.includes('socket') ||
+        /\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}/.test(port) ||
+        /\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}/.test(address || '')) {
       return 'network';
     }
-    if (portLower.includes('bluetooth') || portLower.includes('bt')) return 'bluetooth';
     
+    // Detecção por padrões de porta de rede
+    if (portLower.includes(':') && /:\d+$/.test(port)) {
+      // Porta com formato IP:PORTA (ex: 192.168.1.100:9100)
+      return 'network';
+    }
+    
+    // Local/Serial/LPT
     return 'local';
   }
 

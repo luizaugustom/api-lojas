@@ -10,9 +10,10 @@ import {
   HttpStatus,
   Query,
   Res,
+  Req,
 } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth } from '@nestjs/swagger';
-import { Response } from 'express';
+import { Request, Response } from 'express';
 import { BudgetService } from './budget.service';
 import { CreateBudgetDto } from './dto/create-budget.dto';
 import { UpdateBudgetDto } from './dto/update-budget.dto';
@@ -136,9 +137,15 @@ export class BudgetController {
     status: 404,
     description: 'Orçamento não encontrado',
   })
-  async print(@CurrentUser() user: any, @Param('id') id: string) {
+  async print(
+    @CurrentUser() user: any,
+    @Param('id') id: string,
+    @Req() req: Request,
+  ) {
     const companyId = user.role === UserRole.COMPANY ? user.id : user.companyId;
-    return this.budgetService.printBudget(id, companyId);
+    // Obter computerId do header (enviado pelo cliente desktop/web)
+    const computerId = (req.headers['x-computer-id'] as string) || null;
+    return this.budgetService.printBudget(id, companyId, computerId);
   }
 
   @Get(':id/pdf')

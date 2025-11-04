@@ -384,7 +384,7 @@ export class BudgetService {
     return { message: 'Orçamento excluído com sucesso' };
   }
 
-  async printBudget(id: string, companyId?: string) {
+  async printBudget(id: string, companyId?: string, computerId?: string | null) {
     const budget = await this.findOne(id, companyId);
 
     const printData: BudgetPrintData = {
@@ -423,7 +423,7 @@ export class BudgetService {
       } : undefined,
     };
 
-    await this.printerService.printBudget(printData);
+    await this.printerService.printBudget(printData, computerId);
 
     this.logger.log(`Budget ${id} printed successfully`);
 

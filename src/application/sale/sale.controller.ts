@@ -10,7 +10,9 @@ import {
   Query,
   ParseIntPipe,
   BadRequestException,
+  Req,
 } from '@nestjs/common';
+import { Request } from 'express';
 import {
   ApiTags,
   ApiOperation,
@@ -43,13 +45,17 @@ export class SaleController {
   create(
     @CurrentUser() user: any,
     @Body() createSaleDto: CreateSaleDto,
+    @Req() req: Request,
   ) {
     const sellerId = user.role === UserRole.SELLER ? user.id : createSaleDto.sellerId;
     if (!sellerId) {
       throw new BadRequestException('Vendedor é obrigatório');
     }
     
-    return this.saleService.create(user.companyId, sellerId, createSaleDto);
+    // Obter computerId do header (enviado pelo cliente desktop/web)
+    const computerId = (req.headers['x-computer-id'] as string) || null;
+    
+    return this.saleService.create(user.companyId, sellerId, createSaleDto, computerId);
   }
 
   @Get()
@@ -158,9 +164,12 @@ export class SaleController {
   reprintReceipt(
     @Param('id', UuidValidationPipe) id: string,
     @CurrentUser() user: any,
+    @Req() req: Request,
   ) {
     const companyId = user.role === UserRole.ADMIN ? undefined : user.companyId;
-    return this.saleService.reprintReceipt(id, companyId);
+    // Obter computerId do header (enviado pelo cliente desktop/web)
+    const computerId = (req.headers['x-computer-id'] as string) || null;
+    return this.saleService.reprintReceipt(id, companyId, computerId);
   }
 
   @Get(':id/print-content')

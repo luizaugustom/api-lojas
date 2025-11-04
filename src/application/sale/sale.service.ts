@@ -24,7 +24,7 @@ export class SaleService {
     private readonly ibptService: IBPTService,
   ) {}
 
-  async create(companyId: string, sellerId: string, createSaleDto: CreateSaleDto) {
+  async create(companyId: string, sellerId: string, createSaleDto: CreateSaleDto, computerId?: string | null) {
     try {
       // Validate products and calculate total
       let total = 0;
@@ -384,7 +384,7 @@ export class SaleService {
             customFooter: completeSale.company.customFooter,
           };
 
-          const printResult = await this.printerService.printNFCe(nfcePrintData, companyId);
+          const printResult = await this.printerService.printNFCe(nfcePrintData, companyId, computerId);
           
           if (!printResult.success) {
             this.logger.warn(`⚠️ Falha na impressão para venda: ${completeSale.id}`);
@@ -816,7 +816,7 @@ export class SaleService {
     };
   }
 
-  async reprintReceipt(id: string, companyId?: string) {
+  async reprintReceipt(id: string, companyId?: string, computerId?: string | null) {
     // Buscar venda com todas as relações necessárias
     const sale = await this.prisma.sale.findUnique({
       where: { id },
@@ -894,7 +894,7 @@ export class SaleService {
             } : undefined,
           };
 
-          const printResult = await this.printerService.printNonFiscalReceipt(receiptData, sale.companyId, true);
+          const printResult = await this.printerService.printNonFiscalReceipt(receiptData, sale.companyId, true, computerId);
           
           if (!printResult.success) {
             this.logger.warn(`⚠️ Falha na reimpressão do cupom não fiscal para venda: ${sale.id}`);
@@ -974,7 +974,7 @@ export class SaleService {
           customFooter: sale.company.customFooter,
         };
 
-        const printResult = await this.printerService.printNFCe(nfcePrintData, sale.companyId);
+        const printResult = await this.printerService.printNFCe(nfcePrintData, sale.companyId, computerId);
         
         if (!printResult.success) {
           const errorMessage = printResult.details?.reason || printResult.error || 'Erro ao reimprimir NFC-e';
@@ -1028,7 +1028,7 @@ export class SaleService {
           customFooter: sale.company.customFooter,
         };
 
-        const printResult = await this.printerService.printNFCe(nfcePrintData, sale.companyId);
+        const printResult = await this.printerService.printNFCe(nfcePrintData, sale.companyId, computerId);
         
         if (!printResult.success) {
           const errorMessage = printResult.details?.reason || printResult.error || 'Erro ao reimprimir NFC-e';

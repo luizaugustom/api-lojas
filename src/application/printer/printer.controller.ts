@@ -79,8 +79,13 @@ export class PrinterController {
   @Roles(UserRole.ADMIN, UserRole.COMPANY)
   @ApiOperation({ summary: 'Testar impressora' })
   @ApiResponse({ status: 200, description: 'Teste realizado com sucesso' })
-  async testPrinter(@Param('id', UuidValidationPipe) id: string) {
-    const result = await this.printerService.testPrinter(id);
+  async testPrinter(
+    @Param('id', UuidValidationPipe) id: string,
+    @Req() req: Request,
+  ) {
+    // Obter computerId do header (enviado pelo cliente desktop/web)
+    const computerId = (req.headers['x-computer-id'] as string) || null;
+    const result = await this.printerService.testPrinter(id, computerId);
     if (result.success) {
       return { success: true, message: 'Teste realizado com sucesso' };
     } else {
