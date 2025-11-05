@@ -696,16 +696,6 @@ export class PrinterService {
     }
     receipt += this.centerText('================================') + '\n';
     
-    // Aviso importante quando mockado
-    if (isMocked) {
-      receipt += this.centerText('⚠️ AVISO IMPORTANTE ⚠️') + '\n';
-      receipt += this.centerText('================================') + '\n';
-      receipt += this.wrapText('EMPRESA NÃO POSSUI CONFIGURAÇÃO FISCAL COMPLETA PARA EMISSÃO DE NFCe', 32);
-      receipt += this.wrapText('Este é um CUPOM NÃO FISCAL', 32);
-      receipt += this.wrapText('Configure os dados fiscais nas configurações para emitir NFCe válida', 32);
-      receipt += this.centerText('================================') + '\n\n';
-    }
-    
     receipt += this.centerText('CUPOM NÃO FISCAL') + '\n';
     receipt += this.centerText('================================') + '\n';
     
@@ -754,16 +744,11 @@ export class PrinterService {
     
     receipt += this.centerText('================================') + '\n';
     
-    if (isMocked) {
-      receipt += this.wrapText('NÃO É DOCUMENTO FISCAL', 32);
-      receipt += this.wrapText('Configure dados fiscais para emissão de NFCe', 32);
-      receipt += this.centerText('================================') + '\n';
-    }
-    
-    receipt += this.centerText('OBRIGADO PELA PREFERÊNCIA!') + '\n';
+    receipt += this.centerText(`OBRIGADO POR ESCOLHER ${company.name.toUpperCase()}!`) + '\n';
     receipt += this.centerText('VOLTE SEMPRE!') + '\n';
     receipt += this.centerText('================================') + '\n';
     receipt += this.centerText('🚀SISTEMA MONTSHOP! 🚀') + '\n';
+    receipt += this.centerText('==========') + '\n';
     receipt += '\n\n\n';
     
     return receipt;
@@ -999,10 +984,11 @@ export class PrinterService {
     // ===== RODAPÉ =====
     nfce += '\n';
     nfce += this.centerText('================================') + '\n';
-    nfce += this.centerText('OBRIGADO PELA PREFERÊNCIA!') + '\n';
+    nfce += this.centerText(`OBRIGADO POR ESCOLHER ${company.name.toUpperCase()}!`) + '\n';
     nfce += this.centerText('VOLTE SEMPRE!') + '\n';
     nfce += this.centerText('================================') + '\n';
     nfce += this.centerText('🚀SISTEMA MONTSHOP! 🚀') + '\n';
+    nfce += this.centerText('==========') + '\n';
     nfce += this.centerText(this.formatDate(new Date())) + '\n';
     nfce += '\n\n\n';
     
@@ -1596,9 +1582,11 @@ export class PrinterService {
     content += this.centerText('Este orçamento tem validade até') + '\n';
     content += this.centerText(this.formatDate(new Date(budget.validUntil))) + '\n';
     content += '\n';
-    content += this.centerText('OBRIGADO PELA PREFERÊNCIA!') + '\n';
+    content += this.centerText(`OBRIGADO POR ESCOLHER ${company.name.toUpperCase()}!`) + '\n';
+    content += this.centerText('VOLTE SEMPRE!') + '\n';
     content += this.centerText('================================') + '\n';
     content += this.centerText('🚀SISTEMA MONTSHOP! 🚀') + '\n';
+    content += this.centerText('==========') + '\n';
     content += this.centerText(this.formatDate(new Date())) + '\n';
     content += '\n\n\n';
     
