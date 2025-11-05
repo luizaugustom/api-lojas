@@ -16,7 +16,7 @@ export declare class SaleService {
     private readonly ibptService;
     private readonly logger;
     constructor(prisma: PrismaService, productService: ProductService, printerService: PrinterService, fiscalService: FiscalService, emailService: EmailService, ibptService: IBPTService);
-    create(companyId: string, sellerId: string, createSaleDto: CreateSaleDto): Promise<{
+    create(companyId: string, sellerId: string, createSaleDto: CreateSaleDto, computerId?: string | null): Promise<{
         company: {
             number: string;
             id: string;
@@ -240,11 +240,19 @@ export declare class SaleService {
         averageTicket: number | import("@prisma/client/runtime/library").Decimal;
         salesByPaymentMethod: {};
     }>;
-    reprintReceipt(id: string, companyId?: string): Promise<{
+    reprintReceipt(id: string, companyId?: string, computerId?: string | null): Promise<{
         message: string;
         warning: string;
+        printContent: string;
+        printType: string;
     } | {
         message: string;
+        printContent: string;
+        printType: string;
         warning?: undefined;
+    }>;
+    getPrintContent(id: string, companyId?: string): Promise<{
+        content: string;
+        isMock: boolean;
     }>;
 }

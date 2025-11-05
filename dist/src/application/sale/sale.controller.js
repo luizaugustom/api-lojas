@@ -28,12 +28,13 @@ let SaleController = class SaleController {
     constructor(saleService) {
         this.saleService = saleService;
     }
-    create(user, createSaleDto) {
+    create(user, createSaleDto, req) {
         const sellerId = user.role === roles_decorator_1.UserRole.SELLER ? user.id : createSaleDto.sellerId;
         if (!sellerId) {
             throw new common_1.BadRequestException('Vendedor é obrigatório');
         }
-        return this.saleService.create(user.companyId, sellerId, createSaleDto);
+        const computerId = req.headers['x-computer-id'] || null;
+        return this.saleService.create(user.companyId, sellerId, createSaleDto, computerId);
     }
     findAll(user, page = 1, limit = 10, sellerId, startDate, endDate) {
         const companyId = user.role === roles_decorator_1.UserRole.ADMIN ? undefined : user.companyId;
@@ -57,9 +58,14 @@ let SaleController = class SaleController {
     processExchange(user, processExchangeDto) {
         return this.saleService.processExchange(user.companyId, processExchangeDto);
     }
-    reprintReceipt(id, user) {
+    reprintReceipt(id, user, req) {
         const companyId = user.role === roles_decorator_1.UserRole.ADMIN ? undefined : user.companyId;
-        return this.saleService.reprintReceipt(id, companyId);
+        const computerId = req.headers['x-computer-id'] || null;
+        return this.saleService.reprintReceipt(id, companyId, computerId);
+    }
+    getPrintContent(id, user) {
+        const companyId = user.role === roles_decorator_1.UserRole.ADMIN ? undefined : user.companyId;
+        return this.saleService.getPrintContent(id, companyId);
     }
     update(id, updateSaleDto, user) {
         const companyId = user.role === roles_decorator_1.UserRole.ADMIN ? undefined : user.companyId;
@@ -79,8 +85,9 @@ __decorate([
     (0, swagger_1.ApiResponse)({ status: 400, description: 'Dados inválidos ou estoque insuficiente' }),
     __param(0, (0, current_user_decorator_1.CurrentUser)()),
     __param(1, (0, common_1.Body)()),
+    __param(2, (0, common_1.Req)()),
     __metadata("design:type", Function),
-    __metadata("design:paramtypes", [Object, create_sale_dto_1.CreateSaleDto]),
+    __metadata("design:paramtypes", [Object, create_sale_dto_1.CreateSaleDto, Object]),
     __metadata("design:returntype", void 0)
 ], SaleController.prototype, "create", null);
 __decorate([
@@ -184,10 +191,23 @@ __decorate([
     (0, swagger_1.ApiResponse)({ status: 400, description: 'ID inválido ou erro ao reimprimir cupom' }),
     __param(0, (0, common_1.Param)('id', uuid_validation_pipe_1.UuidValidationPipe)),
     __param(1, (0, current_user_decorator_1.CurrentUser)()),
+    __param(2, (0, common_1.Req)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String, Object, Object]),
+    __metadata("design:returntype", void 0)
+], SaleController.prototype, "reprintReceipt", null);
+__decorate([
+    (0, common_1.Get)(':id/print-content'),
+    (0, roles_decorator_1.Roles)(roles_decorator_1.UserRole.ADMIN, roles_decorator_1.UserRole.COMPANY, roles_decorator_1.UserRole.SELLER),
+    (0, swagger_1.ApiOperation)({ summary: 'Obter conteúdo de impressão para venda (para impressão local)' }),
+    (0, swagger_1.ApiResponse)({ status: 200, description: 'Conteúdo de impressão gerado com sucesso' }),
+    (0, swagger_1.ApiResponse)({ status: 400, description: 'ID inválido ou erro ao gerar conteúdo' }),
+    __param(0, (0, common_1.Param)('id', uuid_validation_pipe_1.UuidValidationPipe)),
+    __param(1, (0, current_user_decorator_1.CurrentUser)()),
     __metadata("design:type", Function),
     __metadata("design:paramtypes", [String, Object]),
     __metadata("design:returntype", void 0)
-], SaleController.prototype, "reprintReceipt", null);
+], SaleController.prototype, "getPrintContent", null);
 __decorate([
     (0, common_1.Patch)(':id'),
     (0, roles_decorator_1.Roles)(roles_decorator_1.UserRole.ADMIN, roles_decorator_1.UserRole.COMPANY),

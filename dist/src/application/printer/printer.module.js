@@ -9,24 +9,15 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.PrinterModule = void 0;
 const common_1 = require("@nestjs/common");
 const printer_service_1 = require("./printer.service");
-const printer_controller_1 = require("./printer.controller");
 const prisma_module_1 = require("../../infrastructure/database/prisma.module");
-const printer_driver_service_1 = require("../../shared/services/printer-driver.service");
 const thermal_printer_service_1 = require("../../shared/services/thermal-printer.service");
 let PrinterModule = class PrinterModule {
 };
 exports.PrinterModule = PrinterModule;
 exports.PrinterModule = PrinterModule = __decorate([
     (0, common_1.Module)({
-        imports: [
-            prisma_module_1.PrismaModule,
-        ],
-        providers: [
-            printer_service_1.PrinterService,
-            printer_driver_service_1.PrinterDriverService,
-            thermal_printer_service_1.ThermalPrinterService,
-        ],
-        controllers: [printer_controller_1.PrinterController],
+        imports: [prisma_module_1.PrismaModule],
+        providers: [printer_service_1.PrinterService, thermal_printer_service_1.ThermalPrinterService],
         exports: [printer_service_1.PrinterService],
     })
 ], PrinterModule);

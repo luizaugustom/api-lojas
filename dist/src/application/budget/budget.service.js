@@ -307,7 +307,7 @@ let BudgetService = BudgetService_1 = class BudgetService {
         this.logger.log(`Budget ${id} deleted successfully`);
         return { message: 'Orçamento excluído com sucesso' };
     }
-    async printBudget(id, companyId) {
+    async printBudget(id, companyId, computerId) {
         const budget = await this.findOne(id, companyId);
         const printData = {
             company: {
@@ -344,7 +344,7 @@ let BudgetService = BudgetService_1 = class BudgetService {
                 name: budget.seller.name,
             } : undefined,
         };
-        await this.printerService.printBudget(printData);
+        await this.printerService.printBudget(printData, computerId);
         this.logger.log(`Budget ${id} printed successfully`);
         return { message: 'Orçamento enviado para impressão' };
     }

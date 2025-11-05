@@ -245,7 +245,7 @@ export declare class BudgetService {
     remove(id: string, companyId: string): Promise<{
         message: string;
     }>;
-    printBudget(id: string, companyId?: string): Promise<{
+    printBudget(id: string, companyId?: string, computerId?: string | null): Promise<{
         message: string;
     }>;
     generatePdf(id: string, companyId?: string): Promise<Buffer>;

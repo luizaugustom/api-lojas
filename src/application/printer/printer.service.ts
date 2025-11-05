@@ -1,4 +1,4 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, BadRequestException } from '@nestjs/common';
 import { PrismaService } from '../../infrastructure/database/prisma.service';
 import { ThermalPrinterService } from '../../shared/services/thermal-printer.service';
 import * as QRCode from 'qrcode';
@@ -112,16 +112,30 @@ export interface PrintResult {
   };
 }
 
+interface SystemPrinter {
+  name: string;
+  driver: string;
+  port: string;
+  status: 'online' | 'offline';
+  isDefault: boolean;
+  connection: 'usb' | 'network' | 'bluetooth';
+}
+
 @Injectable()
 export class PrinterService {
   private readonly logger = new Logger(PrinterService.name);
+  // Armazena dispositivos por computador (sem mexer no DB)
+  private clientDevices = new Map<string, { printers: SystemPrinter[]; lastUpdate: Date }>();
 
   constructor(
     private readonly prisma: PrismaService,
     private readonly thermalPrinter: ThermalPrinterService,
   ) {}
 
-  // Métodos de configuração/descoberta removidos - apenas geração de conteúdo mantida
+  /**
+   * Registra impressoras detectadas do computador do cliente
+   */
+  async registerClientDevices(
     computerId: string, 
     printers: any[], 
     companyId?: string
@@ -208,7 +222,63 @@ export class PrinterService {
   }
 
   /**
+   * Obtém impressoras disponíveis
+   * Se computerId for fornecido, retorna impressoras do computador do cliente
+   * Caso contrário, retorna lista vazia (não detecta impressoras do servidor)
+   */
+  private async getAvailablePrinters(computerId: string | null, companyId?: string): Promise<Array<{
+    name: string;
+    isDefault: boolean;
+    status: 'online' | 'offline';
+  }>> {
+    try {
+      // Se há computerId, busca impressoras do computador do cliente
+      if (computerId) {
+        const clientData = this.clientDevices.get(computerId);
+        if (clientData && clientData.printers.length > 0) {
+          this.logger.log(`Retornando ${clientData.printers.length} impressora(s) do computador ${computerId}`);
+          return clientData.printers.map(p => ({
+            name: p.name,
+            isDefault: p.isDefault,
+            status: p.status,
+          }));
+        }
+        // Se não encontrou, retorna vazio (dispositivos ainda não foram detectados)
+        this.logger.warn(`Nenhuma impressora encontrada para o computador ${computerId}`);
+        return [];
+      }
+      
+      // Se não há computerId, busca impressoras no banco de dados da empresa
+      if (companyId) {
+        const dbPrinters = await this.prisma.printer.findMany({
+          where: {
+            companyId,
+          },
+          orderBy: {
+            createdAt: 'desc',
+          },
+        });
+        
+        if (dbPrinters.length > 0) {
+          return dbPrinters.map(p => ({
+            name: p.name,
+            isDefault: false, // Banco de dados não tem informação de padrão
+            status: p.isConnected ? 'online' : 'offline',
+          }));
+        }
+      }
+      
+      // Retorna lista vazia se não encontrou nada
+      return [];
+    } catch (error) {
+      this.logger.error('Erro ao obter impressoras disponíveis:', error);
+      return [];
+    }
+  }
+
+  /**
    * Verifica drivers instalados
+   * NOTA: Funcionalidade de drivers não implementada - retorna sempre como instalado
    */
   async checkDrivers(): Promise<{
     allInstalled: boolean;
@@ -218,22 +288,12 @@ export class PrinterService {
     try {
       this.logger.log('Verificando drivers de impressora...');
       
-      // Verifica drivers atuais
-      const drivers = await this.driverService.checkThermalPrinterDrivers();
-      const missingDrivers = drivers.filter(d => !d.installed);
-      
-      if (missingDrivers.length === 0) {
-        return {
-          allInstalled: true,
-          drivers,
-          message: 'Todos os drivers necessários estão instalados',
-        };
-      }
-      
+      // Funcionalidade de verificação de drivers não implementada
+      // Retorna como se todos os drivers estivessem instalados
       return {
-        allInstalled: false,
-        drivers,
-        message: `${missingDrivers.length} driver(s) faltando`,
+        allInstalled: true,
+        drivers: [],
+        message: 'Funcionalidade de verificação de drivers não implementada',
       };
     } catch (error) {
       this.logger.error('Erro ao verificar drivers:', error);
@@ -247,6 +307,7 @@ export class PrinterService {
 
   /**
    * Instala drivers automaticamente
+   * NOTA: Funcionalidade de instalação de drivers não implementada
    */
   async installDrivers(): Promise<{
     success: boolean;
@@ -256,26 +317,25 @@ export class PrinterService {
     try {
       this.logger.log('Instalando drivers de impressora...');
       
-      // Tenta instalar drivers
-      const installResult = await this.driverService.installThermalPrinterDrivers();
-      
+      // Funcionalidade de instalação de drivers não implementada
       return {
-        success: installResult.success,
-        message: installResult.message,
-        errors: installResult.errors,
+        success: false,
+        message: 'Funcionalidade de instalação de drivers não implementada',
+        errors: ['Funcionalidade não disponível'],
       };
     } catch (error) {
       this.logger.error('Erro ao instalar drivers:', error);
       return {
         success: false,
         message: 'Erro ao instalar drivers',
-        errors: [error.message],
+        errors: [error instanceof Error ? error.message : String(error)],
       };
     }
   }
 
   /**
    * Verifica e instala drivers se necessário (DEPRECATED - usar checkDrivers e installDrivers)
+   * NOTA: Funcionalidade de drivers não implementada
    */
   async checkAndInstallDrivers(): Promise<{
     driversInstalled: boolean;
@@ -285,34 +345,18 @@ export class PrinterService {
     try {
       this.logger.log('Verificando drivers de impressora...');
       
-      // Verifica drivers atuais
-      const drivers = await this.driverService.checkThermalPrinterDrivers();
-      const missingDrivers = drivers.filter(d => !d.installed);
-      
-      if (missingDrivers.length === 0) {
-        return {
-          driversInstalled: true,
-          message: 'Todos os drivers necessários estão instalados',
-          errors: [],
-        };
-      }
-      
-      this.logger.log(`${missingDrivers.length} driver(s) faltando. Tentando instalar...`);
-      
-      // Tenta instalar drivers
-      const installResult = await this.driverService.installThermalPrinterDrivers();
-      
+      // Funcionalidade de verificação/instalação de drivers não implementada
       return {
-        driversInstalled: installResult.success,
-        message: installResult.message,
-        errors: installResult.errors,
+        driversInstalled: true,
+        message: 'Funcionalidade de verificação de drivers não implementada',
+        errors: [],
       };
     } catch (error) {
       this.logger.error('Erro ao verificar/instalar drivers:', error);
       return {
         driversInstalled: false,
         message: 'Erro ao verificar drivers',
-        errors: [error.message],
+        errors: [error instanceof Error ? error.message : String(error)],
       };
     }
   }
@@ -1410,7 +1454,8 @@ export class PrinterService {
         throw new BadRequestException('Impressora não encontrada');
       }
 
-      return await this.driverService.getPrinterErrorLogs(printer.name);
+      // Funcionalidade de logs de erro não implementada
+      return [];
     } catch (error) {
       this.logger.error('Erro ao obter logs da impressora:', error);
       return [];

@@ -1,3 +1,4 @@
+import { Request } from 'express';
 import { SaleService } from './sale.service';
 import { CreateSaleDto } from './dto/create-sale.dto';
 import { UpdateSaleDto } from './dto/update-sale.dto';
@@ -5,7 +6,7 @@ import { ProcessExchangeDto } from './dto/process-exchange.dto';
 export declare class SaleController {
     private readonly saleService;
     constructor(saleService: SaleService);
-    create(user: any, createSaleDto: CreateSaleDto): Promise<{
+    create(user: any, createSaleDto: CreateSaleDto, req: Request): Promise<{
         company: {
             number: string;
             id: string;
@@ -245,12 +246,20 @@ export declare class SaleController {
         originalQuantity: number;
         exchangedQuantity: number;
     }>;
-    reprintReceipt(id: string, user: any): Promise<{
+    reprintReceipt(id: string, user: any, req: Request): Promise<{
         message: string;
         warning: string;
+        printContent: string;
+        printType: string;
     } | {
         message: string;
+        printContent: string;
+        printType: string;
         warning?: undefined;
+    }>;
+    getPrintContent(id: string, user: any): Promise<{
+        content: string;
+        isMock: boolean;
     }>;
     update(id: string, updateSaleDto: UpdateSaleDto, user: any): Promise<{
         seller: {

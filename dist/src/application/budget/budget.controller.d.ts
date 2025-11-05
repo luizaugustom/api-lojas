@@ -1,4 +1,4 @@
-import { Response } from 'express';
+import { Request, Response } from 'express';
 import { BudgetService } from './budget.service';
 import { CreateBudgetDto } from './dto/create-budget.dto';
 import { UpdateBudgetDto } from './dto/update-budget.dto';
@@ -206,7 +206,7 @@ export declare class BudgetController {
     remove(user: any, id: string): Promise<{
         message: string;
     }>;
-    print(user: any, id: string): Promise<{
+    print(user: any, id: string, req: Request): Promise<{
         message: string;
     }>;
     generatePdf(user: any, id: string, res: Response): Promise<Response<any, Record<string, any>>>;

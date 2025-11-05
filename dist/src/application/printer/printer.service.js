@@ -12,173 +12,15 @@ var PrinterService_1;
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.PrinterService = void 0;
 const common_1 = require("@nestjs/common");
-const config_1 = require("@nestjs/config");
 const prisma_service_1 = require("../../infrastructure/database/prisma.service");
-const printer_driver_service_1 = require("../../shared/services/printer-driver.service");
 const thermal_printer_service_1 = require("../../shared/services/thermal-printer.service");
 const QRCode = require("qrcode");
 let PrinterService = PrinterService_1 = class PrinterService {
-    constructor(configService, prisma, driverService, thermalPrinter) {
-        this.configService = configService;
+    constructor(prisma, thermalPrinter) {
         this.prisma = prisma;
-        this.driverService = driverService;
         this.thermalPrinter = thermalPrinter;
         this.logger = new common_1.Logger(PrinterService_1.name);
-        this.lastPrinterCheck = null;
-        this.availablePrinters = [];
         this.clientDevices = new Map();
-        this.printerTimeout = this.configService.get('PRINTER_TIMEOUT', 5000);
-        this.printerRetryAttempts = this.configService.get('PRINTER_RETRY_ATTEMPTS', 3);
-        this.initializePrinters();
-    }
-    async initializePrinters() {
-        try {
-            this.logger.log('Inicializando sistema de impressão...');
-            this.availablePrinters = await this.driverService.detectSystemPrinters();
-            this.lastPrinterCheck = new Date();
-            this.logger.log(`${this.availablePrinters.length} impressora(s) detectada(s)`);
-            const drivers = await this.driverService.checkThermalPrinterDrivers();
-            const installedDrivers = drivers.filter(d => d.installed);
-            this.logger.log(`${installedDrivers.length} driver(s) de impressora térmica instalado(s)`);
-            await this.syncPrintersWithDatabase();
-        }
-        catch (error) {
-            this.logger.error('Erro ao inicializar impressoras:', error);
-        }
-    }
-    async syncPrintersWithDatabase() {
-        try {
-            for (const sysPrinter of this.availablePrinters) {
-                const existing = await this.prisma.printer.findFirst({
-                    where: {
-                        name: sysPrinter.name,
-                    },
-                });
-                if (!existing) {
-                    this.logger.log(`Nova impressora detectada: ${sysPrinter.name}`);
-                }
-                else {
-                    await this.prisma.printer.update({
-                        where: { id: existing.id },
-                        data: {
-                            isConnected: sysPrinter.status === 'online',
-                            paperStatus: sysPrinter.status === 'paper-empty' ? 'EMPTY' : 'OK',
-                            lastStatusCheck: new Date(),
-                        },
-                    });
-                }
-            }
-        }
-        catch (error) {
-            this.logger.error('Erro ao sincronizar impressoras:', error);
-        }
-    }
-    async checkPrintersStatus() {
-        try {
-            this.logger.debug('Verificando status das impressoras...');
-            this.availablePrinters = await this.driverService.detectSystemPrinters();
-            this.lastPrinterCheck = new Date();
-            const dbPrinters = await this.prisma.printer.findMany();
-            for (const dbPrinter of dbPrinters) {
-                const sysPrinter = this.availablePrinters.find(p => p.name === dbPrinter.name);
-                if (sysPrinter) {
-                    const status = await this.thermalPrinter.checkPrinterStatus(dbPrinter.name);
-                    await this.prisma.printer.update({
-                        where: { id: dbPrinter.id },
-                        data: {
-                            isConnected: status.online,
-                            paperStatus: status.paperOk ? 'OK' : status.error ? 'ERROR' : 'LOW',
-                            lastStatusCheck: new Date(),
-                        },
-                    });
-                }
-                else {
-                    await this.prisma.printer.update({
-                        where: { id: dbPrinter.id },
-                        data: {
-                            isConnected: false,
-                            paperStatus: 'ERROR',
-                            lastStatusCheck: new Date(),
-                        },
-                    });
-                }
-            }
-            this.logger.debug('Verificação de impressoras concluída');
-        }
-        catch (error) {
-            this.logger.error('Erro ao verificar status das impressoras:', error);
-        }
-    }
-    async discoverPrinters() {
-        try {
-            this.logger.log('Descobrindo impressoras no sistema...');
-            const systemPrinters = await this.driverService.detectSystemPrinters();
-            this.availablePrinters = systemPrinters;
-            this.lastPrinterCheck = new Date();
-            const printers = systemPrinters.map(sp => ({
-                name: sp.name,
-                type: sp.connection,
-                connectionInfo: sp.port,
-            }));
-            this.logger.log(`${printers.length} impressora(s) descoberta(s)`);
-            return printers;
-        }
-        catch (error) {
-            this.logger.error('Erro ao descobrir impressoras:', error);
-            return [];
-        }
-    }
-    async getAvailablePrinters(computerId, companyId) {
-        const printers = [];
-        if (computerId) {
-            const clientData = this.clientDevices.get(computerId);
-            if (clientData && clientData.printers.length > 0) {
-                this.logger.log(`Retornando ${clientData.printers.length} impressora(s) do computador ${computerId}`);
-                printers.push(...clientData.printers);
-            }
-        }
-        if (companyId) {
-            try {
-                const dbPrinters = await this.prisma.printer.findMany({
-                    where: { companyId },
-                    select: {
-                        name: true,
-                        type: true,
-                        connectionInfo: true,
-                        isConnected: true,
-                    },
-                });
-                const dbSystemPrinters = dbPrinters.map(p => ({
-                    name: p.name,
-                    driver: 'Database',
-                    port: p.connectionInfo || 'Unknown',
-                    status: p.isConnected ? 'online' : 'offline',
-                    isDefault: false,
-                    connection: (p.type || 'usb'),
-                }));
-                for (const dbPrinter of dbSystemPrinters) {
-                    if (!printers.find(p => p.name === dbPrinter.name)) {
-                        printers.push(dbPrinter);
-                    }
-                }
-                this.logger.log(`Adicionadas ${dbSystemPrinters.length} impressora(s) do banco de dados para empresa ${companyId}`);
-            }
-            catch (error) {
-                this.logger.warn('Erro ao buscar impressoras do banco:', error);
-            }
-        }
-        if (printers.length === 0 && !computerId && !companyId) {
-            if (!this.lastPrinterCheck ||
-                (new Date().getTime() - this.lastPrinterCheck.getTime()) > 60000) {
-                this.availablePrinters = await this.driverService.detectSystemPrinters();
-                this.lastPrinterCheck = new Date();
-            }
-            return this.availablePrinters;
-        }
-        if (printers.length === 0 && computerId) {
-            this.logger.warn(`Nenhum dispositivo encontrado para o computador ${computerId}`);
-        }
-        return printers;
     }
     async registerClientDevices(computerId, printers, companyId) {
         try {
@@ -251,22 +93,52 @@ let PrinterService = PrinterService_1 = class PrinterService {
             };
         }
     }
+    async getAvailablePrinters(computerId, companyId) {
+        try {
+            if (computerId) {
+                const clientData = this.clientDevices.get(computerId);
+                if (clientData && clientData.printers.length > 0) {
+                    this.logger.log(`Retornando ${clientData.printers.length} impressora(s) do computador ${computerId}`);
+                    return clientData.printers.map(p => ({
+                        name: p.name,
+                        isDefault: p.isDefault,
+                        status: p.status,
+                    }));
+                }
+                this.logger.warn(`Nenhuma impressora encontrada para o computador ${computerId}`);
+                return [];
+            }
+            if (companyId) {
+                const dbPrinters = await this.prisma.printer.findMany({
+                    where: {
+                        companyId,
+                    },
+                    orderBy: {
+                        createdAt: 'desc',
+                    },
+                });
+                if (dbPrinters.length > 0) {
+                    return dbPrinters.map(p => ({
+                        name: p.name,
+                        isDefault: false,
+                        status: p.isConnected ? 'online' : 'offline',
+                    }));
+                }
+            }
+            return [];
+        }
+        catch (error) {
+            this.logger.error('Erro ao obter impressoras disponíveis:', error);
+            return [];
+        }
+    }
     async checkDrivers() {
         try {
             this.logger.log('Verificando drivers de impressora...');
-            const drivers = await this.driverService.checkThermalPrinterDrivers();
-            const missingDrivers = drivers.filter(d => !d.installed);
-            if (missingDrivers.length === 0) {
-                return {
-                    allInstalled: true,
-                    drivers,
-                    message: 'Todos os drivers necessários estão instalados',
-                };
-            }
             return {
-                allInstalled: false,
-                drivers,
-                message: `${missingDrivers.length} driver(s) faltando`,
+                allInstalled: true,
+                drivers: [],
+                message: 'Funcionalidade de verificação de drivers não implementada',
             };
         }
         catch (error) {
@@ -281,11 +153,10 @@ let PrinterService = PrinterService_1 = class PrinterService {
     async installDrivers() {
         try {
             this.logger.log('Instalando drivers de impressora...');
-            const installResult = await this.driverService.installThermalPrinterDrivers();
             return {
-                success: installResult.success,
-                message: installResult.message,
-                errors: installResult.errors,
+                success: false,
+                message: 'Funcionalidade de instalação de drivers não implementada',
+                errors: ['Funcionalidade não disponível'],
             };
         }
         catch (error) {
@@ -293,28 +164,17 @@ let PrinterService = PrinterService_1 = class PrinterService {
             return {
                 success: false,
                 message: 'Erro ao instalar drivers',
-                errors: [error.message],
+                errors: [error instanceof Error ? error.message : String(error)],
             };
         }
     }
     async checkAndInstallDrivers() {
         try {
             this.logger.log('Verificando drivers de impressora...');
-            const drivers = await this.driverService.checkThermalPrinterDrivers();
-            const missingDrivers = drivers.filter(d => !d.installed);
-            if (missingDrivers.length === 0) {
-                return {
-                    driversInstalled: true,
-                    message: 'Todos os drivers necessários estão instalados',
-                    errors: [],
-                };
-            }
-            this.logger.log(`${missingDrivers.length} driver(s) faltando. Tentando instalar...`);
-            const installResult = await this.driverService.installThermalPrinterDrivers();
             return {
-                driversInstalled: installResult.success,
-                message: installResult.message,
-                errors: installResult.errors,
+                driversInstalled: true,
+                message: 'Funcionalidade de verificação de drivers não implementada',
+                errors: [],
             };
         }
         catch (error) {
@@ -322,7 +182,7 @@ let PrinterService = PrinterService_1 = class PrinterService {
             return {
                 driversInstalled: false,
                 message: 'Erro ao verificar drivers',
-                errors: [error.message],
+                errors: [error instanceof Error ? error.message : String(error)],
             };
         }
     }
@@ -383,10 +243,10 @@ let PrinterService = PrinterService_1 = class PrinterService {
             },
         });
     }
-    async printReceipt(receiptData, companyId) {
+    async printReceipt(receiptData, companyId, computerId) {
         try {
             const receipt = this.generateReceiptContent(receiptData);
-            const result = await this.sendToPrinter(receipt, companyId);
+            const result = await this.sendToPrinter(receipt, companyId, computerId);
             if (result.success) {
                 this.logger.log(`Receipt printed successfully for sale: ${receiptData.sale.id}`);
             }
@@ -407,10 +267,10 @@ let PrinterService = PrinterService_1 = class PrinterService {
             };
         }
     }
-    async printCashClosureReport(reportData, companyId) {
+    async printCashClosureReport(reportData, companyId, computerId) {
         try {
             const report = this.generateCashClosureReport(reportData);
-            const result = await this.sendToPrinter(report, companyId);
+            const result = await this.sendToPrinter(report, companyId, computerId);
             if (result.success) {
                 this.logger.log('Cash closure report printed successfully');
             }
@@ -431,11 +291,11 @@ let PrinterService = PrinterService_1 = class PrinterService {
             };
         }
     }
-    async printNonFiscalReceipt(receiptData, companyId, isMocked = false) {
+    async printNonFiscalReceipt(receiptData, companyId, isMocked = false, computerId) {
         try {
-            this.logger.log(`Iniciando impressão de cupom não fiscal para venda: ${receiptData.sale.id}${isMocked ? ' (DADOS MOCKADOS)' : ''}`);
+            this.logger.log(`Iniciando impressão de cupom não fiscal para venda: ${receiptData.sale.id}${isMocked ? ' (DADOS MOCKADOS)' : ''}${computerId ? ` (computador: ${computerId})` : ''}`);
             const receipt = this.generateNonFiscalReceiptContent(receiptData, isMocked);
-            const result = await this.sendToPrinter(receipt, companyId);
+            const result = await this.sendToPrinter(receipt, companyId, computerId);
             if (result.success) {
                 this.logger.log(`✅ Cupom não fiscal impresso com sucesso para venda: ${receiptData.sale.id}`);
             }
@@ -456,9 +316,52 @@ let PrinterService = PrinterService_1 = class PrinterService {
             };
         }
     }
-    async printNFCe(nfceData, companyId) {
+    async getNFCeContent(nfceData) {
         try {
-            this.logger.log(`Iniciando impressão de NFCe para venda: ${nfceData.sale.id}`);
+            this.logger.log(`Gerando conteúdo de NFCe para venda: ${nfceData.sale.id}`);
+            const isMock = nfceData.fiscal.status === 'MOCK' || nfceData.fiscal.isMock === true;
+            if (isMock) {
+                this.logger.warn(`⚠️ NFCe mockada detectada. Gerando cupom não fiscal para venda: ${nfceData.sale.id}`);
+                const receiptData = {
+                    company: {
+                        name: nfceData.company.name,
+                        cnpj: nfceData.company.cnpj,
+                        address: nfceData.company.address,
+                    },
+                    sale: {
+                        id: nfceData.sale.id,
+                        date: nfceData.sale.saleDate,
+                        total: nfceData.sale.total,
+                        paymentMethods: nfceData.sale.paymentMethod,
+                        change: nfceData.sale.change,
+                    },
+                    items: nfceData.items.map(item => ({
+                        name: item.productName,
+                        quantity: item.quantity,
+                        unitPrice: item.unitPrice,
+                        totalPrice: item.totalPrice,
+                    })),
+                    seller: {
+                        name: nfceData.sale.sellerName,
+                    },
+                    client: {
+                        name: nfceData.sale.clientName,
+                        cpfCnpj: nfceData.sale.clientCpfCnpj,
+                    },
+                };
+                return this.generateNonFiscalReceiptContent(receiptData, true);
+            }
+            return await this.generateNFCeContent(nfceData);
+        }
+        catch (error) {
+            const errorMessage = error instanceof Error ? error.message : String(error);
+            this.logger.error(`❌ Erro ao gerar conteúdo de NFCe para venda ${nfceData.sale.id}:`, error);
+            throw new Error(`Erro ao gerar conteúdo NFC-e: ${errorMessage}`);
+        }
+    }
+    async printNFCe(nfceData, companyId, computerId) {
+        try {
+            this.logger.log(`Iniciando impressão de NFCe para venda: ${nfceData.sale.id}${computerId ? ` (computador: ${computerId})` : ''}`);
             const isMock = nfceData.fiscal.status === 'MOCK' || nfceData.fiscal.isMock === true;
             if (isMock) {
                 this.logger.warn(`⚠️ NFCe mockada detectada. Imprimindo cupom não fiscal para venda: ${nfceData.sale.id}`);
@@ -489,10 +392,10 @@ let PrinterService = PrinterService_1 = class PrinterService {
                         cpfCnpj: nfceData.sale.clientCpfCnpj,
                     },
                 };
-                return await this.printNonFiscalReceipt(receiptData, companyId, true);
+                return await this.printNonFiscalReceipt(receiptData, companyId, true, computerId);
             }
             const nfce = await this.generateNFCeContent(nfceData);
-            const result = await this.sendToPrinter(nfce, companyId);
+            const result = await this.sendToPrinter(nfce, companyId, computerId);
             if (result.success) {
                 this.logger.log(`✅ NFCe impressa com sucesso para venda: ${nfceData.sale.id}`);
             }
@@ -801,11 +704,32 @@ let PrinterService = PrinterService_1 = class PrinterService {
         nfce += '\n\n\n';
         return nfce;
     }
-    async sendToPrinter(content, companyId) {
+    async sendToPrinter(content, companyId, computerId) {
         try {
             let printerName = null;
             let printerSource = 'não encontrada';
-            if (companyId) {
+            if (computerId) {
+                this.logger.log(`🔍 Buscando impressoras do computador do cliente: ${computerId}`);
+                const clientPrinters = await this.getAvailablePrinters(computerId, companyId);
+                if (clientPrinters.length > 0) {
+                    const defaultPrinter = clientPrinters.find(p => p.isDefault && p.status === 'online');
+                    const anyOnlinePrinter = clientPrinters.find(p => p.status === 'online');
+                    if (defaultPrinter) {
+                        printerName = defaultPrinter.name;
+                        printerSource = `impressora padrão do computador ${computerId}`;
+                        this.logger.log(`✅ Usando impressora padrão do cliente: ${printerName}`);
+                    }
+                    else if (anyOnlinePrinter) {
+                        printerName = anyOnlinePrinter.name;
+                        printerSource = `impressora do computador ${computerId}`;
+                        this.logger.log(`✅ Usando impressora do cliente: ${printerName}`);
+                    }
+                }
+                else {
+                    this.logger.warn(`⚠️ Nenhuma impressora encontrada no computador ${computerId}. Tentando outras fontes...`);
+                }
+            }
+            if (!printerName && companyId) {
                 const dbPrinter = await this.prisma.printer.findFirst({
                     where: {
                         companyId,
@@ -818,11 +742,11 @@ let PrinterService = PrinterService_1 = class PrinterService {
                 if (dbPrinter) {
                     printerName = dbPrinter.name;
                     printerSource = 'banco de dados (empresa)';
-                    this.logger.log(`Impressora encontrada no banco: ${printerName}`);
+                    this.logger.log(`✅ Impressora encontrada no banco: ${printerName}`);
                 }
             }
             if (!printerName) {
-                this.logger.log('Buscando impressora padrão do sistema...');
+                this.logger.log('🔍 Buscando impressora padrão do sistema...');
                 const systemPrinters = await this.getAvailablePrinters(null, companyId);
                 if (systemPrinters.length === 0) {
                     this.logger.warn('⚠️ Nenhuma impressora detectada no sistema');
@@ -830,7 +754,7 @@ let PrinterService = PrinterService_1 = class PrinterService {
                         success: false,
                         error: 'Nenhuma impressora detectada no sistema',
                         details: {
-                            reason: 'Nenhuma impressora foi encontrada no sistema operacional. Verifique se a impressora está conectada e instalada corretamente.',
+                            reason: 'Nenhuma impressora foi encontrada no sistema operacional. Verifique se a impressora está conectada e instalada corretamente. Se estiver usando o aplicativo desktop, certifique-se de ter feito a descoberta de impressoras.',
                         },
                     };
                 }
@@ -1014,7 +938,7 @@ let PrinterService = PrinterService_1 = class PrinterService {
             throw error;
         }
     }
-    async testPrinter(id) {
+    async testPrinter(id, computerId) {
         try {
             const printer = await this.prisma.printer.findUnique({
                 where: { id },
@@ -1023,7 +947,7 @@ let PrinterService = PrinterService_1 = class PrinterService {
                 throw new common_1.BadRequestException('Impressora não encontrada');
             }
             const testContent = this.generateTestContent();
-            const result = await this.sendToPrinter(testContent, printer.companyId);
+            const result = await this.sendToPrinter(testContent, printer.companyId, computerId);
             if (result.success) {
                 await this.updatePrinterStatus(id, {
                     isConnected: true,
@@ -1138,18 +1062,18 @@ let PrinterService = PrinterService_1 = class PrinterService {
             if (!printer) {
                 throw new common_1.BadRequestException('Impressora não encontrada');
             }
-            return await this.driverService.getPrinterErrorLogs(printer.name);
+            return [];
         }
         catch (error) {
             this.logger.error('Erro ao obter logs da impressora:', error);
             return [];
         }
     }
-    async printBudget(data) {
+    async printBudget(data, computerId) {
         try {
-            this.logger.log(`Printing budget: ${data.budget.id}`);
+            this.logger.log(`Printing budget: ${data.budget.id}${computerId ? ` (computador: ${computerId})` : ''}`);
             const content = this.generateBudgetContent(data);
-            const result = await this.sendToPrinter(content, data.company.id);
+            const result = await this.sendToPrinter(content, data.company.id, computerId);
             if (result.success) {
                 this.logger.log(`Budget ${data.budget.id} printed successfully`);
             }
@@ -1261,13 +1185,32 @@ let PrinterService = PrinterService_1 = class PrinterService {
         };
         return statusMap[status] || status;
     }
+    async generatePrintContent(nfceData, companyId) {
+        try {
+            const content = await this.generateNFCeContent(nfceData);
+            return content;
+        }
+        catch (error) {
+            const errorMessage = error instanceof Error ? error.message : String(error);
+            this.logger.error('Erro ao gerar conteúdo de impressão:', error);
+            throw new Error(`Erro ao gerar conteúdo de impressão: ${errorMessage}`);
+        }
+    }
+    async getNonFiscalReceiptContent(receiptData, isMocked = false) {
+        try {
+            return this.generateNonFiscalReceiptContent(receiptData, isMocked);
+        }
+        catch (error) {
+            const errorMessage = error instanceof Error ? error.message : String(error);
+            this.logger.error('Erro ao gerar conteúdo de cupom não fiscal:', error);
+            throw new Error(`Erro ao gerar conteúdo de cupom não fiscal: ${errorMessage}`);
+        }
+    }
 };
 exports.PrinterService = PrinterService;
 exports.PrinterService = PrinterService = PrinterService_1 = __decorate([
     (0, common_1.Injectable)(),
-    __metadata("design:paramtypes", [config_1.ConfigService,
-        prisma_service_1.PrismaService,
-        printer_driver_service_1.PrinterDriverService,
+    __metadata("design:paramtypes", [prisma_service_1.PrismaService,
         thermal_printer_service_1.ThermalPrinterService])
 ], PrinterService);
 //# sourceMappingURL=printer.service.js.map

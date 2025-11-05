@@ -45,7 +45,7 @@ let AuthController = AuthController_1 = class AuthController {
                 httpOnly: true,
                 secure: process.env.NODE_ENV === 'production',
                 sameSite: 'strict',
-                maxAge: Number(process.env.ACCESS_TOKEN_MAX_AGE_MS) || 15 * 60 * 1000,
+                maxAge: Number(process.env.ACCESS_TOKEN_MAX_AGE_MS) || 22 * 60 * 60 * 1000,
             };
             res.cookie('access_token', result.access_token, accessCookieOptions);
         }
@@ -71,7 +71,7 @@ let AuthController = AuthController_1 = class AuthController {
                 httpOnly: true,
                 secure: process.env.NODE_ENV === 'production',
                 sameSite: 'strict',
-                maxAge: Number(process.env.ACCESS_TOKEN_MAX_AGE_MS) || 15 * 60 * 1000,
+                maxAge: Number(process.env.ACCESS_TOKEN_MAX_AGE_MS) || 22 * 60 * 60 * 1000,
             };
             res.cookie('access_token', result.access_token, accessCookieOptions);
         }

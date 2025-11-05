@@ -67,6 +67,12 @@ let AuthService = AuthService_1 = class AuthService {
             if (!isPasswordValid) {
                 return null;
             }
+            if (role === 'company') {
+                if (!user.isActive) {
+                    this.logger.warn(`Login bloqueado: Empresa ${user.login} está desativada`);
+                    return null;
+                }
+            }
             let mappedCompanyId = null;
             let plan = undefined;
             if (role === 'company') {
@@ -78,9 +84,13 @@ let AuthService = AuthService_1 = class AuthService {
                 if (mappedCompanyId) {
                     const company = await this.prisma.company.findUnique({
                         where: { id: mappedCompanyId },
-                        select: { plan: true },
+                        select: { plan: true, isActive: true },
                     });
-                    plan = company?.plan;
+                    if (!company || !company.isActive) {
+                        this.logger.warn(`Login bloqueado: Vendedor ${user.login} pertence à empresa ${mappedCompanyId} que está desativada`);
+                        return null;
+                    }
+                    plan = company.plan;
                 }
             }
             return {
@@ -108,7 +118,7 @@ let AuthService = AuthService_1 = class AuthService {
             role: user.role,
             companyId: user.companyId,
         };
-        const access_token = this.jwtService.sign(payload, { expiresIn: this.configService.get('JWT_EXPIRES_IN', '15m') });
+        const access_token = this.jwtService.sign(payload, { expiresIn: this.configService.get('JWT_EXPIRES_IN', '22h') });
         const refreshToken = this.generateRandomToken();
         const refreshTokenHash = this.hashToken(refreshToken);
         const refreshTtlSeconds = Number(this.configService.get('REFRESH_TOKEN_TTL_SECONDS', 60 * 60 * 24 * 30));
@@ -161,13 +171,29 @@ let AuthService = AuthService_1 = class AuthService {
         if (!user) {
             throw new common_1.UnauthorizedException('User not found');
         }
+        if (tokenRecord.role === 'company') {
+            if (!user.isActive) {
+                this.logger.warn(`Refresh bloqueado: Empresa ${user.login} está desativada`);
+                throw new common_1.UnauthorizedException('Empresa desativada');
+            }
+        }
+        if (tokenRecord.role === 'seller' && user.companyId) {
+            const company = await this.prisma.company.findUnique({
+                where: { id: user.companyId },
+                select: { isActive: true },
+            });
+            if (!company || !company.isActive) {
+                this.logger.warn(`Refresh bloqueado: Vendedor ${user.login} pertence à empresa ${user.companyId} que está desativada`);
+                throw new common_1.UnauthorizedException('Empresa desativada');
+            }
+        }
         const payload = {
             sub: user.id,
             login: user.login,
             role: tokenRecord.role,
             companyId: user.companyId || undefined,
         };
-        const access_token = this.jwtService.sign(payload, { expiresIn: this.configService.get('JWT_EXPIRES_IN', '15m') });
+        const access_token = this.jwtService.sign(payload, { expiresIn: this.configService.get('JWT_EXPIRES_IN', '22h') });
         const newRefresh = this.generateRandomToken();
         const newHash = this.hashToken(newRefresh);
         await this.prisma.refreshToken.update({ where: { id: tokenRecord.id }, data: { revoked: true } });
@@ -187,7 +213,7 @@ let AuthService = AuthService_1 = class AuthService {
         else if (tokenRecord.role === 'seller' && user.companyId) {
             const company = await this.prisma.company.findUnique({
                 where: { id: user.companyId },
-                select: { plan: true },
+                select: { plan: true, isActive: true },
             });
             plan = company?.plan;
         }
@@ -238,6 +264,12 @@ let AuthService = AuthService_1 = class AuthService {
             if (!user) {
                 return null;
             }
+            if (payload.role === 'company') {
+                if (!user.isActive) {
+                    this.logger.warn(`Validação JWT bloqueada: Empresa ${user.login} está desativada`);
+                    return null;
+                }
+            }
             let mappedCompanyId = null;
             let plan = undefined;
             if (payload.role === 'company') {
@@ -249,9 +281,13 @@ let AuthService = AuthService_1 = class AuthService {
                 if (mappedCompanyId) {
                     const company = await this.prisma.company.findUnique({
                         where: { id: mappedCompanyId },
-                        select: { plan: true },
+                        select: { plan: true, isActive: true },
                     });
-                    plan = company?.plan;
+                    if (!company || !company.isActive) {
+                        this.logger.warn(`Validação JWT bloqueada: Vendedor ${user.login} pertence à empresa ${mappedCompanyId} que está desativada`);
+                        return null;
+                    }
+                    plan = company.plan;
                 }
             }
             return {

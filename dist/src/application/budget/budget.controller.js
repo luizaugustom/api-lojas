@@ -54,9 +54,10 @@ let BudgetController = class BudgetController {
         const companyId = user.role === roles_decorator_1.UserRole.COMPANY ? user.id : user.companyId;
         return this.budgetService.remove(id, companyId);
     }
-    async print(user, id) {
+    async print(user, id, req) {
         const companyId = user.role === roles_decorator_1.UserRole.COMPANY ? user.id : user.companyId;
-        return this.budgetService.printBudget(id, companyId);
+        const computerId = req.headers['x-computer-id'] || null;
+        return this.budgetService.printBudget(id, companyId, computerId);
     }
     async generatePdf(user, id, res) {
         const companyId = user.role === roles_decorator_1.UserRole.COMPANY ? user.id : user.companyId;
@@ -175,8 +176,9 @@ __decorate([
     }),
     __param(0, (0, current_user_decorator_1.CurrentUser)()),
     __param(1, (0, common_1.Param)('id')),
+    __param(2, (0, common_1.Req)()),
     __metadata("design:type", Function),
-    __metadata("design:paramtypes", [Object, String]),
+    __metadata("design:paramtypes", [Object, String, Object]),
     __metadata("design:returntype", Promise)
 ], BudgetController.prototype, "print", null);
 __decorate([
