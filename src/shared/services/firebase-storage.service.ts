@@ -23,7 +23,8 @@ export interface UploadResult {
 @Injectable()
 export class FirebaseStorageService {
   private readonly logger = new Logger(FirebaseStorageService.name);
-  private bucket: admin.storage.Storage;
+  private storage: admin.storage.Storage;
+  private bucketName: string;
   private readonly maxFileSize: number;
   private readonly defaultImageOptions: ImageOptimizationOptions = {
     maxWidth: 1920,
@@ -62,12 +63,20 @@ export class FirebaseStorageService {
         this.logger.log('✅ Firebase Admin SDK initialized successfully');
       }
 
-      this.bucket = admin.storage();
-      this.logger.log(`📦 Firebase Storage bucket configured: ${this.configService.get('FIREBASE_STORAGE_BUCKET')}`);
+      this.storage = admin.storage();
+      this.bucketName = this.configService.get<string>('FIREBASE_STORAGE_BUCKET') || '';
+      this.logger.log(`📦 Firebase Storage bucket configured: ${this.bucketName}`);
     } catch (error) {
       this.logger.error('❌ Error initializing Firebase:', error);
       throw error;
     }
+  }
+
+  /**
+   * Obter instância do bucket
+   */
+  private getBucket() {
+    return this.storage.bucket(this.bucketName);
   }
 
   /**
@@ -104,8 +113,10 @@ export class FirebaseStorageService {
       const filePath = subfolder ? `${subfolder}/${fileName}` : fileName;
 
       // Upload para Firebase Storage
-      const fileUpload = this.bucket.bucket().file(filePath);
+      const bucket = this.getBucket();
+      const fileUpload = bucket.file(filePath);
       
+      // Fazer upload do arquivo
       await fileUpload.save(buffer, {
         metadata: {
           contentType: isImage && options?.format ? `image/${options.format}` : file.mimetype,
@@ -115,11 +126,40 @@ export class FirebaseStorageService {
             optimized: isImage.toString(),
           },
         },
-        public: true, // Tornar arquivo público
       });
 
-      // Obter URL pública
-      const publicUrl = `https://storage.googleapis.com/${this.bucket.bucket().name}/${filePath}`;
+      // Tornar arquivo público
+      try {
+        // Verificar se já é público antes de tentar tornar público
+        const [metadata] = await fileUpload.getMetadata();
+        const isPublic = metadata.acl?.some(rule => rule.entity === 'allUsers' && rule.role === 'READER');
+        
+        if (!isPublic) {
+          await fileUpload.makePublic();
+          this.logger.log(`✅ File made public: ${filePath}`);
+        } else {
+          this.logger.log(`ℹ️ File already public: ${filePath}`);
+        }
+      } catch (publicError) {
+        // Log mas não falha se já for público ou se houver erro de permissão
+        this.logger.warn(`⚠️ Could not make file public (may already be public or permission issue): ${publicError.message}`);
+        // Continuar mesmo com erro, pois o arquivo pode já ser público ou as regras do bucket podem permitir acesso
+      }
+
+      // Obter URL pública usando o formato correto do Firebase Storage
+      // O formato correto é: https://firebasestorage.googleapis.com/v0/b/{bucket}/o/{path}?alt=media
+      const encodedPath = encodeURIComponent(filePath);
+      const publicUrl = `https://firebasestorage.googleapis.com/v0/b/${this.bucketName}/o/${encodedPath}?alt=media`;
+      
+      // Verificar se o arquivo está acessível (opcional, apenas para log)
+      try {
+        const [exists] = await fileUpload.exists();
+        if (!exists) {
+          this.logger.warn(`⚠️ File uploaded but may not be accessible: ${filePath}`);
+        }
+      } catch (checkError) {
+        this.logger.warn(`Could not verify file existence: ${checkError.message}`);
+      }
 
       this.logger.log(`✅ File uploaded successfully: ${publicUrl}`);
 
@@ -132,7 +172,25 @@ export class FirebaseStorageService {
       };
     } catch (error) {
       this.logger.error('❌ Error uploading file to Firebase:', error);
-      throw new BadRequestException('Erro ao fazer upload do arquivo');
+      this.logger.error('Error details:', {
+        message: error.message,
+        code: error.code,
+        stack: error.stack,
+        fileName: file.originalname,
+        fileSize: file.size,
+        mimetype: file.mimetype,
+      });
+      
+      // Fornecer mensagem de erro mais específica
+      if (error.code === 'ENOENT' || error.message?.includes('not found')) {
+        throw new BadRequestException('Bucket do Firebase Storage não encontrado. Verifique as configurações.');
+      } else if (error.code === 'EACCES' || error.message?.includes('permission')) {
+        throw new BadRequestException('Sem permissão para fazer upload no Firebase Storage. Verifique as credenciais.');
+      } else if (error.message?.includes('Firebase')) {
+        throw new BadRequestException(`Erro no Firebase Storage: ${error.message}`);
+      }
+      
+      throw new BadRequestException(`Erro ao fazer upload do arquivo: ${error.message || 'Erro desconhecido'}`);
     }
   }
 
@@ -161,7 +219,8 @@ export class FirebaseStorageService {
         return false;
       }
 
-      const file = this.bucket.bucket().file(fileName);
+      const bucket = this.getBucket();
+      const file = bucket.file(fileName);
       await file.delete();
 
       this.logger.log(`✅ File deleted successfully: ${fileUrl}`);
@@ -267,17 +326,22 @@ export class FirebaseStorageService {
    */
   private extractFilePathFromUrl(url: string): string | null {
     try {
-      // URL format: https://storage.googleapis.com/{bucket}/{path}
-      const match = url.match(/https:\/\/storage\.googleapis\.com\/[^\/]+\/(.+)/);
-      if (match && match[1]) {
-        // Decodificar URL encoding
-        return decodeURIComponent(match[1]);
-      }
-
-      // Formato alternativo: https://firebasestorage.googleapis.com/...
-      const firebaseMatch = url.match(/\/o\/(.+?)\?/);
+      // Formato novo: https://firebasestorage.googleapis.com/v0/b/{bucket}/o/{path}?alt=media
+      const firebaseMatch = url.match(/\/o\/(.+?)(\?|$)/);
       if (firebaseMatch && firebaseMatch[1]) {
         return decodeURIComponent(firebaseMatch[1]);
+      }
+
+      // Formato antigo: https://storage.googleapis.com/{bucket}/{path}
+      const storageMatch = url.match(/https:\/\/storage\.googleapis\.com\/[^\/]+\/(.+)/);
+      if (storageMatch && storageMatch[1]) {
+        // Decodificar URL encoding
+        return decodeURIComponent(storageMatch[1]);
+      }
+
+      // Se a URL já é um caminho relativo (sem protocolo), retornar como está
+      if (!url.startsWith('http://') && !url.startsWith('https://')) {
+        return url;
       }
 
       return null;
@@ -295,7 +359,8 @@ export class FirebaseStorageService {
       const fileName = this.extractFilePathFromUrl(fileUrl);
       if (!fileName) return false;
 
-      const file = this.bucket.bucket().file(fileName);
+      const bucket = this.getBucket();
+      const file = bucket.file(fileName);
       const [exists] = await file.exists();
       return exists;
     } catch (error) {
@@ -314,7 +379,8 @@ export class FirebaseStorageService {
         return { exists: false };
       }
 
-      const file = this.bucket.bucket().file(fileName);
+      const bucket = this.getBucket();
+      const file = bucket.file(fileName);
       const [metadata] = await file.getMetadata();
 
       return {

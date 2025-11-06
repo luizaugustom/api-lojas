@@ -146,23 +146,33 @@ let ProductController = ProductController_1 = class ProductController {
         return this.productService.removeAllPhotos(id);
     }
     async uploadPhotosAndCreate(photos, productData, user) {
-        this.logger.log(`🚀 Upload and create product for company: ${user.companyId}`);
-        this.logger.log(`📸 Photos received: ${photos?.length || 0}`);
-        if (photos && photos.length > 3) {
-            throw new common_1.BadRequestException('Máximo de 3 fotos por produto');
+        try {
+            this.logger.log(`🚀 Upload and create product for company: ${user.companyId}`);
+            this.logger.log(`📸 Photos received: ${photos?.length || 0}`);
+            if (photos && photos.length > 3) {
+                throw new common_1.BadRequestException('Máximo de 3 fotos por produto');
+            }
+            const createProductDto = {
+                name: productData.name,
+                barcode: productData.barcode,
+                stockQuantity: parseInt(productData.stockQuantity),
+                price: parseFloat(productData.price),
+                size: productData.size,
+                category: productData.category,
+                expirationDate: productData.expirationDate,
+                ncm: productData.ncm,
+                cfop: productData.cfop,
+                unitOfMeasure: productData.unitOfMeasure,
+            };
+            return await this.productService.createWithPhotos(user.companyId, createProductDto, photos || []);
         }
-        const createProductDto = {
-            name: productData.name,
-            barcode: productData.barcode,
-            stockQuantity: parseInt(productData.stockQuantity),
-            price: parseFloat(productData.price),
-            size: productData.size,
-            category: productData.category,
-            expirationDate: productData.expirationDate,
-            ncm: productData.ncm,
-            cfop: productData.cfop,
-        };
-        return this.productService.createWithPhotos(user.companyId, createProductDto, photos || []);
+        catch (error) {
+            this.logger.error('❌ Error in uploadPhotosAndCreate:', error);
+            if (error instanceof common_1.BadRequestException) {
+                throw error;
+            }
+            throw new common_1.BadRequestException(`Erro ao criar produto com fotos: ${error.message || 'Erro desconhecido'}`);
+        }
     }
     async updateProductPhotos(id, newPhotos, photosToDelete, user) {
         const photosToDeleteArray = Array.isArray(photosToDelete)
@@ -171,44 +181,53 @@ let ProductController = ProductController_1 = class ProductController {
         return this.productService.updateWithPhotos(id, user.companyId, {}, newPhotos, photosToDeleteArray);
     }
     async uploadPhotosAndUpdate(id, photos, productData, photosToDeleteBody, user) {
-        this.logger.log(`🚀 Upload and update product ${id} for company: ${user.companyId}`);
-        this.logger.log(`📸 Photos received: ${photos?.length || 0}`);
-        if (photos && photos.length > 3) {
-            throw new common_1.BadRequestException('Máximo de 3 fotos por produto');
+        try {
+            this.logger.log(`🚀 Upload and update product ${id} for company: ${user.companyId}`);
+            this.logger.log(`📸 Photos received: ${photos?.length || 0}`);
+            if (photos && photos.length > 3) {
+                throw new common_1.BadRequestException('Máximo de 3 fotos por produto');
+            }
+            let photosToDelete = [];
+            if (photosToDeleteBody) {
+                photosToDelete = Array.isArray(photosToDeleteBody)
+                    ? photosToDeleteBody
+                    : [photosToDeleteBody];
+            }
+            else if (productData.photosToDelete) {
+                photosToDelete = Array.isArray(productData.photosToDelete)
+                    ? productData.photosToDelete
+                    : [productData.photosToDelete];
+            }
+            const updateProductDto = {};
+            if (productData.name !== undefined)
+                updateProductDto.name = productData.name;
+            if (productData.barcode !== undefined)
+                updateProductDto.barcode = productData.barcode;
+            if (productData.stockQuantity !== undefined)
+                updateProductDto.stockQuantity = parseInt(productData.stockQuantity);
+            if (productData.price !== undefined)
+                updateProductDto.price = parseFloat(productData.price);
+            if (productData.size !== undefined)
+                updateProductDto.size = productData.size;
+            if (productData.category !== undefined)
+                updateProductDto.category = productData.category;
+            if (productData.expirationDate !== undefined)
+                updateProductDto.expirationDate = productData.expirationDate;
+            if (productData.ncm !== undefined)
+                updateProductDto.ncm = productData.ncm;
+            if (productData.cfop !== undefined)
+                updateProductDto.cfop = productData.cfop;
+            if (productData.unitOfMeasure !== undefined)
+                updateProductDto.unitOfMeasure = productData.unitOfMeasure;
+            return await this.productService.updateWithPhotos(id, user.companyId, updateProductDto, photos || [], photosToDelete);
         }
-        let photosToDelete = [];
-        if (photosToDeleteBody) {
-            photosToDelete = Array.isArray(photosToDeleteBody)
-                ? photosToDeleteBody
-                : [photosToDeleteBody];
+        catch (error) {
+            this.logger.error('❌ Error in uploadPhotosAndUpdate:', error);
+            if (error instanceof common_1.BadRequestException) {
+                throw error;
+            }
+            throw new common_1.BadRequestException(`Erro ao atualizar produto com fotos: ${error.message || 'Erro desconhecido'}`);
         }
-        else if (productData.photosToDelete) {
-            photosToDelete = Array.isArray(productData.photosToDelete)
-                ? productData.photosToDelete
-                : [productData.photosToDelete];
-        }
-        const updateProductDto = {};
-        if (productData.name !== undefined)
-            updateProductDto.name = productData.name;
-        if (productData.barcode !== undefined)
-            updateProductDto.barcode = productData.barcode;
-        if (productData.stockQuantity !== undefined)
-            updateProductDto.stockQuantity = parseInt(productData.stockQuantity);
-        if (productData.price !== undefined)
-            updateProductDto.price = parseFloat(productData.price);
-        if (productData.size !== undefined)
-            updateProductDto.size = productData.size;
-        if (productData.category !== undefined)
-            updateProductDto.category = productData.category;
-        if (productData.expirationDate !== undefined)
-            updateProductDto.expirationDate = productData.expirationDate;
-        if (productData.ncm !== undefined)
-            updateProductDto.ncm = productData.ncm;
-        if (productData.cfop !== undefined)
-            updateProductDto.cfop = productData.cfop;
-        if (productData.unitOfMeasure !== undefined)
-            updateProductDto.unitOfMeasure = productData.unitOfMeasure;
-        return this.productService.updateWithPhotos(id, user.companyId, updateProductDto, photos || [], photosToDelete);
     }
 };
 exports.ProductController = ProductController;

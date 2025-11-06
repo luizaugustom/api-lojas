@@ -15,11 +15,13 @@ export interface UploadResult {
 export declare class FirebaseStorageService {
     private readonly configService;
     private readonly logger;
-    private bucket;
+    private storage;
+    private bucketName;
     private readonly maxFileSize;
     private readonly defaultImageOptions;
     constructor(configService: ConfigService);
     private initializeFirebase;
+    private getBucket;
     uploadFile(file: Express.Multer.File, subfolder?: string, options?: ImageOptimizationOptions): Promise<UploadResult>;
     uploadMultipleFiles(files: Express.Multer.File[], subfolder?: string, options?: ImageOptimizationOptions): Promise<UploadResult[]>;
     deleteFile(fileUrl: string): Promise<boolean>;
