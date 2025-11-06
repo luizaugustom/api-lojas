@@ -71,10 +71,37 @@ export class ProductPhotoService {
     existingPhotos: string[] = [],
     photosToDelete: string[] = [],
   ): Promise<string[]> {
+    this.logger.log(`📸 Preparing photos - Existing: ${existingPhotos.length}, To delete: ${photosToDelete.length}, New: ${newFiles.length}`);
+    this.logger.log(`🗑️ Photos to delete: ${JSON.stringify(photosToDelete)}`);
+    this.logger.log(`📋 Existing photos: ${JSON.stringify(existingPhotos)}`);
+    
     // Remover fotos marcadas para exclusão
-    const remainingPhotos = existingPhotos.filter(
-      (photo) => !photosToDelete.includes(photo)
-    );
+    // Usar comparação mais robusta que considera URLs com encoding diferente
+    const remainingPhotos = existingPhotos.filter((photo) => {
+      const shouldKeep = !photosToDelete.some((toDelete) => {
+        // Comparação exata primeiro
+        if (photo === toDelete) return true;
+        // Comparação após decodificar URLs (caso uma esteja encoded e outra não)
+        try {
+          const decodedPhoto = decodeURIComponent(photo);
+          const decodedToDelete = decodeURIComponent(toDelete);
+          if (decodedPhoto === decodedToDelete) return true;
+        } catch {
+          // Ignorar erros de decode
+        }
+        // Comparação ignorando diferenças de encoding
+        if (photo.replace(/%20/g, ' ') === toDelete.replace(/%20/g, ' ')) return true;
+        return false;
+      });
+      
+      if (!shouldKeep) {
+        this.logger.log(`🗑️ Removing photo: ${photo}`);
+      }
+      
+      return shouldKeep;
+    });
+    
+    this.logger.log(`✅ Remaining photos after deletion: ${remainingPhotos.length}`);
 
     // Calcular quantas fotos novas podem ser adicionadas
     const currentCount = remainingPhotos.length;

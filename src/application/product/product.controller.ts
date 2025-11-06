@@ -523,17 +523,49 @@ export class ProductController {
         throw new BadRequestException('Máximo de 3 fotos por produto');
       }
 
-      // Processar photosToDelete - usar o parâmetro específico primeiro, depois fallback para o body
+      // Processar photosToDelete - FormData pode enviar como array ou string separada por vírgula
       let photosToDelete: string[] = [];
+      
+      // Log para debug
+      this.logger.log(`📋 photosToDeleteBody type: ${typeof photosToDeleteBody}`);
+      this.logger.log(`📋 photosToDeleteBody value: ${JSON.stringify(photosToDeleteBody)}`);
+      this.logger.log(`📋 productData.photosToDelete: ${JSON.stringify(productData.photosToDelete)}`);
+      
+      // Tentar obter do parâmetro específico primeiro
       if (photosToDeleteBody) {
-        photosToDelete = Array.isArray(photosToDeleteBody)
-          ? photosToDeleteBody
-          : [photosToDeleteBody];
-      } else if (productData.photosToDelete) {
-        photosToDelete = Array.isArray(productData.photosToDelete)
-          ? productData.photosToDelete
-          : [productData.photosToDelete];
+        if (Array.isArray(photosToDeleteBody)) {
+          photosToDelete = photosToDeleteBody;
+        } else if (typeof photosToDeleteBody === 'string') {
+          // Se for string, pode ser JSON array ou string separada por vírgula
+          try {
+            const parsed = JSON.parse(photosToDeleteBody);
+            photosToDelete = Array.isArray(parsed) ? parsed : [photosToDeleteBody];
+          } catch {
+            // Se não for JSON, tratar como string única ou separada por vírgula
+            photosToDelete = photosToDeleteBody.includes(',') 
+              ? photosToDeleteBody.split(',').map(s => s.trim()).filter(s => s.length > 0)
+              : [photosToDeleteBody];
+          }
+        }
       }
+      
+      // Fallback para productData.photosToDelete
+      if (photosToDelete.length === 0 && productData.photosToDelete) {
+        if (Array.isArray(productData.photosToDelete)) {
+          photosToDelete = productData.photosToDelete;
+        } else if (typeof productData.photosToDelete === 'string') {
+          try {
+            const parsed = JSON.parse(productData.photosToDelete);
+            photosToDelete = Array.isArray(parsed) ? parsed : [productData.photosToDelete];
+          } catch {
+            photosToDelete = productData.photosToDelete.includes(',') 
+              ? productData.photosToDelete.split(',').map(s => s.trim()).filter(s => s.length > 0)
+              : [productData.photosToDelete];
+          }
+        }
+      }
+      
+      this.logger.log(`🗑️ Photos to delete (${photosToDelete.length}): ${JSON.stringify(photosToDelete)}`);
 
       // Criar UpdateProductDto apenas com campos presentes
       const updateProductDto: UpdateProductDto = {};
