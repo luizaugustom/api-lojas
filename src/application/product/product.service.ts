@@ -34,9 +34,10 @@ export class ProductService {
     return [];
   }
 
-  private serializePhotos(arr?: string[] | null): any {
+  private serializePhotos(arr?: string[] | null): string[] | null {
     if (!arr || arr.length === 0) return null;
-    return JSON.stringify(arr);
+    // Prisma espera um array de strings, não uma string JSON
+    return arr;
   }
 
   async create(companyId: string, createProductDto: CreateProductDto) {
