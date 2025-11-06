@@ -18,6 +18,9 @@ const sharp = require("sharp");
 const uuid_1 = require("uuid");
 const path = require("path");
 let FirebaseStorageService = FirebaseStorageService_1 = class FirebaseStorageService {
+    getCleanBucketName() {
+        return this.bucketName.replace(/^gs:\/\//, '').trim();
+    }
     constructor(configService) {
         this.configService = configService;
         this.logger = new common_1.Logger(FirebaseStorageService_1.name);
@@ -36,7 +39,8 @@ let FirebaseStorageService = FirebaseStorageService_1 = class FirebaseStorageSer
                 const projectId = this.configService.get('FIREBASE_PROJECT_ID');
                 const clientEmail = this.configService.get('FIREBASE_CLIENT_EMAIL');
                 const privateKey = this.configService.get('FIREBASE_PRIVATE_KEY')?.replace(/\\n/g, '\n');
-                const storageBucket = this.configService.get('FIREBASE_STORAGE_BUCKET');
+                const rawStorageBucket = this.configService.get('FIREBASE_STORAGE_BUCKET');
+                const storageBucket = rawStorageBucket?.replace(/^gs:\/\//, '').trim();
                 if (!projectId || !clientEmail || !privateKey || !storageBucket) {
                     throw new Error('Firebase credentials not configured. Please set FIREBASE_* environment variables.');
                 }
@@ -51,7 +55,11 @@ let FirebaseStorageService = FirebaseStorageService_1 = class FirebaseStorageSer
                 this.logger.log('✅ Firebase Admin SDK initialized successfully');
             }
             this.storage = admin.storage();
-            this.bucketName = this.configService.get('FIREBASE_STORAGE_BUCKET') || '';
+            const rawBucketName = this.configService.get('FIREBASE_STORAGE_BUCKET') || '';
+            this.bucketName = rawBucketName.replace(/^gs:\/\//, '').trim();
+            if (!this.bucketName) {
+                throw new Error('FIREBASE_STORAGE_BUCKET não configurado corretamente');
+            }
             this.logger.log(`📦 Firebase Storage bucket configured: ${this.bucketName}`);
         }
         catch (error) {
@@ -60,7 +68,7 @@ let FirebaseStorageService = FirebaseStorageService_1 = class FirebaseStorageSer
         }
     }
     getBucket() {
-        return this.storage.bucket(this.bucketName);
+        return this.storage.bucket(this.getCleanBucketName());
     }
     async uploadFile(file, subfolder, options) {
         try {
@@ -106,7 +114,8 @@ let FirebaseStorageService = FirebaseStorageService_1 = class FirebaseStorageSer
                 this.logger.warn(`⚠️ Could not make file public (may already be public or permission issue): ${publicError.message}`);
             }
             const encodedPath = encodeURIComponent(filePath);
-            const publicUrl = `https://firebasestorage.googleapis.com/v0/b/${this.bucketName}/o/${encodedPath}?alt=media`;
+            const publicUrl = `https://firebasestorage.googleapis.com/v0/b/${this.getCleanBucketName()}/o/${encodedPath}?alt=media`;
+            this.logger.log(`🔗 Generated public URL: ${publicUrl}`);
             try {
                 const [exists] = await fileUpload.exists();
                 if (!exists) {

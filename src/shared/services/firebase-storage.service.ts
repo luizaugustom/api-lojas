@@ -33,6 +33,13 @@ export class FirebaseStorageService {
     format: 'webp',
   };
 
+  /**
+   * Obter nome do bucket sempre limpo (sem gs://)
+   */
+  private getCleanBucketName(): string {
+    return this.bucketName.replace(/^gs:\/\//, '').trim();
+  }
+
   constructor(private readonly configService: ConfigService) {
     this.maxFileSize = this.configService.get('MAX_FILE_SIZE', 10485760); // 10MB
     this.initializeFirebase();
@@ -45,7 +52,10 @@ export class FirebaseStorageService {
         const projectId = this.configService.get<string>('FIREBASE_PROJECT_ID');
         const clientEmail = this.configService.get<string>('FIREBASE_CLIENT_EMAIL');
         const privateKey = this.configService.get<string>('FIREBASE_PRIVATE_KEY')?.replace(/\\n/g, '\n');
-        const storageBucket = this.configService.get<string>('FIREBASE_STORAGE_BUCKET');
+        const rawStorageBucket = this.configService.get<string>('FIREBASE_STORAGE_BUCKET');
+        
+        // Remover prefixo gs:// se existir para garantir consistência
+        const storageBucket = rawStorageBucket?.replace(/^gs:\/\//, '').trim();
 
         if (!projectId || !clientEmail || !privateKey || !storageBucket) {
           throw new Error('Firebase credentials not configured. Please set FIREBASE_* environment variables.');
@@ -64,7 +74,16 @@ export class FirebaseStorageService {
       }
 
       this.storage = admin.storage();
-      this.bucketName = this.configService.get<string>('FIREBASE_STORAGE_BUCKET') || '';
+      // Usar o mesmo bucket name limpo que foi usado na inicialização
+      const rawBucketName = this.configService.get<string>('FIREBASE_STORAGE_BUCKET') || '';
+      // Remover prefixo gs:// se existir, pois o Firebase Admin SDK aceita com ou sem
+      // Mas para construir URLs públicas precisamos apenas do nome
+      this.bucketName = rawBucketName.replace(/^gs:\/\//, '').trim();
+      
+      if (!this.bucketName) {
+        throw new Error('FIREBASE_STORAGE_BUCKET não configurado corretamente');
+      }
+      
       this.logger.log(`📦 Firebase Storage bucket configured: ${this.bucketName}`);
     } catch (error) {
       this.logger.error('❌ Error initializing Firebase:', error);
@@ -76,7 +95,7 @@ export class FirebaseStorageService {
    * Obter instância do bucket
    */
   private getBucket() {
-    return this.storage.bucket(this.bucketName);
+    return this.storage.bucket(this.getCleanBucketName());
   }
 
   /**
@@ -149,7 +168,9 @@ export class FirebaseStorageService {
       // Obter URL pública usando o formato correto do Firebase Storage
       // O formato correto é: https://firebasestorage.googleapis.com/v0/b/{bucket}/o/{path}?alt=media
       const encodedPath = encodeURIComponent(filePath);
-      const publicUrl = `https://firebasestorage.googleapis.com/v0/b/${this.bucketName}/o/${encodedPath}?alt=media`;
+      const publicUrl = `https://firebasestorage.googleapis.com/v0/b/${this.getCleanBucketName()}/o/${encodedPath}?alt=media`;
+      
+      this.logger.log(`🔗 Generated public URL: ${publicUrl}`);
       
       // Verificar se o arquivo está acessível (opcional, apenas para log)
       try {

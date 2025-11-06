@@ -19,6 +19,7 @@ export declare class FirebaseStorageService {
     private bucketName;
     private readonly maxFileSize;
     private readonly defaultImageOptions;
+    private getCleanBucketName;
     constructor(configService: ConfigService);
     private initializeFirebase;
     private getBucket;
