@@ -106,15 +106,16 @@ export class SaleService {
         }
       }
 
-      // Validate total paid matches sale total (with tolerance for rounding)
-      if (Math.abs(totalPaid - total) > 0.01) {
+      // Validate total paid covers sale total (with tolerance for rounding)
+      const paymentDifference = totalPaid - total;
+      if (paymentDifference < -0.01) {
         throw new BadRequestException(`Total pago (${totalPaid}) não confere com o total da venda (${total})`);
       }
 
       // Calculate change (only relevant for cash payments)
       const cashPayment = createSaleDto.paymentMethods.find(pm => pm.method === PaymentMethod.CASH);
       const cashAmount = cashPayment ? cashPayment.amount : 0;
-      const change = totalPaid > total ? totalPaid - total : 0;
+      const change = paymentDifference > 0 ? paymentDifference : 0;
 
       // Create sale with items in a transaction
       const result = await this.prisma.$transaction(async (tx) => {
