@@ -23,6 +23,7 @@ const roles_guard_1 = require("../../shared/guards/roles.guard");
 const roles_decorator_1 = require("../../shared/decorators/roles.decorator");
 const current_user_decorator_1 = require("../../shared/decorators/current-user.decorator");
 const client_time_util_1 = require("../../shared/utils/client-time.util");
+const data_period_util_1 = require("../../shared/utils/data-period.util");
 let BudgetController = class BudgetController {
     constructor(budgetService) {
         this.budgetService = budgetService;
@@ -38,10 +39,17 @@ let BudgetController = class BudgetController {
         console.log('[BudgetController] Creating budget for company:', companyId, 'seller:', sellerId);
         return this.budgetService.create(companyId, sellerId, createBudgetDto);
     }
-    async findAll(user, status, sellerId) {
+    async findAll(user, status, sellerId, startDate, endDate) {
         const companyId = user.role === roles_decorator_1.UserRole.COMPANY ? user.id : user.companyId;
         const filterSellerId = user.role === roles_decorator_1.UserRole.SELLER ? user.id : sellerId;
-        return this.budgetService.findAll(companyId, filterSellerId, status);
+        let effectiveStartDate = startDate;
+        let effectiveEndDate = endDate;
+        if (!startDate && !endDate) {
+            const range = (0, data_period_util_1.resolveDataPeriodRangeAsISOString)(user.dataPeriod);
+            effectiveStartDate = range.startDate;
+            effectiveEndDate = range.endDate;
+        }
+        return this.budgetService.findAll(companyId, filterSellerId, status, effectiveStartDate, effectiveEndDate);
     }
     async findOne(user, id) {
         const companyId = user.role === roles_decorator_1.UserRole.COMPANY ? user.id : user.companyId;
@@ -106,8 +114,10 @@ __decorate([
     __param(0, (0, current_user_decorator_1.CurrentUser)()),
     __param(1, (0, common_1.Query)('status')),
     __param(2, (0, common_1.Query)('sellerId')),
+    __param(3, (0, common_1.Query)('startDate')),
+    __param(4, (0, common_1.Query)('endDate')),
     __metadata("design:type", Function),
-    __metadata("design:paramtypes", [Object, String, String]),
+    __metadata("design:paramtypes", [Object, String, String, String, String]),
     __metadata("design:returntype", Promise)
 ], BudgetController.prototype, "findAll", null);
 __decorate([

@@ -29,6 +29,7 @@ import { Roles, UserRole } from '../../shared/decorators/roles.decorator';
 import { CurrentUser } from '../../shared/decorators/current-user.decorator';
 import { UuidValidationPipe } from '../../shared/pipes/uuid-validation.pipe';
 import { extractClientTimeInfo } from '../../shared/utils/client-time.util';
+import { resolveDataPeriodRangeAsISOString } from '../../shared/utils/data-period.util';
 
 @ApiTags('cash')
 @Controller('cash-closure')
@@ -95,13 +96,32 @@ export class CashClosureController {
   @ApiOperation({ summary: 'Obter histórico de fechamentos de caixa' })
   @ApiQuery({ name: 'page', required: false, type: Number })
   @ApiQuery({ name: 'limit', required: false, type: Number })
+  @ApiQuery({ name: 'startDate', required: false, type: String })
+  @ApiQuery({ name: 'endDate', required: false, type: String })
   @ApiResponse({ status: 200, description: 'Histórico de fechamentos de caixa' })
   getHistory(
     @CurrentUser() user: any,
     @Query('page', new ParseIntPipe({ optional: true })) page = 1,
     @Query('limit', new ParseIntPipe({ optional: true })) limit = 10,
+    @Query('startDate') startDate?: string,
+    @Query('endDate') endDate?: string,
   ) {
-    return this.cashClosureService.getClosureHistory(user.companyId, page, limit);
+    let effectiveStartDate = startDate;
+    let effectiveEndDate = endDate;
+
+    if (!startDate && !endDate) {
+      const range = resolveDataPeriodRangeAsISOString(user.dataPeriod);
+      effectiveStartDate = range.startDate;
+      effectiveEndDate = range.endDate;
+    }
+
+    return this.cashClosureService.getClosureHistory(
+      user.companyId,
+      page,
+      limit,
+      effectiveStartDate,
+      effectiveEndDate,
+    );
   }
 
   @Get(':id')

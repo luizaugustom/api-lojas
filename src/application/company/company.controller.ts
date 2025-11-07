@@ -25,6 +25,7 @@ import { CreateCompanyDto } from './dto/create-company.dto';
 import { UpdateCompanyDto } from './dto/update-company.dto';
 import { UpdateFiscalConfigDto } from './dto/update-fiscal-config.dto';
 import { UpdateCatalogPageDto } from './dto/update-catalog-page.dto';
+import { UpdateCompanyDataPeriodDto } from './dto/update-data-period.dto';
 import { JwtAuthGuard } from '../../shared/guards/jwt-auth.guard';
 import { RolesGuard } from '../../shared/guards/roles.guard';
 import { Roles, UserRole } from '../../shared/decorators/roles.decorator';
@@ -118,6 +119,17 @@ export class CompanyController {
     @Body() updateCompanyDto: UpdateCompanyDto,
   ) {
     return this.companyService.update(user.companyId, updateCompanyDto);
+  }
+
+  @Patch('my-company/data-period')
+  @Roles(UserRole.COMPANY)
+  @ApiOperation({ summary: 'Atualizar período padrão dos dados' })
+  @ApiResponse({ status: 200, description: 'Período padrão atualizado com sucesso' })
+  updateDataPeriod(
+    @CurrentUser() user: any,
+    @Body() updateDataPeriodDto: UpdateCompanyDataPeriodDto,
+  ) {
+    return this.companyService.updateDataPeriod(user.companyId, updateDataPeriodDto.dataPeriod);
   }
 
   @Patch(':id/activate')

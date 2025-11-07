@@ -321,6 +321,10 @@ export class CashClosureService {
       throw new NotFoundException('Não há fechamento de caixa aberto');
     }
 
+    if (sellerId && closure.sales) {
+      (closure as any).sales = closure.sales.filter((sale) => sale.sellerId === sellerId);
+    }
+
     return closure;
   }
 
@@ -501,6 +505,10 @@ export class CashClosureService {
       });
     }
 
+    if (sellerId) {
+      sales = sales.filter((sale) => sale.sellerId === sellerId);
+    }
+
     const totalSales = sales.reduce((sum, sale) => sum + Number(sale.total), 0);
     
     // Calcular vendas por método de pagamento
@@ -519,7 +527,7 @@ export class CashClosureService {
       const sellerName = sale.seller.name;
       acc[sellerName] = (acc[sellerName] || 0) + Number(sale.total);
       return acc;
-    }, {});
+    }, {} as Record<string, number>);
 
     return {
       hasOpenClosure: true,
@@ -534,13 +542,36 @@ export class CashClosureService {
     };
   }
 
-  async getClosureHistory(companyId: string, page = 1, limit = 10) {
+  async getClosureHistory(
+    companyId: string,
+    page = 1,
+    limit = 10,
+    startDate?: string,
+    endDate?: string,
+    sellerId?: string,
+  ) {
+    const where: any = {
+      companyId,
+      isClosed: true,
+    };
+
+    if (sellerId) {
+      where.sellerId = sellerId;
+    }
+
+    if (startDate || endDate) {
+      where.closingDate = {};
+      if (startDate) {
+        where.closingDate.gte = new Date(startDate);
+      }
+      if (endDate) {
+        where.closingDate.lte = new Date(endDate);
+      }
+    }
+
     const [closuresRaw, total] = await Promise.all([
       this.prisma.cashClosure.findMany({
-        where: {
-          companyId,
-          isClosed: true,
-        },
+        where,
         include: CASH_CLOSURE_REPORT_INCLUDE,
         orderBy: {
           closingDate: 'desc',
@@ -548,12 +579,7 @@ export class CashClosureService {
         skip: (page - 1) * limit,
         take: limit,
       }),
-      this.prisma.cashClosure.count({
-        where: {
-          companyId,
-          isClosed: true,
-        },
-      }),
+      this.prisma.cashClosure.count({ where }),
     ]);
 
     const closures = await Promise.all(

@@ -142,13 +142,22 @@ let BudgetService = BudgetService_1 = class BudgetService {
             throw error;
         }
     }
-    async findAll(companyId, sellerId, status) {
+    async findAll(companyId, sellerId, status, startDate, endDate) {
         const where = { companyId };
         if (sellerId) {
             where.sellerId = sellerId;
         }
         if (status) {
             where.status = status;
+        }
+        if (startDate || endDate) {
+            where.budgetDate = {};
+            if (startDate) {
+                where.budgetDate.gte = new Date(startDate);
+            }
+            if (endDate) {
+                where.budgetDate.lte = new Date(endDate);
+            }
         }
         const budgets = await this.prisma.budget.findMany({
             where,

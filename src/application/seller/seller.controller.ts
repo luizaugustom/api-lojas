@@ -21,11 +21,13 @@ import { SellerService } from './seller.service';
 import { CreateSellerDto } from './dto/create-seller.dto';
 import { UpdateSellerDto } from './dto/update-seller.dto';
 import { UpdateSellerProfileDto } from './dto/update-seller-profile.dto';
+import { UpdateSellerDataPeriodDto } from './dto/update-seller-data-period.dto';
 import { JwtAuthGuard } from '../../shared/guards/jwt-auth.guard';
 import { RolesGuard } from '../../shared/guards/roles.guard';
 import { Roles, UserRole } from '../../shared/decorators/roles.decorator';
 import { CurrentUser } from '../../shared/decorators/current-user.decorator';
 import { UuidValidationPipe } from '../../shared/pipes/uuid-validation.pipe';
+import { resolveDataPeriodRangeAsISOString } from '../../shared/utils/data-period.util';
 
 @ApiTags('seller')
 @Controller('seller')
@@ -78,13 +80,33 @@ export class SellerController {
   @ApiOperation({ summary: 'Obter vendas do vendedor' })
   @ApiQuery({ name: 'page', required: false, type: Number })
   @ApiQuery({ name: 'limit', required: false, type: Number })
+  @ApiQuery({ name: 'startDate', required: false, type: String })
+  @ApiQuery({ name: 'endDate', required: false, type: String })
   @ApiResponse({ status: 200, description: 'Vendas do vendedor' })
   getMySales(
     @CurrentUser() user: any,
     @Query('page', new ParseIntPipe({ optional: true })) page = 1,
     @Query('limit', new ParseIntPipe({ optional: true })) limit = 10,
+    @Query('startDate') startDate?: string,
+    @Query('endDate') endDate?: string,
   ) {
-    return this.sellerService.getSellerSales(user.id, user.companyId, page, limit);
+    let effectiveStartDate = startDate;
+    let effectiveEndDate = endDate;
+
+    if (!startDate && !endDate) {
+      const range = resolveDataPeriodRangeAsISOString(user.dataPeriod);
+      effectiveStartDate = range.startDate;
+      effectiveEndDate = range.endDate;
+    }
+
+    return this.sellerService.getSellerSales(
+      user.id,
+      user.companyId,
+      page,
+      limit,
+      effectiveStartDate,
+      effectiveEndDate,
+    );
   }
 
   @Get(':id')
@@ -144,6 +166,17 @@ export class SellerController {
   ) {
     // Vendedor só pode atualizar campos limitados (sem hasIndividualCash)
     return this.sellerService.update(user.userId, updateSellerProfileDto);
+  }
+
+  @Patch('my-data-period')
+  @Roles(UserRole.SELLER)
+  @ApiOperation({ summary: 'Atualizar período padrão dos dados do vendedor' })
+  @ApiResponse({ status: 200, description: 'Período atualizado com sucesso' })
+  updateMyDataPeriod(
+    @CurrentUser() user: any,
+    @Body() updateDataPeriodDto: UpdateSellerDataPeriodDto,
+  ) {
+    return this.sellerService.updateDataPeriod(user.id, updateDataPeriodDto.dataPeriod);
   }
 
   @Patch(':id')

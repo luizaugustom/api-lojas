@@ -3,6 +3,7 @@ import { HashService } from '../../shared/services/hash.service';
 import { CreateSellerDto } from './dto/create-seller.dto';
 import { UpdateSellerDto } from './dto/update-seller.dto';
 import { PlanLimitsService } from '../../shared/services/plan-limits.service';
+import { DataPeriodFilter } from '@prisma/client';
 export declare class SellerService {
     private readonly prisma;
     private readonly hashService;
@@ -71,6 +72,10 @@ export declare class SellerService {
         cpf: string;
         commissionRate: import("@prisma/client/runtime/library").Decimal;
     }>;
+    updateDataPeriod(id: string, dataPeriod: DataPeriodFilter): Promise<{
+        message: string;
+        dataPeriod: import(".prisma/client").$Enums.DataPeriodFilter;
+    }>;
     remove(id: string, companyId?: string): Promise<{
         message: string;
     }>;
@@ -80,8 +85,19 @@ export declare class SellerService {
         averageSaleValue: number;
         monthlySales: number;
         monthlySalesValue: number;
+        salesByPeriod: {
+            date: string;
+            total: number;
+            revenue: number;
+        }[];
+        topProducts: {
+            productId: string;
+            productName: string;
+            quantity: number;
+            revenue: number;
+        }[];
     }>;
-    getSellerSales(id: string, companyId?: string, page?: number, limit?: number): Promise<{
+    getSellerSales(id: string, companyId?: string, page?: number, limit?: number, startDate?: string, endDate?: string): Promise<{
         sales: ({
             items: ({
                 product: {

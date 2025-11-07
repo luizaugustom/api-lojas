@@ -270,6 +270,9 @@ let CashClosureService = CashClosureService_1 = class CashClosureService {
         if (!closure) {
             throw new common_1.NotFoundException('Não há fechamento de caixa aberto');
         }
+        if (sellerId && closure.sales) {
+            closure.sales = closure.sales.filter((sale) => sale.sellerId === sellerId);
+        }
         return closure;
     }
     async close(companyId, closeCashClosureDto, sellerId, computerId, clientTimeInfo) {
@@ -413,6 +416,9 @@ let CashClosureService = CashClosureService_1 = class CashClosureService {
                 },
             });
         }
+        if (sellerId) {
+            sales = sales.filter((sale) => sale.sellerId === sellerId);
+        }
         const totalSales = sales.reduce((sum, sale) => sum + Number(sale.total), 0);
         const salesByPaymentMethod = sales.reduce((acc, sale) => {
             sale.paymentMethods.forEach(paymentMethod => {
@@ -439,13 +445,26 @@ let CashClosureService = CashClosureService_1 = class CashClosureService {
             isIndividualCash: !!targetSellerId,
         };
     }
-    async getClosureHistory(companyId, page = 1, limit = 10) {
+    async getClosureHistory(companyId, page = 1, limit = 10, startDate, endDate, sellerId) {
+        const where = {
+            companyId,
+            isClosed: true,
+        };
+        if (sellerId) {
+            where.sellerId = sellerId;
+        }
+        if (startDate || endDate) {
+            where.closingDate = {};
+            if (startDate) {
+                where.closingDate.gte = new Date(startDate);
+            }
+            if (endDate) {
+                where.closingDate.lte = new Date(endDate);
+            }
+        }
         const [closuresRaw, total] = await Promise.all([
             this.prisma.cashClosure.findMany({
-                where: {
-                    companyId,
-                    isClosed: true,
-                },
+                where,
                 include: CASH_CLOSURE_REPORT_INCLUDE,
                 orderBy: {
                     closingDate: 'desc',
@@ -453,12 +472,7 @@ let CashClosureService = CashClosureService_1 = class CashClosureService {
                 skip: (page - 1) * limit,
                 take: limit,
             }),
-            this.prisma.cashClosure.count({
-                where: {
-                    companyId,
-                    isClosed: true,
-                },
-            }),
+            this.prisma.cashClosure.count({ where }),
         ]);
         const closures = await Promise.all(closuresRaw.map(async (closure) => {
             const detailedClosure = closure;

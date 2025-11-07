@@ -15,6 +15,7 @@ const common_1 = require("@nestjs/common");
 const prisma_service_1 = require("../../infrastructure/database/prisma.service");
 const hash_service_1 = require("../../shared/services/hash.service");
 const plan_limits_service_1 = require("../../shared/services/plan-limits.service");
+const update_seller_data_period_dto_1 = require("./dto/update-seller-data-period.dto");
 let SellerService = SellerService_1 = class SellerService {
     constructor(prisma, hashService, planLimitsService) {
         this.prisma = prisma;
@@ -206,6 +207,26 @@ let SellerService = SellerService_1 = class SellerService {
             throw error;
         }
     }
+    async updateDataPeriod(id, dataPeriod) {
+        if (!update_seller_data_period_dto_1.SELLER_ALLOWED_PERIODS.includes(dataPeriod)) {
+            throw new common_1.ForbiddenException('Período não permitido para vendedor');
+        }
+        const updated = await this.prisma.seller.update({
+            where: { id },
+            data: {
+                defaultDataPeriod: dataPeriod,
+            },
+            select: {
+                id: true,
+                defaultDataPeriod: true,
+            },
+        });
+        this.logger.log(`Seller ${id} updated default data period to ${updated.defaultDataPeriod}`);
+        return {
+            message: 'Período padrão atualizado com sucesso',
+            dataPeriod: updated.defaultDataPeriod,
+        };
+    }
     async remove(id, companyId) {
         try {
             const where = { id };
@@ -247,8 +268,12 @@ let SellerService = SellerService_1 = class SellerService {
         if (!seller) {
             throw new common_1.NotFoundException('Vendedor não encontrado');
         }
+        const saleWhere = { sellerId: id };
+        if (companyId) {
+            saleWhere.companyId = companyId;
+        }
         const totalSalesAggregate = await this.prisma.sale.aggregate({
-            where: { sellerId: id },
+            where: saleWhere,
             _sum: {
                 total: true,
             },
@@ -258,7 +283,7 @@ let SellerService = SellerService_1 = class SellerService {
         startOfMonth.setHours(0, 0, 0, 0);
         const monthlySales = await this.prisma.sale.aggregate({
             where: {
-                sellerId: id,
+                ...saleWhere,
                 saleDate: {
                     gte: startOfMonth,
                 },
@@ -270,6 +295,81 @@ let SellerService = SellerService_1 = class SellerService {
                 id: true,
             },
         });
+        const startOfPeriod = new Date();
+        startOfPeriod.setDate(startOfPeriod.getDate() - 30);
+        startOfPeriod.setHours(0, 0, 0, 0);
+        const salesInPeriod = await this.prisma.sale.findMany({
+            where: {
+                ...saleWhere,
+                saleDate: {
+                    gte: startOfPeriod,
+                },
+            },
+            select: {
+                saleDate: true,
+                total: true,
+            },
+            orderBy: {
+                saleDate: 'asc',
+            },
+        });
+        const salesByDateMap = new Map();
+        for (const sale of salesInPeriod) {
+            const dateKey = sale.saleDate.toISOString().split('T')[0];
+            const entry = salesByDateMap.get(dateKey) ?? { total: 0, revenue: 0 };
+            entry.total += 1;
+            entry.revenue += Number(sale.total || 0);
+            salesByDateMap.set(dateKey, entry);
+        }
+        const salesByPeriod = Array.from(salesByDateMap.entries())
+            .sort(([dateA], [dateB]) => dateA.localeCompare(dateB))
+            .map(([date, data]) => ({
+            date,
+            total: data.total,
+            revenue: Number(data.revenue),
+        }));
+        const topProductsRaw = await this.prisma.saleItem.groupBy({
+            by: ['productId'],
+            where: {
+                sale: {
+                    ...saleWhere,
+                    saleDate: {
+                        gte: startOfPeriod,
+                    },
+                },
+            },
+            _sum: {
+                quantity: true,
+                totalPrice: true,
+            },
+            orderBy: {
+                _sum: {
+                    quantity: 'desc',
+                },
+            },
+            take: 5,
+        });
+        const productIds = topProductsRaw.map((item) => item.productId);
+        const products = productIds.length
+            ? await this.prisma.product.findMany({
+                where: {
+                    id: {
+                        in: productIds,
+                    },
+                },
+                select: {
+                    id: true,
+                    name: true,
+                },
+            })
+            : [];
+        const productNameMap = new Map(products.map((product) => [product.id, product.name]));
+        const topProducts = topProductsRaw.map((item) => ({
+            productId: item.productId,
+            productName: productNameMap.get(item.productId) ?? 'Produto desconhecido',
+            quantity: item._sum.quantity ?? 0,
+            revenue: Number(item._sum.totalPrice ?? 0),
+        }));
         const totalSalesCount = seller._count.sales;
         const totalRevenue = Number(totalSalesAggregate._sum.total || 0);
         const averageSaleValue = totalSalesCount > 0 ? totalRevenue / totalSalesCount : 0;
@@ -279,12 +379,23 @@ let SellerService = SellerService_1 = class SellerService {
             averageSaleValue: averageSaleValue,
             monthlySales: monthlySales._count.id,
             monthlySalesValue: Number(monthlySales._sum.total || 0),
+            salesByPeriod,
+            topProducts,
         };
     }
-    async getSellerSales(id, companyId, page = 1, limit = 10) {
+    async getSellerSales(id, companyId, page = 1, limit = 10, startDate, endDate) {
         const where = { sellerId: id };
         if (companyId) {
             where.companyId = companyId;
+        }
+        if (startDate || endDate) {
+            where.saleDate = {};
+            if (startDate) {
+                where.saleDate.gte = new Date(startDate);
+            }
+            if (endDate) {
+                where.saleDate.lte = new Date(endDate);
+            }
         }
         const [sales, total] = await Promise.all([
             this.prisma.sale.findMany({

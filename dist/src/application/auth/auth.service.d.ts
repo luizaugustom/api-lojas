@@ -5,6 +5,7 @@ import { AdminService } from '../admin/admin.service';
 import { CompanyService } from '../company/company.service';
 import { SellerService } from '../seller/seller.service';
 import { LoginDto } from './dto/login.dto';
+import { DataPeriodFilter } from '@prisma/client';
 export interface JwtPayload {
     sub: string;
     email?: string;
@@ -21,6 +22,7 @@ export interface LoginResponse {
         companyId?: string;
         name?: string;
         plan?: string;
+        dataPeriod?: DataPeriodFilter | null;
     };
 }
 export declare class AuthService {
@@ -34,6 +36,7 @@ export declare class AuthService {
     constructor(jwtService: JwtService, configService: ConfigService, prisma: PrismaService, adminService: AdminService, companyService: CompanyService, sellerService: SellerService);
     private hashToken;
     private generateRandomToken;
+    private resolveDataPeriod;
     validateUser(login: string, password: string): Promise<any>;
     login(loginDto: LoginDto): Promise<LoginResponse>;
     refresh(refreshToken: string): Promise<{
@@ -46,6 +49,7 @@ export declare class AuthService {
             companyId: string;
             name: any;
             plan: string;
+            dataPeriod: import(".prisma/client").$Enums.DataPeriodFilter;
         };
     }>;
     revokeRefreshToken(refreshToken: string): Promise<void>;

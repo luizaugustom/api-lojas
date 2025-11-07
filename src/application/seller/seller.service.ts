@@ -4,6 +4,8 @@ import { HashService } from '../../shared/services/hash.service';
 import { CreateSellerDto } from './dto/create-seller.dto';
 import { UpdateSellerDto } from './dto/update-seller.dto';
 import { PlanLimitsService } from '../../shared/services/plan-limits.service';
+import { DataPeriodFilter } from '@prisma/client';
+import { SELLER_ALLOWED_PERIODS } from './dto/update-seller-data-period.dto';
 
 @Injectable()
 export class SellerService {
@@ -232,6 +234,30 @@ export class SellerService {
     }
   }
 
+  async updateDataPeriod(id: string, dataPeriod: DataPeriodFilter) {
+    if (!SELLER_ALLOWED_PERIODS.includes(dataPeriod)) {
+      throw new ForbiddenException('Período não permitido para vendedor');
+    }
+
+    const updated = await this.prisma.seller.update({
+      where: { id },
+      data: {
+        defaultDataPeriod: dataPeriod,
+      },
+      select: {
+        id: true,
+        defaultDataPeriod: true,
+      },
+    });
+
+    this.logger.log(`Seller ${id} updated default data period to ${updated.defaultDataPeriod}`);
+
+    return {
+      message: 'Período padrão atualizado com sucesso',
+      dataPeriod: updated.defaultDataPeriod,
+    };
+  }
+
   async remove(id: string, companyId?: string) {
     try {
       const where: any = { id };
@@ -412,10 +438,27 @@ export class SellerService {
     };
   }
 
-  async getSellerSales(id: string, companyId?: string, page = 1, limit = 10) {
+  async getSellerSales(
+    id: string,
+    companyId?: string,
+    page = 1,
+    limit = 10,
+    startDate?: string,
+    endDate?: string,
+  ) {
     const where: any = { sellerId: id };
     if (companyId) {
       where.companyId = companyId;
+    }
+
+    if (startDate || endDate) {
+      where.saleDate = {};
+      if (startDate) {
+        where.saleDate.gte = new Date(startDate);
+      }
+      if (endDate) {
+        where.saleDate.lte = new Date(endDate);
+      }
     }
 
     const [sales, total] = await Promise.all([

@@ -25,6 +25,7 @@ const roles_decorator_1 = require("../../shared/decorators/roles.decorator");
 const current_user_decorator_1 = require("../../shared/decorators/current-user.decorator");
 const uuid_validation_pipe_1 = require("../../shared/pipes/uuid-validation.pipe");
 const client_time_util_1 = require("../../shared/utils/client-time.util");
+const data_period_util_1 = require("../../shared/utils/data-period.util");
 let CashClosureController = class CashClosureController {
     constructor(cashClosureService) {
         this.cashClosureService = cashClosureService;
@@ -48,8 +49,15 @@ let CashClosureController = class CashClosureController {
         const sellerId = user.role === roles_decorator_1.UserRole.SELLER ? user.userId : undefined;
         return this.cashClosureService.getCashClosureStats(user.companyId, sellerId);
     }
-    getHistory(user, page = 1, limit = 10) {
-        return this.cashClosureService.getClosureHistory(user.companyId, page, limit);
+    getHistory(user, page = 1, limit = 10, startDate, endDate) {
+        let effectiveStartDate = startDate;
+        let effectiveEndDate = endDate;
+        if (!startDate && !endDate) {
+            const range = (0, data_period_util_1.resolveDataPeriodRangeAsISOString)(user.dataPeriod);
+            effectiveStartDate = range.startDate;
+            effectiveEndDate = range.endDate;
+        }
+        return this.cashClosureService.getClosureHistory(user.companyId, page, limit, effectiveStartDate, effectiveEndDate);
     }
     findOne(id, user) {
         if (user.role === roles_decorator_1.UserRole.ADMIN) {
@@ -138,12 +146,16 @@ __decorate([
     (0, swagger_1.ApiOperation)({ summary: 'Obter histórico de fechamentos de caixa' }),
     (0, swagger_1.ApiQuery)({ name: 'page', required: false, type: Number }),
     (0, swagger_1.ApiQuery)({ name: 'limit', required: false, type: Number }),
+    (0, swagger_1.ApiQuery)({ name: 'startDate', required: false, type: String }),
+    (0, swagger_1.ApiQuery)({ name: 'endDate', required: false, type: String }),
     (0, swagger_1.ApiResponse)({ status: 200, description: 'Histórico de fechamentos de caixa' }),
     __param(0, (0, current_user_decorator_1.CurrentUser)()),
     __param(1, (0, common_1.Query)('page', new common_1.ParseIntPipe({ optional: true }))),
     __param(2, (0, common_1.Query)('limit', new common_1.ParseIntPipe({ optional: true }))),
+    __param(3, (0, common_1.Query)('startDate')),
+    __param(4, (0, common_1.Query)('endDate')),
     __metadata("design:type", Function),
-    __metadata("design:paramtypes", [Object, Object, Object]),
+    __metadata("design:paramtypes", [Object, Object, Object, String, String]),
     __metadata("design:returntype", void 0)
 ], CashClosureController.prototype, "getHistory", null);
 __decorate([

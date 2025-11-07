@@ -25,6 +25,16 @@ enum TaxRegime {
   MEI
 }
 
+enum DataPeriodFilter {
+  ALL
+  THIS_YEAR
+  LAST_6_MONTHS
+  LAST_3_MONTHS
+  LAST_1_MONTH
+  LAST_15_DAYS
+  THIS_WEEK
+}
+
 model Admin {
   id        String   @id @default(uuid())
   login     String   @unique
@@ -79,6 +89,7 @@ model Company {
   autoMessageEnabled  Boolean  @default(false)
   catalogPageUrl      String?
   catalogPageEnabled  Boolean  @default(false)
+  defaultDataPeriod   DataPeriodFilter @default(THIS_YEAR)
   adminId         String
   admin           Admin           @relation(fields: [adminId], references: [id], onDelete: Cascade)
   sellers         Seller[]
@@ -106,6 +117,7 @@ model Seller {
   phone          String?
   commissionRate Decimal  @default(0)
   hasIndividualCash Boolean @default(false)
+  defaultDataPeriod DataPeriodFilter @default(LAST_1_MONTH)
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
   companyId   String

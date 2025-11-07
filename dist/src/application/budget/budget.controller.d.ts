@@ -54,7 +54,7 @@ export declare class BudgetController {
         budgetNumber: number;
         budgetDate: Date;
     }>;
-    findAll(user: any, status?: string, sellerId?: string): Promise<({
+    findAll(user: any, status?: string, sellerId?: string, startDate?: string, endDate?: string): Promise<({
         seller: {
             id: string;
             name: string;
@@ -153,6 +153,7 @@ export declare class BudgetController {
             name: string;
             email: string | null;
             phone: string | null;
+            defaultDataPeriod: import(".prisma/client").$Enums.DataPeriodFilter;
             cpf: string | null;
             birthDate: Date | null;
             commissionRate: import("@prisma/client/runtime/library").Decimal;

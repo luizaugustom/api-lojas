@@ -2,6 +2,7 @@ import { SellerService } from './seller.service';
 import { CreateSellerDto } from './dto/create-seller.dto';
 import { UpdateSellerDto } from './dto/update-seller.dto';
 import { UpdateSellerProfileDto } from './dto/update-seller-profile.dto';
+import { UpdateSellerDataPeriodDto } from './dto/update-seller-data-period.dto';
 export declare class SellerController {
     private readonly sellerService;
     constructor(sellerService: SellerService);
@@ -62,8 +63,19 @@ export declare class SellerController {
         averageSaleValue: number;
         monthlySales: number;
         monthlySalesValue: number;
+        salesByPeriod: {
+            date: string;
+            total: number;
+            revenue: number;
+        }[];
+        topProducts: {
+            productId: string;
+            productName: string;
+            quantity: number;
+            revenue: number;
+        }[];
     }>;
-    getMySales(user: any, page?: number, limit?: number): Promise<{
+    getMySales(user: any, page?: number, limit?: number, startDate?: string, endDate?: string): Promise<{
         sales: ({
             items: ({
                 product: {
@@ -124,6 +136,17 @@ export declare class SellerController {
         averageSaleValue: number;
         monthlySales: number;
         monthlySalesValue: number;
+        salesByPeriod: {
+            date: string;
+            total: number;
+            revenue: number;
+        }[];
+        topProducts: {
+            productId: string;
+            productName: string;
+            quantity: number;
+            revenue: number;
+        }[];
     }>;
     getSales(id: string, user: any, page?: number, limit?: number): Promise<{
         sales: ({
@@ -171,6 +194,10 @@ export declare class SellerController {
         phone: string;
         cpf: string;
         commissionRate: import("@prisma/client/runtime/library").Decimal;
+    }>;
+    updateMyDataPeriod(user: any, updateDataPeriodDto: UpdateSellerDataPeriodDto): Promise<{
+        message: string;
+        dataPeriod: import(".prisma/client").$Enums.DataPeriodFilter;
     }>;
     update(id: string, updateSellerDto: UpdateSellerDto, user: any): Promise<{
         id: string;

@@ -3,6 +3,7 @@ import { CreateCompanyDto } from './dto/create-company.dto';
 import { UpdateCompanyDto } from './dto/update-company.dto';
 import { UpdateFiscalConfigDto } from './dto/update-fiscal-config.dto';
 import { UpdateCatalogPageDto } from './dto/update-catalog-page.dto';
+import { UpdateCompanyDataPeriodDto } from './dto/update-data-period.dto';
 import { PlanLimitsService } from '../../shared/services/plan-limits.service';
 export declare class CompanyController {
     private readonly companyService;
@@ -70,6 +71,7 @@ export declare class CompanyController {
         agency: string;
         accountNumber: string;
         accountType: string;
+        defaultDataPeriod: import(".prisma/client").$Enums.DataPeriodFilter;
         _count: {
             sellers: number;
             products: number;
@@ -147,6 +149,7 @@ export declare class CompanyController {
         agency: string;
         accountNumber: string;
         accountType: string;
+        defaultDataPeriod: import(".prisma/client").$Enums.DataPeriodFilter;
         _count: {
             sellers: number;
             products: number;
@@ -165,6 +168,10 @@ export declare class CompanyController {
         phone: string;
         plan: import(".prisma/client").$Enums.PlanType;
         isActive: boolean;
+    }>;
+    updateDataPeriod(user: any, updateDataPeriodDto: UpdateCompanyDataPeriodDto): Promise<{
+        message: string;
+        dataPeriod: import(".prisma/client").$Enums.DataPeriodFilter;
     }>;
     activate(id: string): Promise<{
         id: string;

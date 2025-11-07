@@ -23,6 +23,7 @@ const prisma_service_1 = require("../../infrastructure/database/prisma.service")
 const admin_service_1 = require("../admin/admin.service");
 const company_service_1 = require("../company/company.service");
 const seller_service_1 = require("../seller/seller.service");
+const client_1 = require("@prisma/client");
 let AuthService = AuthService_1 = class AuthService {
     constructor(jwtService, configService, prisma, adminService, companyService, sellerService) {
         this.jwtService = jwtService;
@@ -38,6 +39,24 @@ let AuthService = AuthService_1 = class AuthService {
     }
     generateRandomToken() {
         return crypto.randomBytes(64).toString('hex');
+    }
+    resolveDataPeriod(role, entity) {
+        switch (role) {
+            case 'admin':
+                return client_1.DataPeriodFilter.ALL;
+            case 'company':
+                return entity?.defaultDataPeriod ?? client_1.DataPeriodFilter.THIS_YEAR;
+            case 'seller': {
+                const value = entity?.defaultDataPeriod ?? client_1.DataPeriodFilter.LAST_1_MONTH;
+                const allowedValues = new Set([
+                    client_1.DataPeriodFilter.LAST_3_MONTHS,
+                    client_1.DataPeriodFilter.LAST_1_MONTH,
+                ]);
+                return allowedValues.has(value) ? value : client_1.DataPeriodFilter.LAST_1_MONTH;
+            }
+            default:
+                return null;
+        }
     }
     async validateUser(login, password) {
         try {
@@ -93,6 +112,7 @@ let AuthService = AuthService_1 = class AuthService {
                     plan = company.plan;
                 }
             }
+            const dataPeriod = this.resolveDataPeriod(role, user);
             return {
                 id: user.id,
                 login: user.login,
@@ -100,6 +120,7 @@ let AuthService = AuthService_1 = class AuthService {
                 companyId: mappedCompanyId,
                 name: user.name || null,
                 plan,
+                dataPeriod,
             };
         }
         catch (error) {
@@ -140,6 +161,7 @@ let AuthService = AuthService_1 = class AuthService {
                 companyId: user.companyId,
                 name: user.name,
                 plan: user.plan,
+                dataPeriod: user.dataPeriod ?? this.resolveDataPeriod(user.role, user),
             },
             refresh_token: refreshToken,
         };
@@ -217,6 +239,7 @@ let AuthService = AuthService_1 = class AuthService {
             });
             plan = company?.plan;
         }
+        const dataPeriod = this.resolveDataPeriod(tokenRecord.role, user);
         return {
             access_token,
             refresh_token: newRefresh,
@@ -227,6 +250,7 @@ let AuthService = AuthService_1 = class AuthService {
                 companyId: user.companyId || undefined,
                 name: user.name || undefined,
                 plan,
+                dataPeriod,
             },
         };
     }
@@ -290,6 +314,7 @@ let AuthService = AuthService_1 = class AuthService {
                     plan = company.plan;
                 }
             }
+            const dataPeriod = this.resolveDataPeriod(payload.role, user);
             return {
                 id: user.id,
                 login: user.login,
@@ -297,6 +322,7 @@ let AuthService = AuthService_1 = class AuthService {
                 companyId: mappedCompanyId,
                 name: user.name || null,
                 plan,
+                dataPeriod,
             };
         }
         catch (error) {

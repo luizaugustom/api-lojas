@@ -8,7 +8,7 @@ import { CreateCompanyDto } from './dto/create-company.dto';
 import { UpdateCompanyDto } from './dto/update-company.dto';
 import { UpdateFiscalConfigDto } from './dto/update-fiscal-config.dto';
 import { UpdateCatalogPageDto } from './dto/update-catalog-page.dto';
-import { PlanType } from '@prisma/client';
+import { PlanType, DataPeriodFilter } from '@prisma/client';
 import axios from 'axios';
 import * as FormData from 'form-data';
 import * as fs from 'fs';
@@ -126,6 +126,7 @@ export class CompanyService {
         brandColor: true,
         plan: true,
         isActive: true,
+        defaultDataPeriod: true,
         zipCode: true,
         state: true,
         city: true,
@@ -164,6 +165,26 @@ export class CompanyService {
     }
 
     return company;
+  }
+
+  async updateDataPeriod(id: string, dataPeriod: DataPeriodFilter) {
+    const updated = await this.prisma.company.update({
+      where: { id },
+      data: {
+        defaultDataPeriod: dataPeriod,
+      },
+      select: {
+        id: true,
+        defaultDataPeriod: true,
+      },
+    });
+
+    this.logger.log(`Company ${id} updated default data period to ${updated.defaultDataPeriod}`);
+
+    return {
+      message: 'Período padrão atualizado com sucesso',
+      dataPeriod: updated.defaultDataPeriod,
+    };
   }
 
   async update(id: string, updateCompanyDto: UpdateCompanyDto) {

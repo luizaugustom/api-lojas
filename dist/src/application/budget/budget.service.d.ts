@@ -98,7 +98,7 @@ export declare class BudgetService {
         budgetNumber: number;
         budgetDate: Date;
     }>;
-    findAll(companyId: string, sellerId?: string, status?: string): Promise<({
+    findAll(companyId: string, sellerId?: string, status?: string, startDate?: string, endDate?: string): Promise<({
         seller: {
             id: string;
             name: string;
@@ -197,6 +197,7 @@ export declare class BudgetService {
             name: string;
             email: string | null;
             phone: string | null;
+            defaultDataPeriod: import(".prisma/client").$Enums.DataPeriodFilter;
             cpf: string | null;
             birthDate: Date | null;
             commissionRate: import("@prisma/client/runtime/library").Decimal;

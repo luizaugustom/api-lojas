@@ -25,6 +25,7 @@ const roles_decorator_1 = require("../../shared/decorators/roles.decorator");
 const current_user_decorator_1 = require("../../shared/decorators/current-user.decorator");
 const uuid_validation_pipe_1 = require("../../shared/pipes/uuid-validation.pipe");
 const client_time_util_1 = require("../../shared/utils/client-time.util");
+const data_period_util_1 = require("../../shared/utils/data-period.util");
 let SaleController = class SaleController {
     constructor(saleService) {
         this.saleService = saleService;
@@ -41,17 +42,46 @@ let SaleController = class SaleController {
     findAll(user, page = 1, limit = 10, sellerId, startDate, endDate) {
         const companyId = user.role === roles_decorator_1.UserRole.ADMIN ? undefined : user.companyId;
         const sellerFilter = user.role === roles_decorator_1.UserRole.SELLER ? user.id : sellerId;
-        return this.saleService.findAll(companyId, page, limit, sellerFilter, startDate, endDate);
+        let effectiveStartDate = startDate;
+        let effectiveEndDate = endDate;
+        if (!startDate && !endDate) {
+            const range = (0, data_period_util_1.resolveDataPeriodRangeAsISOString)(user.dataPeriod);
+            effectiveStartDate = range.startDate;
+            effectiveEndDate = range.endDate;
+        }
+        return this.saleService.findAll(companyId, page, limit, sellerFilter, effectiveStartDate, effectiveEndDate);
     }
     getStats(user, sellerId, startDate, endDate) {
         const companyId = user.role === roles_decorator_1.UserRole.ADMIN ? undefined : user.companyId;
-        return this.saleService.getSalesStats(companyId, sellerId, startDate, endDate);
+        let effectiveStartDate = startDate;
+        let effectiveEndDate = endDate;
+        if (!startDate && !endDate) {
+            const range = (0, data_period_util_1.resolveDataPeriodRangeAsISOString)(user.dataPeriod);
+            effectiveStartDate = range.startDate;
+            effectiveEndDate = range.endDate;
+        }
+        const sellerFilter = user.role === roles_decorator_1.UserRole.SELLER ? user.id : sellerId;
+        return this.saleService.getSalesStats(companyId, sellerFilter, effectiveStartDate, effectiveEndDate);
     }
     getMySales(user, page = 1, limit = 10, startDate, endDate) {
-        return this.saleService.findAll(user.companyId, page, limit, user.id, startDate, endDate);
+        let effectiveStartDate = startDate;
+        let effectiveEndDate = endDate;
+        if (!startDate && !endDate) {
+            const range = (0, data_period_util_1.resolveDataPeriodRangeAsISOString)(user.dataPeriod);
+            effectiveStartDate = range.startDate;
+            effectiveEndDate = range.endDate;
+        }
+        return this.saleService.findAll(user.companyId, page, limit, user.id, effectiveStartDate, effectiveEndDate);
     }
     getMyStats(user, startDate, endDate) {
-        return this.saleService.getSalesStats(user.companyId, user.id, startDate, endDate);
+        let effectiveStartDate = startDate;
+        let effectiveEndDate = endDate;
+        if (!startDate && !endDate) {
+            const range = (0, data_period_util_1.resolveDataPeriodRangeAsISOString)(user.dataPeriod);
+            effectiveStartDate = range.startDate;
+            effectiveEndDate = range.endDate;
+        }
+        return this.saleService.getSalesStats(user.companyId, user.id, effectiveStartDate, effectiveEndDate);
     }
     findOne(id, user) {
         const companyId = user.role === roles_decorator_1.UserRole.ADMIN ? undefined : user.companyId;

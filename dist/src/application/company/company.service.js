@@ -122,6 +122,7 @@ let CompanyService = CompanyService_1 = class CompanyService {
                 brandColor: true,
                 plan: true,
                 isActive: true,
+                defaultDataPeriod: true,
                 zipCode: true,
                 state: true,
                 city: true,
@@ -158,6 +159,23 @@ let CompanyService = CompanyService_1 = class CompanyService {
             throw new common_1.NotFoundException('Empresa não encontrada');
         }
         return company;
+    }
+    async updateDataPeriod(id, dataPeriod) {
+        const updated = await this.prisma.company.update({
+            where: { id },
+            data: {
+                defaultDataPeriod: dataPeriod,
+            },
+            select: {
+                id: true,
+                defaultDataPeriod: true,
+            },
+        });
+        this.logger.log(`Company ${id} updated default data period to ${updated.defaultDataPeriod}`);
+        return {
+            message: 'Período padrão atualizado com sucesso',
+            dataPeriod: updated.defaultDataPeriod,
+        };
     }
     async update(id, updateCompanyDto) {
         try {

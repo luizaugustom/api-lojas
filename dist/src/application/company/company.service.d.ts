@@ -7,6 +7,7 @@ import { CreateCompanyDto } from './dto/create-company.dto';
 import { UpdateCompanyDto } from './dto/update-company.dto';
 import { UpdateFiscalConfigDto } from './dto/update-fiscal-config.dto';
 import { UpdateCatalogPageDto } from './dto/update-catalog-page.dto';
+import { DataPeriodFilter } from '@prisma/client';
 export declare class CompanyService {
     private readonly prisma;
     private readonly hashService;
@@ -77,12 +78,17 @@ export declare class CompanyService {
         agency: string;
         accountNumber: string;
         accountType: string;
+        defaultDataPeriod: import(".prisma/client").$Enums.DataPeriodFilter;
         _count: {
             sellers: number;
             products: number;
             sales: number;
             customers: number;
         };
+    }>;
+    updateDataPeriod(id: string, dataPeriod: DataPeriodFilter): Promise<{
+        message: string;
+        dataPeriod: import(".prisma/client").$Enums.DataPeriodFilter;
     }>;
     update(id: string, updateCompanyDto: UpdateCompanyDto): Promise<{
         id: string;

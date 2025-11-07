@@ -24,6 +24,16 @@ enum TaxRegime {
   MEI
 }
 
+enum DataPeriodFilter {
+  ALL
+  THIS_YEAR
+  LAST_6_MONTHS
+  LAST_3_MONTHS
+  LAST_1_MONTH
+  LAST_15_DAYS
+  THIS_WEEK
+}
+
 model Admin {
   id        String   @id @default(uuid())
   login     String   @unique
@@ -93,6 +103,7 @@ model Company {
   // Catalog Page Configuration
   catalogPageUrl     String? // URL única para página pública de catálogo (ex: "masolucoes")
   catalogPageEnabled Boolean @default(false) // Se a página de catálogo está ativada
+  defaultDataPeriod  DataPeriodFilter @default(THIS_YEAR)
 
   // Relations
   adminId         String
@@ -123,6 +134,7 @@ model Seller {
   phone             String?
   commissionRate    Decimal   @default(0) @db.Decimal(5, 2) // Porcentagem de comissão (0-100)
   hasIndividualCash Boolean   @default(false) // Se true, vendedor tem caixa individual; se false, usa caixa compartilhado
+  defaultDataPeriod DataPeriodFilter @default(LAST_1_MONTH)
   createdAt         DateTime  @default(now())
   updatedAt         DateTime  @updatedAt
 

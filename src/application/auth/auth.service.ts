@@ -8,6 +8,7 @@ import { AdminService } from '../admin/admin.service';
 import { CompanyService } from '../company/company.service';
 import { SellerService } from '../seller/seller.service';
 import { LoginDto } from './dto/login.dto';
+import { DataPeriodFilter } from '@prisma/client';
 
 export interface JwtPayload {
   sub: string;
@@ -26,6 +27,7 @@ export interface LoginResponse {
     companyId?: string;
     name?: string;
     plan?: string; // Plano da empresa (apenas para role 'company')
+    dataPeriod?: DataPeriodFilter | null;
   };
 }
 
@@ -51,6 +53,25 @@ export class AuthService {
 
   private generateRandomToken() {
     return crypto.randomBytes(64).toString('hex');
+  }
+
+  private resolveDataPeriod(role: string, entity?: any): DataPeriodFilter | null {
+    switch (role) {
+      case 'admin':
+        return DataPeriodFilter.ALL;
+      case 'company':
+        return (entity?.defaultDataPeriod as DataPeriodFilter | undefined) ?? DataPeriodFilter.THIS_YEAR;
+      case 'seller': {
+        const value = (entity?.defaultDataPeriod as DataPeriodFilter | undefined) ?? DataPeriodFilter.LAST_1_MONTH;
+        const allowedValues = new Set<DataPeriodFilter>([
+          DataPeriodFilter.LAST_3_MONTHS,
+          DataPeriodFilter.LAST_1_MONTH,
+        ]);
+        return allowedValues.has(value) ? value : DataPeriodFilter.LAST_1_MONTH;
+      }
+      default:
+        return null;
+    }
   }
 
   async validateUser(login: string, password: string): Promise<any> {
@@ -119,6 +140,8 @@ export class AuthService {
         }
       }
 
+      const dataPeriod = this.resolveDataPeriod(role, user);
+
       return {
         id: user.id,
         login: user.login,
@@ -126,6 +149,7 @@ export class AuthService {
         companyId: mappedCompanyId,
         name: user.name || null,
         plan,
+        dataPeriod,
       };
     } catch (error) {
       this.logger.error('Error validating user:', error);
@@ -175,6 +199,7 @@ export class AuthService {
         companyId: user.companyId,
         name: user.name,
         plan: user.plan,
+        dataPeriod: user.dataPeriod ?? this.resolveDataPeriod(user.role, user),
       },
       // also return refreshToken value so controller can set cookie
       refresh_token: refreshToken,
@@ -272,6 +297,8 @@ export class AuthService {
       plan = company?.plan;
     }
 
+    const dataPeriod = this.resolveDataPeriod(tokenRecord.role, user);
+
     return {
       access_token,
       refresh_token: newRefresh,
@@ -282,6 +309,7 @@ export class AuthService {
         companyId: (user.companyId as string) || undefined,
         name: user.name || undefined,
         plan,
+        dataPeriod,
       },
     };
   }
@@ -357,6 +385,8 @@ export class AuthService {
         }
       }
 
+      const dataPeriod = this.resolveDataPeriod(payload.role, user);
+
       return {
         id: user.id,
         login: user.login,
@@ -364,6 +394,7 @@ export class AuthService {
         companyId: mappedCompanyId,
         name: user.name || null,
         plan,
+        dataPeriod,
       };
     } catch (error) {
       this.logger.error('Error validating JWT payload:', error);

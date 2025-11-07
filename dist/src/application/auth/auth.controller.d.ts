@@ -17,6 +17,7 @@ export declare class AuthController {
             companyId: string;
             name: any;
             plan: string;
+            dataPeriod: import(".prisma/client").$Enums.DataPeriodFilter;
         };
     }>;
     logout(req: Request, res: Response): Promise<{

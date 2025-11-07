@@ -22,6 +22,7 @@ import { RolesGuard } from '../../shared/guards/roles.guard';
 import { Roles, UserRole } from '../../shared/decorators/roles.decorator';
 import { CurrentUser } from '../../shared/decorators/current-user.decorator';
 import { extractClientTimeInfo } from '../../shared/utils/client-time.util';
+import { resolveDataPeriodRangeAsISOString } from '../../shared/utils/data-period.util';
 
 @ApiTags('budgets')
 @Controller('budget')
@@ -68,11 +69,28 @@ export class BudgetController {
     @CurrentUser() user: any,
     @Query('status') status?: string,
     @Query('sellerId') sellerId?: string,
+    @Query('startDate') startDate?: string,
+    @Query('endDate') endDate?: string,
   ) {
     const companyId = user.role === UserRole.COMPANY ? user.id : user.companyId;
     const filterSellerId = user.role === UserRole.SELLER ? user.id : sellerId;
 
-    return this.budgetService.findAll(companyId, filterSellerId, status);
+    let effectiveStartDate = startDate;
+    let effectiveEndDate = endDate;
+
+    if (!startDate && !endDate) {
+      const range = resolveDataPeriodRangeAsISOString(user.dataPeriod);
+      effectiveStartDate = range.startDate;
+      effectiveEndDate = range.endDate;
+    }
+
+    return this.budgetService.findAll(
+      companyId,
+      filterSellerId,
+      status,
+      effectiveStartDate,
+      effectiveEndDate,
+    );
   }
 
   @Get(':id')

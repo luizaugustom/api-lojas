@@ -121,11 +121,11 @@ export declare class CashClosureController {
         totalCashSales: any;
         salesCount: number;
         salesByPaymentMethod: {};
-        salesBySeller: {};
+        salesBySeller: Record<string, number>;
         isIndividualCash: boolean;
         message?: undefined;
     }>;
-    getHistory(user: any, page?: number, limit?: number): Promise<{
+    getHistory(user: any, page?: number, limit?: number, startDate?: string, endDate?: string): Promise<{
         closures: {
             reportData: import("../printer/printer.service").CashClosureReportData;
             id: string;

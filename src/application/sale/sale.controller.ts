@@ -30,6 +30,7 @@ import { Roles, UserRole } from '../../shared/decorators/roles.decorator';
 import { CurrentUser } from '../../shared/decorators/current-user.decorator';
 import { UuidValidationPipe } from '../../shared/pipes/uuid-validation.pipe';
 import { extractClientTimeInfo } from '../../shared/utils/client-time.util';
+import { resolveDataPeriodRangeAsISOString } from '../../shared/utils/data-period.util';
 
 @ApiTags('sale')
 @Controller('sale')
@@ -79,8 +80,17 @@ export class SaleController {
   ) {
     const companyId = user.role === UserRole.ADMIN ? undefined : user.companyId;
     const sellerFilter = user.role === UserRole.SELLER ? user.id : sellerId;
-    
-    return this.saleService.findAll(companyId, page, limit, sellerFilter, startDate, endDate);
+
+    let effectiveStartDate = startDate;
+    let effectiveEndDate = endDate;
+
+    if (!startDate && !endDate) {
+      const range = resolveDataPeriodRangeAsISOString(user.dataPeriod);
+      effectiveStartDate = range.startDate;
+      effectiveEndDate = range.endDate;
+    }
+
+    return this.saleService.findAll(companyId, page, limit, sellerFilter, effectiveStartDate, effectiveEndDate);
   }
 
   @Get('stats')
@@ -97,7 +107,18 @@ export class SaleController {
     @Query('endDate') endDate?: string,
   ) {
     const companyId = user.role === UserRole.ADMIN ? undefined : user.companyId;
-    return this.saleService.getSalesStats(companyId, sellerId, startDate, endDate);
+    let effectiveStartDate = startDate;
+    let effectiveEndDate = endDate;
+
+    if (!startDate && !endDate) {
+      const range = resolveDataPeriodRangeAsISOString(user.dataPeriod);
+      effectiveStartDate = range.startDate;
+      effectiveEndDate = range.endDate;
+    }
+
+    const sellerFilter = user.role === UserRole.SELLER ? user.id : sellerId;
+
+    return this.saleService.getSalesStats(companyId, sellerFilter, effectiveStartDate, effectiveEndDate);
   }
 
   @Get('my-sales')
@@ -115,7 +136,16 @@ export class SaleController {
     @Query('startDate') startDate?: string,
     @Query('endDate') endDate?: string,
   ) {
-    return this.saleService.findAll(user.companyId, page, limit, user.id, startDate, endDate);
+    let effectiveStartDate = startDate;
+    let effectiveEndDate = endDate;
+
+    if (!startDate && !endDate) {
+      const range = resolveDataPeriodRangeAsISOString(user.dataPeriod);
+      effectiveStartDate = range.startDate;
+      effectiveEndDate = range.endDate;
+    }
+
+    return this.saleService.findAll(user.companyId, page, limit, user.id, effectiveStartDate, effectiveEndDate);
   }
 
   @Get('my-stats')
@@ -129,7 +159,16 @@ export class SaleController {
     @Query('startDate') startDate?: string,
     @Query('endDate') endDate?: string,
   ) {
-    return this.saleService.getSalesStats(user.companyId, user.id, startDate, endDate);
+    let effectiveStartDate = startDate;
+    let effectiveEndDate = endDate;
+
+    if (!startDate && !endDate) {
+      const range = resolveDataPeriodRangeAsISOString(user.dataPeriod);
+      effectiveStartDate = range.startDate;
+      effectiveEndDate = range.endDate;
+    }
+
+    return this.saleService.getSalesStats(user.companyId, user.id, effectiveStartDate, effectiveEndDate);
   }
 
   @Get(':id')

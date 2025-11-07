@@ -19,11 +19,13 @@ const seller_service_1 = require("./seller.service");
 const create_seller_dto_1 = require("./dto/create-seller.dto");
 const update_seller_dto_1 = require("./dto/update-seller.dto");
 const update_seller_profile_dto_1 = require("./dto/update-seller-profile.dto");
+const update_seller_data_period_dto_1 = require("./dto/update-seller-data-period.dto");
 const jwt_auth_guard_1 = require("../../shared/guards/jwt-auth.guard");
 const roles_guard_1 = require("../../shared/guards/roles.guard");
 const roles_decorator_1 = require("../../shared/decorators/roles.decorator");
 const current_user_decorator_1 = require("../../shared/decorators/current-user.decorator");
 const uuid_validation_pipe_1 = require("../../shared/pipes/uuid-validation.pipe");
+const data_period_util_1 = require("../../shared/utils/data-period.util");
 let SellerController = class SellerController {
     constructor(sellerService) {
         this.sellerService = sellerService;
@@ -43,8 +45,15 @@ let SellerController = class SellerController {
     getMyStats(user) {
         return this.sellerService.getSellerStats(user.id);
     }
-    getMySales(user, page = 1, limit = 10) {
-        return this.sellerService.getSellerSales(user.id, user.companyId, page, limit);
+    getMySales(user, page = 1, limit = 10, startDate, endDate) {
+        let effectiveStartDate = startDate;
+        let effectiveEndDate = endDate;
+        if (!startDate && !endDate) {
+            const range = (0, data_period_util_1.resolveDataPeriodRangeAsISOString)(user.dataPeriod);
+            effectiveStartDate = range.startDate;
+            effectiveEndDate = range.endDate;
+        }
+        return this.sellerService.getSellerSales(user.id, user.companyId, page, limit, effectiveStartDate, effectiveEndDate);
     }
     findOne(id, user) {
         if (user.role === roles_decorator_1.UserRole.COMPANY) {
@@ -66,6 +75,9 @@ let SellerController = class SellerController {
     }
     updateMyProfile(user, updateSellerProfileDto) {
         return this.sellerService.update(user.userId, updateSellerProfileDto);
+    }
+    updateMyDataPeriod(user, updateDataPeriodDto) {
+        return this.sellerService.updateDataPeriod(user.id, updateDataPeriodDto.dataPeriod);
     }
     update(id, updateSellerDto, user) {
         if (user.role === roles_decorator_1.UserRole.COMPANY) {
@@ -129,12 +141,16 @@ __decorate([
     (0, swagger_1.ApiOperation)({ summary: 'Obter vendas do vendedor' }),
     (0, swagger_1.ApiQuery)({ name: 'page', required: false, type: Number }),
     (0, swagger_1.ApiQuery)({ name: 'limit', required: false, type: Number }),
+    (0, swagger_1.ApiQuery)({ name: 'startDate', required: false, type: String }),
+    (0, swagger_1.ApiQuery)({ name: 'endDate', required: false, type: String }),
     (0, swagger_1.ApiResponse)({ status: 200, description: 'Vendas do vendedor' }),
     __param(0, (0, current_user_decorator_1.CurrentUser)()),
     __param(1, (0, common_1.Query)('page', new common_1.ParseIntPipe({ optional: true }))),
     __param(2, (0, common_1.Query)('limit', new common_1.ParseIntPipe({ optional: true }))),
+    __param(3, (0, common_1.Query)('startDate')),
+    __param(4, (0, common_1.Query)('endDate')),
     __metadata("design:type", Function),
-    __metadata("design:paramtypes", [Object, Object, Object]),
+    __metadata("design:paramtypes", [Object, Object, Object, String, String]),
     __metadata("design:returntype", void 0)
 ], SellerController.prototype, "getMySales", null);
 __decorate([
@@ -186,6 +202,17 @@ __decorate([
     __metadata("design:paramtypes", [Object, update_seller_profile_dto_1.UpdateSellerProfileDto]),
     __metadata("design:returntype", void 0)
 ], SellerController.prototype, "updateMyProfile", null);
+__decorate([
+    (0, common_1.Patch)('my-data-period'),
+    (0, roles_decorator_1.Roles)(roles_decorator_1.UserRole.SELLER),
+    (0, swagger_1.ApiOperation)({ summary: 'Atualizar período padrão dos dados do vendedor' }),
+    (0, swagger_1.ApiResponse)({ status: 200, description: 'Período atualizado com sucesso' }),
+    __param(0, (0, current_user_decorator_1.CurrentUser)()),
+    __param(1, (0, common_1.Body)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [Object, update_seller_data_period_dto_1.UpdateSellerDataPeriodDto]),
+    __metadata("design:returntype", void 0)
+], SellerController.prototype, "updateMyDataPeriod", null);
 __decorate([
     (0, common_1.Patch)(':id'),
     (0, roles_decorator_1.Roles)(roles_decorator_1.UserRole.ADMIN, roles_decorator_1.UserRole.COMPANY),

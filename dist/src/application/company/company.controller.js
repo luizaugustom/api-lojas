@@ -21,6 +21,7 @@ const create_company_dto_1 = require("./dto/create-company.dto");
 const update_company_dto_1 = require("./dto/update-company.dto");
 const update_fiscal_config_dto_1 = require("./dto/update-fiscal-config.dto");
 const update_catalog_page_dto_1 = require("./dto/update-catalog-page.dto");
+const update_data_period_dto_1 = require("./dto/update-data-period.dto");
 const jwt_auth_guard_1 = require("../../shared/guards/jwt-auth.guard");
 const roles_guard_1 = require("../../shared/guards/roles.guard");
 const roles_decorator_1 = require("../../shared/decorators/roles.decorator");
@@ -58,6 +59,9 @@ let CompanyController = class CompanyController {
     }
     updateMyCompany(user, updateCompanyDto) {
         return this.companyService.update(user.companyId, updateCompanyDto);
+    }
+    updateDataPeriod(user, updateDataPeriodDto) {
+        return this.companyService.updateDataPeriod(user.companyId, updateDataPeriodDto.dataPeriod);
     }
     activate(id) {
         return this.companyService.activate(id);
@@ -194,6 +198,17 @@ __decorate([
     __metadata("design:paramtypes", [Object, update_company_dto_1.UpdateCompanyDto]),
     __metadata("design:returntype", void 0)
 ], CompanyController.prototype, "updateMyCompany", null);
+__decorate([
+    (0, common_1.Patch)('my-company/data-period'),
+    (0, roles_decorator_1.Roles)(roles_decorator_1.UserRole.COMPANY),
+    (0, swagger_1.ApiOperation)({ summary: 'Atualizar período padrão dos dados' }),
+    (0, swagger_1.ApiResponse)({ status: 200, description: 'Período padrão atualizado com sucesso' }),
+    __param(0, (0, current_user_decorator_1.CurrentUser)()),
+    __param(1, (0, common_1.Body)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [Object, update_data_period_dto_1.UpdateCompanyDataPeriodDto]),
+    __metadata("design:returntype", void 0)
+], CompanyController.prototype, "updateDataPeriod", null);
 __decorate([
     (0, common_1.Patch)(':id/activate'),
     (0, roles_decorator_1.Roles)(roles_decorator_1.UserRole.ADMIN),

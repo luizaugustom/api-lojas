@@ -224,11 +224,11 @@ export declare class CashClosureService {
         totalCashSales: any;
         salesCount: number;
         salesByPaymentMethod: {};
-        salesBySeller: {};
+        salesBySeller: Record<string, number>;
         isIndividualCash: boolean;
         message?: undefined;
     }>;
-    getClosureHistory(companyId: string, page?: number, limit?: number): Promise<{
+    getClosureHistory(companyId: string, page?: number, limit?: number, startDate?: string, endDate?: string, sellerId?: string): Promise<{
         closures: {
             reportData: CashClosureReportData;
             id: string;
