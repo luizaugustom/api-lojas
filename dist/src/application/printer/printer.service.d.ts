@@ -118,6 +118,7 @@ export interface CashClosureReportData {
             }>;
         }>;
     }>;
+    includeSaleDetails: boolean;
 }
 export interface PrintResult {
     success: boolean;

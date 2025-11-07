@@ -18,6 +18,7 @@ const swagger_1 = require("@nestjs/swagger");
 const cash_closure_service_1 = require("./cash-closure.service");
 const create_cash_closure_dto_1 = require("./dto/create-cash-closure.dto");
 const close_cash_closure_dto_1 = require("./dto/close-cash-closure.dto");
+const reprint_cash_closure_dto_1 = require("./dto/reprint-cash-closure.dto");
 const jwt_auth_guard_1 = require("../../shared/guards/jwt-auth.guard");
 const roles_guard_1 = require("../../shared/guards/roles.guard");
 const roles_decorator_1 = require("../../shared/decorators/roles.decorator");
@@ -59,18 +60,20 @@ let CashClosureController = class CashClosureController {
         const computerId = req.headers['x-computer-id'] || null;
         return this.cashClosureService.close(user.companyId, closeCashClosureDto, sellerId, computerId);
     }
-    reprintReport(id, user, req) {
+    reprintReport(id, user, req, reprintDto) {
         const computerId = req.headers['x-computer-id'] || null;
+        const includeSaleDetails = reprintDto?.includeSaleDetails ?? false;
         if (user.role === roles_decorator_1.UserRole.ADMIN) {
-            return this.cashClosureService.reprintReport(id, undefined, computerId);
+            return this.cashClosureService.reprintReport(id, undefined, computerId, includeSaleDetails);
         }
-        return this.cashClosureService.reprintReport(id, user.companyId, computerId);
+        return this.cashClosureService.reprintReport(id, user.companyId, computerId, includeSaleDetails);
     }
-    getPrintContent(id, user) {
+    getPrintContent(id, user, includeSaleDetails) {
+        const includeDetails = includeSaleDetails ?? false;
         if (user.role === roles_decorator_1.UserRole.ADMIN) {
-            return this.cashClosureService.getReportContent(id);
+            return this.cashClosureService.getReportContent(id, undefined, includeDetails);
         }
-        return this.cashClosureService.getReportContent(id, user.companyId);
+        return this.cashClosureService.getReportContent(id, user.companyId, includeDetails);
     }
 };
 exports.CashClosureController = CashClosureController;
@@ -171,8 +174,9 @@ __decorate([
     __param(0, (0, common_1.Param)('id', uuid_validation_pipe_1.UuidValidationPipe)),
     __param(1, (0, current_user_decorator_1.CurrentUser)()),
     __param(2, (0, common_1.Req)()),
+    __param(3, (0, common_1.Body)()),
     __metadata("design:type", Function),
-    __metadata("design:paramtypes", [String, Object, Object]),
+    __metadata("design:paramtypes", [String, Object, Object, reprint_cash_closure_dto_1.ReprintCashClosureDto]),
     __metadata("design:returntype", void 0)
 ], CashClosureController.prototype, "reprintReport", null);
 __decorate([
@@ -182,8 +186,9 @@ __decorate([
     (0, swagger_1.ApiResponse)({ status: 200, description: 'Conteúdo pronto para impressão' }),
     __param(0, (0, common_1.Param)('id', uuid_validation_pipe_1.UuidValidationPipe)),
     __param(1, (0, current_user_decorator_1.CurrentUser)()),
+    __param(2, (0, common_1.Query)('includeSaleDetails', new common_1.ParseBoolPipe({ optional: true }))),
     __metadata("design:type", Function),
-    __metadata("design:paramtypes", [String, Object]),
+    __metadata("design:paramtypes", [String, Object, Boolean]),
     __metadata("design:returntype", void 0)
 ], CashClosureController.prototype, "getPrintContent", null);
 exports.CashClosureController = CashClosureController = __decorate([

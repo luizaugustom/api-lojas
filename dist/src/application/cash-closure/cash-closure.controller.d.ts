@@ -2,6 +2,7 @@ import { Request } from 'express';
 import { CashClosureService } from './cash-closure.service';
 import { CreateCashClosureDto } from './dto/create-cash-closure.dto';
 import { CloseCashClosureDto } from './dto/close-cash-closure.dto';
+import { ReprintCashClosureDto } from './dto/reprint-cash-closure.dto';
 export declare class CashClosureController {
     private readonly cashClosureService;
     constructor(cashClosureService: CashClosureService);
@@ -144,6 +145,7 @@ export declare class CashClosureController {
                 id: string;
                 name: string;
             };
+            includeSaleDetails: boolean;
         }[];
         total: number;
         page: number;
@@ -224,6 +226,7 @@ export declare class CashClosureController {
                 id: string;
                 name: string;
             };
+            includeSaleDetails: boolean;
         };
         reportData: import("../printer/printer.service").CashClosureReportData;
         reportContent: string;
@@ -246,8 +249,9 @@ export declare class CashClosureController {
             id: string;
             name: string;
         };
+        includeSaleDetails: boolean;
     }>;
-    reprintReport(id: string, user: any, req: Request): Promise<{
+    reprintReport(id: string, user: any, req: Request, reprintDto: ReprintCashClosureDto): Promise<{
         closure: {
             id: string;
             openingDate: Date;
@@ -266,6 +270,7 @@ export declare class CashClosureController {
                 id: string;
                 name: string;
             };
+            includeSaleDetails: boolean;
         };
         reportData: import("../printer/printer.service").CashClosureReportData;
         reportContent: string;
@@ -287,9 +292,10 @@ export declare class CashClosureController {
             id: string;
             name: string;
         };
+        includeSaleDetails: boolean;
         closureId: string;
     }>;
-    getPrintContent(id: string, user: any): Promise<{
+    getPrintContent(id: string, user: any, includeSaleDetails?: boolean): Promise<{
         closure: {
             id: string;
             openingDate: Date;
@@ -308,6 +314,7 @@ export declare class CashClosureController {
                 id: string;
                 name: string;
             };
+            includeSaleDetails: boolean;
         };
         reportData: import("../printer/printer.service").CashClosureReportData;
         reportContent: string;
@@ -328,6 +335,7 @@ export declare class CashClosureController {
             id: string;
             name: string;
         };
+        includeSaleDetails: boolean;
         closureId: string;
     }>;
 }

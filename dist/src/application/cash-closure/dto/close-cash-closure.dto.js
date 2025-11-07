@@ -55,6 +55,17 @@ __decorate([
 ], CloseCashClosureDto.prototype, "printReport", void 0);
 __decorate([
     (0, swagger_1.ApiProperty)({
+        description: 'Indica se o relatório deve incluir os detalhes de cada venda',
+        example: false,
+        required: false,
+        default: false,
+    }),
+    (0, class_validator_1.IsOptional)(),
+    (0, class_validator_1.IsBoolean)(),
+    __metadata("design:type", Boolean)
+], CloseCashClosureDto.prototype, "includeSaleDetails", void 0);
+__decorate([
+    (0, swagger_1.ApiProperty)({
         description: 'Data e hora de fechamento informada pelo dispositivo do usuário (ISO8601)',
         example: '2025-11-07T18:15:00-03:00',
         required: false,

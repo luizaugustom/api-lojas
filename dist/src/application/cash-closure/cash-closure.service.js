@@ -292,11 +292,14 @@ let CashClosureService = CashClosureService_1 = class CashClosureService {
             if (!existingClosure) {
                 throw new common_1.NotFoundException('Não há fechamento de caixa aberto');
             }
-            const totalSales = existingClosure.sales.reduce((sum, sale) => sum + Number(sale.total), 0);
+            const existingClosureDetailed = existingClosure;
+            const closureSales = await this.fetchSalesForClosure(existingClosureDetailed);
+            const totalSales = closureSales.reduce((sum, sale) => sum + Number(sale.total), 0);
             const totalWithdrawals = Number(closeCashClosureDto.withdrawals ?? 0);
             const closingAmount = Number(closeCashClosureDto.closingAmount ?? 0);
             const shouldPrint = closeCashClosureDto.printReport ?? false;
             const closingDate = this.parseClientDate(closeCashClosureDto.closingDate) ?? new Date();
+            const includeSaleDetails = closeCashClosureDto.includeSaleDetails ?? false;
             const updatedClosure = await this.prisma.cashClosure.update({
                 where: { id: existingClosure.id },
                 data: {
@@ -308,7 +311,7 @@ let CashClosureService = CashClosureService_1 = class CashClosureService {
                 },
                 include: CASH_CLOSURE_REPORT_INCLUDE,
             });
-            const reportData = this.buildCashClosureReportData(updatedClosure);
+            const reportData = await this.buildCashClosureReportData(updatedClosure, { includeSaleDetails });
             const reportContent = this.printerService.generateCashClosureReportContent(reportData);
             let printResult = null;
             if (shouldPrint) {
@@ -372,7 +375,7 @@ let CashClosureService = CashClosureService_1 = class CashClosureService {
             companyId,
             cashClosureId: currentClosure.id,
         };
-        const sales = await this.prisma.sale.findMany({
+        let sales = await this.prisma.sale.findMany({
             where: salesWhere,
             include: {
                 paymentMethods: true,
@@ -384,6 +387,26 @@ let CashClosureService = CashClosureService_1 = class CashClosureService {
                 },
             },
         });
+        if (sales.length === 0) {
+            sales = await this.prisma.sale.findMany({
+                where: {
+                    companyId,
+                    ...(targetSellerId ? { sellerId: targetSellerId } : {}),
+                    saleDate: {
+                        gte: currentClosure.openingDate,
+                    },
+                },
+                include: {
+                    paymentMethods: true,
+                    seller: {
+                        select: {
+                            id: true,
+                            name: true,
+                        },
+                    },
+                },
+            });
+        }
         const totalSales = sales.reduce((sum, sale) => sum + Number(sale.total), 0);
         const salesByPaymentMethod = sales.reduce((acc, sale) => {
             sale.paymentMethods.forEach(paymentMethod => {
@@ -431,15 +454,15 @@ let CashClosureService = CashClosureService_1 = class CashClosureService {
                 },
             }),
         ]);
-        const closures = closuresRaw.map((closure) => {
+        const closures = await Promise.all(closuresRaw.map(async (closure) => {
             const detailedClosure = closure;
-            const reportData = this.buildCashClosureReportData(detailedClosure);
+            const reportData = await this.buildCashClosureReportData(detailedClosure, { includeSaleDetails: false });
             const summary = this.buildClosureSummary(detailedClosure, reportData);
             return {
                 ...summary,
                 reportData,
             };
-        });
+        }));
         return {
             closures,
             total,
@@ -448,13 +471,13 @@ let CashClosureService = CashClosureService_1 = class CashClosureService {
             totalPages: Math.ceil(total / limit),
         };
     }
-    async reprintReport(id, companyId, computerId) {
+    async reprintReport(id, companyId, computerId, includeSaleDetails = false) {
         try {
             const closure = await this.loadClosureWithDetails(id, companyId);
             if (!closure.isClosed) {
                 throw new common_1.BadRequestException('Não é possível imprimir relatório de fechamento em aberto');
             }
-            const reportData = this.buildCashClosureReportData(closure);
+            const reportData = await this.buildCashClosureReportData(closure, { includeSaleDetails });
             const reportContent = this.printerService.generateCashClosureReportContent(reportData);
             const printResult = await this.printerService.printCashClosureReport(reportData, closure.companyId, computerId, reportContent);
             if (!printResult.success) {
@@ -478,12 +501,12 @@ let CashClosureService = CashClosureService_1 = class CashClosureService {
             throw new common_1.BadRequestException('Erro ao reimprimir relatório');
         }
     }
-    async getReportContent(id, companyId) {
+    async getReportContent(id, companyId, includeSaleDetails = false) {
         const closure = await this.loadClosureWithDetails(id, companyId);
         if (!closure.isClosed) {
             throw new common_1.BadRequestException('O relatório completo só fica disponível após o fechamento do caixa');
         }
-        const reportData = this.buildCashClosureReportData(closure);
+        const reportData = await this.buildCashClosureReportData(closure, { includeSaleDetails });
         const reportContent = this.printerService.generateCashClosureReportContent(reportData);
         const summary = this.buildClosureSummary(closure, reportData);
         return {
@@ -507,6 +530,46 @@ let CashClosureService = CashClosureService_1 = class CashClosureService {
         }
         return closure;
     }
+    async fetchSalesForClosure(closure) {
+        const baseInclude = {
+            seller: {
+                select: {
+                    id: true,
+                    name: true,
+                },
+            },
+            paymentMethods: true,
+        };
+        const relationSales = await this.prisma.sale.findMany({
+            where: {
+                companyId: closure.companyId,
+                cashClosureId: closure.id,
+                ...(closure.sellerId ? { sellerId: closure.sellerId } : {}),
+            },
+            include: baseInclude,
+            orderBy: {
+                saleDate: 'asc',
+            },
+        });
+        if (relationSales.length > 0) {
+            return relationSales;
+        }
+        const periodEnd = closure.closingDate ?? new Date();
+        return this.prisma.sale.findMany({
+            where: {
+                companyId: closure.companyId,
+                ...(closure.sellerId ? { sellerId: closure.sellerId } : {}),
+                saleDate: {
+                    gte: closure.openingDate,
+                    lte: periodEnd,
+                },
+            },
+            include: baseInclude,
+            orderBy: {
+                saleDate: 'asc',
+            },
+        });
+    }
     buildCompanyAddress(company) {
         const street = [company.street, company.number].filter(Boolean).join(', ');
         const district = company.district;
@@ -518,11 +581,13 @@ let CashClosureService = CashClosureService_1 = class CashClosureService {
         }
         return parts.join(' - ');
     }
-    buildCashClosureReportData(closure) {
-        const totalChange = closure.sales.reduce((sum, sale) => sum + Number(sale.change || 0), 0);
+    async buildCashClosureReportData(closure, options = {}) {
+        const includeSaleDetails = options.includeSaleDetails ?? true;
+        const sales = await this.fetchSalesForClosure(closure);
+        const totalChange = sales.reduce((sum, sale) => sum + Number(sale.change || 0), 0);
         const paymentSummaryMap = new Map();
         const sellersMap = new Map();
-        closure.sales.forEach((sale) => {
+        sales.forEach((sale) => {
             sale.paymentMethods.forEach((payment) => {
                 const currentTotal = paymentSummaryMap.get(payment.method) || 0;
                 paymentSummaryMap.set(payment.method, currentTotal + Number(payment.amount));
@@ -558,12 +623,14 @@ let CashClosureService = CashClosureService_1 = class CashClosureService {
             .sort((a, b) => b.total - a.total);
         const sellers = Array.from(sellersMap.values()).map((seller) => ({
             ...seller,
-            sales: seller.sales.sort((a, b) => a.date.getTime() - b.date.getTime()),
+            sales: (includeSaleDetails
+                ? seller.sales.sort((a, b) => a.date.getTime() - b.date.getTime())
+                : []),
         })).sort((a, b) => b.totalSales - a.totalSales);
         const totalCashSales = paymentSummary.find((entry) => entry.method === 'cash')?.total || 0;
         const openingAmount = Number(closure.openingAmount || 0);
         const closingAmount = Number(closure.closingAmount || 0);
-        const totalSales = closure.sales.reduce((sum, sale) => sum + Number(sale.total), 0);
+        const totalSales = sales.reduce((sum, sale) => sum + Number(sale.total), 0);
         const totalWithdrawals = Number(closure.totalWithdrawals || 0);
         const expectedClosing = openingAmount + totalCashSales - totalWithdrawals;
         const difference = closingAmount - expectedClosing;
@@ -585,11 +652,12 @@ let CashClosureService = CashClosureService_1 = class CashClosureService {
                 totalCashSales,
                 expectedClosing,
                 difference,
-                salesCount: closure.sales.length,
+                salesCount: sales.length,
                 seller: closure.seller ? { id: closure.seller.id, name: closure.seller.name } : null,
             },
             paymentSummary,
             sellers,
+            includeSaleDetails,
         };
     }
     buildClosureSummary(closure, reportData) {
@@ -608,6 +676,7 @@ let CashClosureService = CashClosureService_1 = class CashClosureService {
             difference: reportData.closure.difference,
             salesCount: reportData.closure.salesCount,
             seller: reportData.closure.seller,
+            includeSaleDetails: reportData.includeSaleDetails,
         };
     }
 };

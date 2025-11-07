@@ -513,7 +513,7 @@ let PrinterService = PrinterService_1 = class PrinterService {
         return receipt;
     }
     generateCashClosureReport(data) {
-        const { company, closure, paymentSummary, sellers } = data;
+        const { company, closure, paymentSummary, sellers, includeSaleDetails } = data;
         let report = '';
         report += this.centerText(company.name) + '\n';
         report += this.centerText(`CNPJ: ${company.cnpj}`) + '\n';
@@ -560,30 +560,36 @@ let PrinterService = PrinterService_1 = class PrinterService {
                 report += `(Troco: ${this.formatCurrency(seller.totalChange)})\n`;
             });
         }
-        sellers.forEach((seller) => {
-            report += '\n' + this.centerText('--------------------------------') + '\n';
-            report += this.centerText(`Vendedor: ${seller.name}`) + '\n';
-            report += `Total vendido: ${this.formatCurrency(seller.totalSales)}\n`;
-            report += `Troco concedido: ${this.formatCurrency(seller.totalChange)}\n`;
-            report += `Vendas registradas: ${seller.sales.length}\n`;
-            report += this.centerText('--------------------------------') + '\n';
-            seller.sales.forEach((sale, index) => {
-                report += `#${(index + 1).toString().padStart(2, '0')} ${this.formatDate(sale.date)}\n`;
-                report += `Venda: ${sale.id}\n`;
-                report += `Total: ${this.formatCurrency(sale.total)}\n`;
-                if (sale.clientName) {
-                    report += `Cliente: ${sale.clientName}\n`;
-                }
-                report += 'Pagamentos:\n';
-                sale.paymentMethods.forEach((payment) => {
-                    report += `  - ${this.getPaymentMethodName(payment.method)}: ${this.formatCurrency(payment.amount)}\n`;
-                });
-                if (sale.change > 0) {
-                    report += `  Troco: ${this.formatCurrency(sale.change)}\n`;
-                }
+        if (includeSaleDetails) {
+            sellers.forEach((seller) => {
+                report += '\n' + this.centerText('--------------------------------') + '\n';
+                report += this.centerText(`Vendedor: ${seller.name}`) + '\n';
+                report += `Total vendido: ${this.formatCurrency(seller.totalSales)}\n`;
+                report += `Troco concedido: ${this.formatCurrency(seller.totalChange)}\n`;
+                report += `Vendas registradas: ${seller.sales.length}\n`;
                 report += this.centerText('--------------------------------') + '\n';
+                seller.sales.forEach((sale, index) => {
+                    report += `#${(index + 1).toString().padStart(2, '0')} ${this.formatDate(sale.date)}\n`;
+                    report += `Venda: ${sale.id}\n`;
+                    report += `Total: ${this.formatCurrency(sale.total)}\n`;
+                    if (sale.clientName) {
+                        report += `Cliente: ${sale.clientName}\n`;
+                    }
+                    report += 'Pagamentos:\n';
+                    sale.paymentMethods.forEach((payment) => {
+                        report += `  - ${this.getPaymentMethodName(payment.method)}: ${this.formatCurrency(payment.amount)}\n`;
+                    });
+                    if (sale.change > 0) {
+                        report += `  Troco: ${this.formatCurrency(sale.change)}\n`;
+                    }
+                    report += this.centerText('--------------------------------') + '\n';
+                });
             });
-        });
+        }
+        else {
+            report += '\nDETALHES INDIVIDUAIS NÃO INCLUÍDOS NESTE RELATÓRIO\n';
+            report += this.centerText('--------------------------------') + '\n';
+        }
         report += this.centerText('RELATÓRIO GERADO EM:') + '\n';
         report += this.centerText(this.formatDate(new Date())) + '\n';
         report += this.centerText('================================') + '\n\n\n';

@@ -179,6 +179,7 @@ export declare class CashClosureService {
                 id: string;
                 name: string;
             };
+            includeSaleDetails: boolean;
         };
         reportData: CashClosureReportData;
         reportContent: string;
@@ -201,6 +202,7 @@ export declare class CashClosureService {
             id: string;
             name: string;
         };
+        includeSaleDetails: boolean;
     }>;
     getCashClosureStats(companyId: string, sellerId?: string): Promise<{
         hasOpenClosure: boolean;
@@ -245,13 +247,14 @@ export declare class CashClosureService {
                 id: string;
                 name: string;
             };
+            includeSaleDetails: boolean;
         }[];
         total: number;
         page: number;
         limit: number;
         totalPages: number;
     }>;
-    reprintReport(id: string, companyId?: string, computerId?: string | null): Promise<{
+    reprintReport(id: string, companyId?: string, computerId?: string | null, includeSaleDetails?: boolean): Promise<{
         closure: {
             id: string;
             openingDate: Date;
@@ -270,6 +273,7 @@ export declare class CashClosureService {
                 id: string;
                 name: string;
             };
+            includeSaleDetails: boolean;
         };
         reportData: CashClosureReportData;
         reportContent: string;
@@ -291,9 +295,10 @@ export declare class CashClosureService {
             id: string;
             name: string;
         };
+        includeSaleDetails: boolean;
         closureId: string;
     }>;
-    getReportContent(id: string, companyId?: string): Promise<{
+    getReportContent(id: string, companyId?: string, includeSaleDetails?: boolean): Promise<{
         closure: {
             id: string;
             openingDate: Date;
@@ -312,6 +317,7 @@ export declare class CashClosureService {
                 id: string;
                 name: string;
             };
+            includeSaleDetails: boolean;
         };
         reportData: CashClosureReportData;
         reportContent: string;
@@ -332,9 +338,11 @@ export declare class CashClosureService {
             id: string;
             name: string;
         };
+        includeSaleDetails: boolean;
         closureId: string;
     }>;
     private loadClosureWithDetails;
+    private fetchSalesForClosure;
     private buildCompanyAddress;
     private buildCashClosureReportData;
     private buildClosureSummary;
