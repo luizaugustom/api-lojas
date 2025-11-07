@@ -15,6 +15,7 @@ let SanitizeUpdateDataInterceptor = class SanitizeUpdateDataInterceptor {
             const allowedFields = [
                 'name',
                 'photos',
+                'photosToDelete',
                 'barcode',
                 'size',
                 'stockQuantity',
@@ -36,6 +37,30 @@ let SanitizeUpdateDataInterceptor = class SanitizeUpdateDataInterceptor {
                 }
                 else {
                     delete sanitizedBody['photos'];
+                }
+            }
+            if (sanitizedBody['photosToDelete']) {
+                if (Array.isArray(sanitizedBody['photosToDelete'])) {
+                    sanitizedBody['photosToDelete'] = sanitizedBody['photosToDelete']
+                        .map(item => String(item))
+                        .filter(item => item.trim().length > 0);
+                }
+                else if (typeof sanitizedBody['photosToDelete'] === 'string') {
+                    const value = sanitizedBody['photosToDelete'];
+                    try {
+                        const parsed = JSON.parse(value);
+                        sanitizedBody['photosToDelete'] = Array.isArray(parsed)
+                            ? parsed.map(item => String(item)).filter(item => item.trim().length > 0)
+                            : [value];
+                    }
+                    catch {
+                        sanitizedBody['photosToDelete'] = value.includes(',')
+                            ? value.split(',').map(item => item.trim()).filter(item => item.length > 0)
+                            : [value];
+                    }
+                }
+                else {
+                    delete sanitizedBody['photosToDelete'];
                 }
             }
             if (sanitizedBody['stockQuantity']) {

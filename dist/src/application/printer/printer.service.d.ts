@@ -77,21 +77,46 @@ export interface CashClosureReportData {
     company: {
         name: string;
         cnpj: string;
+        address?: string;
     };
     closure: {
+        id: string;
         openingDate: Date;
         closingDate: Date;
         openingAmount: number;
         closingAmount: number;
         totalSales: number;
         totalWithdrawals: number;
+        totalChange: number;
+        totalCashSales: number;
+        expectedClosing: number;
+        difference: number;
+        salesCount: number;
+        seller?: {
+            id: string;
+            name: string;
+        } | null;
     };
-    sales: Array<{
-        id: string;
-        date: Date;
+    paymentSummary: Array<{
+        method: string;
         total: number;
-        seller: string;
-        paymentMethods: string[];
+    }>;
+    sellers: Array<{
+        id: string;
+        name: string;
+        totalSales: number;
+        totalChange: number;
+        sales: Array<{
+            id: string;
+            date: Date;
+            total: number;
+            change: number;
+            clientName?: string | null;
+            paymentMethods: Array<{
+                method: string;
+                amount: number;
+            }>;
+        }>;
     }>;
 }
 export interface PrintResult {
@@ -103,6 +128,7 @@ export interface PrintResult {
         status?: string;
         reason?: string;
     };
+    content?: string;
 }
 export declare class PrinterService {
     private readonly prisma;
@@ -188,7 +214,7 @@ export declare class PrinterService {
         lastStatusCheck: Date | null;
     }>;
     printReceipt(receiptData: ReceiptData, companyId?: string, computerId?: string | null): Promise<PrintResult>;
-    printCashClosureReport(reportData: CashClosureReportData, companyId?: string, computerId?: string | null): Promise<PrintResult>;
+    printCashClosureReport(reportData: CashClosureReportData, companyId?: string, computerId?: string | null, preGeneratedContent?: string): Promise<PrintResult>;
     printNonFiscalReceipt(receiptData: ReceiptData, companyId?: string, isMocked?: boolean, computerId?: string | null): Promise<PrintResult>;
     getNFCeContent(nfceData: NFCePrintData): Promise<string>;
     printNFCe(nfceData: NFCePrintData, companyId?: string, computerId?: string | null): Promise<PrintResult>;
@@ -226,4 +252,5 @@ export declare class PrinterService {
     private getBudgetStatus;
     generatePrintContent(nfceData: NFCePrintData, companyId?: string): Promise<string>;
     getNonFiscalReceiptContent(receiptData: ReceiptData, isMocked?: boolean): Promise<string>;
+    generateCashClosureReportContent(reportData: CashClosureReportData): string;
 }

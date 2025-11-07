@@ -267,9 +267,9 @@ let PrinterService = PrinterService_1 = class PrinterService {
             };
         }
     }
-    async printCashClosureReport(reportData, companyId, computerId) {
+    async printCashClosureReport(reportData, companyId, computerId, preGeneratedContent) {
+        const report = preGeneratedContent ?? this.generateCashClosureReport(reportData);
         try {
-            const report = this.generateCashClosureReport(reportData);
             const result = await this.sendToPrinter(report, companyId, computerId);
             if (result.success) {
                 this.logger.log('Cash closure report printed successfully');
@@ -277,7 +277,10 @@ let PrinterService = PrinterService_1 = class PrinterService {
             else {
                 this.logger.warn(`Cash closure report printing failed: ${result.error}`);
             }
-            return result;
+            return {
+                ...result,
+                content: report,
+            };
         }
         catch (error) {
             const errorMessage = error instanceof Error ? error.message : String(error);
@@ -288,6 +291,7 @@ let PrinterService = PrinterService_1 = class PrinterService {
                 details: {
                     reason: `Erro inesperado durante a impressão do relatório de fechamento: ${errorMessage}`,
                 },
+                content: report,
             };
         }
     }
@@ -509,43 +513,80 @@ let PrinterService = PrinterService_1 = class PrinterService {
         return receipt;
     }
     generateCashClosureReport(data) {
-        const { company, closure, sales } = data;
+        const { company, closure, paymentSummary, sellers } = data;
         let report = '';
         report += this.centerText(company.name) + '\n';
         report += this.centerText(`CNPJ: ${company.cnpj}`) + '\n';
-        report += this.centerText('--------------------------------') + '\n';
-        report += this.centerText('RELATÓRIO DE FECHAMENTO') + '\n';
-        report += this.centerText('--------------------------------') + '\n';
+        if (company.address) {
+            report += this.centerText(company.address) + '\n';
+        }
+        report += this.centerText('================================') + '\n';
+        report += this.centerText('RELATÓRIO DE FECHAMENTO DE CAIXA') + '\n';
+        report += this.centerText('================================') + '\n';
+        report += `Fechamento: ${closure.id}\n`;
+        report += closure.seller
+            ? `Caixa: Individual - ${closure.seller.name}\n`
+            : 'Caixa: Compartilhado\n';
         report += `Abertura: ${this.formatDate(closure.openingDate)}\n`;
         report += `Fechamento: ${this.formatDate(closure.closingDate)}\n`;
         report += `Valor inicial: ${this.formatCurrency(closure.openingAmount)}\n`;
-        report += `Valor final: ${this.formatCurrency(closure.closingAmount)}\n`;
         report += `Total vendas: ${this.formatCurrency(closure.totalSales)}\n`;
-        report += `Total saques: ${this.formatCurrency(closure.totalWithdrawals)}\n`;
+        report += `Retiradas: ${this.formatCurrency(closure.totalWithdrawals)}\n`;
+        report += `Troco concedido: ${this.formatCurrency(closure.totalChange)}\n`;
+        report += `Vendas em dinheiro: ${this.formatCurrency(closure.totalCashSales)}\n`;
+        report += `Saldo esperado: ${this.formatCurrency(closure.expectedClosing)}\n`;
+        report += `Valor informado: ${this.formatCurrency(closure.closingAmount)}\n`;
+        const diff = closure.difference;
+        const diffLabel = Math.abs(diff) < 0.01 ? 'OK' : diff > 0 ? 'SOBRA' : 'FALTA';
+        report += `Diferença: ${this.formatCurrency(diff)} (${diffLabel})\n`;
+        report += `Qtde de vendas: ${closure.salesCount}\n`;
         report += this.centerText('--------------------------------') + '\n';
-        report += `Total de vendas: ${sales.length}\n`;
-        const paymentSummary = sales.reduce((acc, sale) => {
-            sale.paymentMethods.forEach(method => {
-                acc[method] = (acc[method] || 0) + sale.total;
+        report += 'RESUMO POR FORMA DE PAGAMENTO:\n';
+        if (paymentSummary.length === 0) {
+            report += 'Nenhuma venda registrada.\n';
+        }
+        else {
+            paymentSummary.forEach(({ method, total }) => {
+                report += `${this.getPaymentMethodName(method)}: ${this.formatCurrency(total)}\n`;
             });
-            return acc;
-        }, {});
-        report += '\nRESUMO POR FORMA DE PAGAMENTO:\n';
-        Object.entries(paymentSummary).forEach(([method, total]) => {
-            report += `${this.getPaymentMethodName(method)}: ${this.formatCurrency(total)}\n`;
-        });
-        const sellerSummary = sales.reduce((acc, sale) => {
-            acc[sale.seller] = (acc[sale.seller] || 0) + sale.total;
-            return acc;
-        }, {});
+        }
         report += '\nRESUMO POR VENDEDOR:\n';
-        Object.entries(sellerSummary).forEach(([seller, total]) => {
-            report += `${seller}: ${this.formatCurrency(total)}\n`;
+        if (sellers.length === 0) {
+            report += 'Nenhuma venda registrada.\n';
+        }
+        else {
+            sellers.forEach((seller) => {
+                report += `${seller.name}: ${this.formatCurrency(seller.totalSales)} `;
+                report += `(Troco: ${this.formatCurrency(seller.totalChange)})\n`;
+            });
+        }
+        sellers.forEach((seller) => {
+            report += '\n' + this.centerText('--------------------------------') + '\n';
+            report += this.centerText(`Vendedor: ${seller.name}`) + '\n';
+            report += `Total vendido: ${this.formatCurrency(seller.totalSales)}\n`;
+            report += `Troco concedido: ${this.formatCurrency(seller.totalChange)}\n`;
+            report += `Vendas registradas: ${seller.sales.length}\n`;
+            report += this.centerText('--------------------------------') + '\n';
+            seller.sales.forEach((sale, index) => {
+                report += `#${(index + 1).toString().padStart(2, '0')} ${this.formatDate(sale.date)}\n`;
+                report += `Venda: ${sale.id}\n`;
+                report += `Total: ${this.formatCurrency(sale.total)}\n`;
+                if (sale.clientName) {
+                    report += `Cliente: ${sale.clientName}\n`;
+                }
+                report += 'Pagamentos:\n';
+                sale.paymentMethods.forEach((payment) => {
+                    report += `  - ${this.getPaymentMethodName(payment.method)}: ${this.formatCurrency(payment.amount)}\n`;
+                });
+                if (sale.change > 0) {
+                    report += `  Troco: ${this.formatCurrency(sale.change)}\n`;
+                }
+                report += this.centerText('--------------------------------') + '\n';
+            });
         });
-        report += this.centerText('--------------------------------') + '\n';
         report += this.centerText('RELATÓRIO GERADO EM:') + '\n';
         report += this.centerText(this.formatDate(new Date())) + '\n';
-        report += this.centerText('--------------------------------') + '\n\n\n';
+        report += this.centerText('================================') + '\n\n\n';
         return report;
     }
     async generateNFCeContent(data) {
@@ -1196,6 +1237,9 @@ let PrinterService = PrinterService_1 = class PrinterService {
             this.logger.error('Erro ao gerar conteúdo de cupom não fiscal:', error);
             throw new Error(`Erro ao gerar conteúdo de cupom não fiscal: ${errorMessage}`);
         }
+    }
+    generateCashClosureReportContent(reportData) {
+        return this.generateCashClosureReport(reportData);
     }
 };
 exports.PrinterService = PrinterService;

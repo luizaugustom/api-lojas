@@ -1,5 +1,6 @@
+import { Prisma } from '@prisma/client';
 import { PrismaService } from '../../infrastructure/database/prisma.service';
-import { PrinterService } from '../printer/printer.service';
+import { PrinterService, CashClosureReportData, PrintResult } from '../printer/printer.service';
 import { CreateCashClosureDto } from './dto/create-cash-closure.dto';
 import { CloseCashClosureDto } from './dto/close-cash-closure.dto';
 export declare class CashClosureService {
@@ -23,10 +24,10 @@ export declare class CashClosureService {
         companyId: string;
         openingDate: Date;
         closingDate: Date | null;
-        openingAmount: import("@prisma/client/runtime/library").Decimal;
-        closingAmount: import("@prisma/client/runtime/library").Decimal;
-        totalSales: import("@prisma/client/runtime/library").Decimal;
-        totalWithdrawals: import("@prisma/client/runtime/library").Decimal;
+        openingAmount: Prisma.Decimal;
+        closingAmount: Prisma.Decimal;
+        totalSales: Prisma.Decimal;
+        totalWithdrawals: Prisma.Decimal;
         isClosed: boolean;
         sellerId: string | null;
     }>;
@@ -46,10 +47,10 @@ export declare class CashClosureService {
             companyId: string;
             openingDate: Date;
             closingDate: Date | null;
-            openingAmount: import("@prisma/client/runtime/library").Decimal;
-            closingAmount: import("@prisma/client/runtime/library").Decimal;
-            totalSales: import("@prisma/client/runtime/library").Decimal;
-            totalWithdrawals: import("@prisma/client/runtime/library").Decimal;
+            openingAmount: Prisma.Decimal;
+            closingAmount: Prisma.Decimal;
+            totalSales: Prisma.Decimal;
+            totalWithdrawals: Prisma.Decimal;
             isClosed: boolean;
             sellerId: string | null;
         })[];
@@ -74,8 +75,8 @@ export declare class CashClosureService {
                 createdAt: Date;
                 saleId: string;
                 quantity: number;
-                unitPrice: import("@prisma/client/runtime/library").Decimal;
-                totalPrice: import("@prisma/client/runtime/library").Decimal;
+                unitPrice: Prisma.Decimal;
+                totalPrice: Prisma.Decimal;
                 productId: string;
             })[];
         } & {
@@ -84,8 +85,8 @@ export declare class CashClosureService {
             updatedAt: Date;
             companyId: string;
             sellerId: string;
-            total: import("@prisma/client/runtime/library").Decimal;
-            change: import("@prisma/client/runtime/library").Decimal;
+            total: Prisma.Decimal;
+            change: Prisma.Decimal;
             clientCpfCnpj: string | null;
             clientName: string | null;
             isInstallment: boolean;
@@ -106,10 +107,10 @@ export declare class CashClosureService {
         companyId: string;
         openingDate: Date;
         closingDate: Date | null;
-        openingAmount: import("@prisma/client/runtime/library").Decimal;
-        closingAmount: import("@prisma/client/runtime/library").Decimal;
-        totalSales: import("@prisma/client/runtime/library").Decimal;
-        totalWithdrawals: import("@prisma/client/runtime/library").Decimal;
+        openingAmount: Prisma.Decimal;
+        closingAmount: Prisma.Decimal;
+        totalSales: Prisma.Decimal;
+        totalWithdrawals: Prisma.Decimal;
         isClosed: boolean;
         sellerId: string | null;
     }>;
@@ -125,8 +126,8 @@ export declare class CashClosureService {
             updatedAt: Date;
             companyId: string;
             sellerId: string;
-            total: import("@prisma/client/runtime/library").Decimal;
-            change: import("@prisma/client/runtime/library").Decimal;
+            total: Prisma.Decimal;
+            change: Prisma.Decimal;
             clientCpfCnpj: string | null;
             clientName: string | null;
             isInstallment: boolean;
@@ -151,54 +152,54 @@ export declare class CashClosureService {
         companyId: string;
         openingDate: Date;
         closingDate: Date | null;
-        openingAmount: import("@prisma/client/runtime/library").Decimal;
-        closingAmount: import("@prisma/client/runtime/library").Decimal;
-        totalSales: import("@prisma/client/runtime/library").Decimal;
-        totalWithdrawals: import("@prisma/client/runtime/library").Decimal;
+        openingAmount: Prisma.Decimal;
+        closingAmount: Prisma.Decimal;
+        totalSales: Prisma.Decimal;
+        totalWithdrawals: Prisma.Decimal;
         isClosed: boolean;
         sellerId: string | null;
     }>;
-    close(companyId: string, closeCashClosureDto: CloseCashClosureDto, sellerId?: string): Promise<{
-        sales: ({
+    close(companyId: string, closeCashClosureDto: CloseCashClosureDto, sellerId?: string, computerId?: string | null): Promise<{
+        closure: {
+            id: string;
+            openingDate: Date;
+            closingDate: Date;
+            isClosed: boolean;
+            openingAmount: number;
+            closingAmount: number;
+            totalSales: number;
+            totalWithdrawals: number;
+            totalChange: number;
+            totalCashSales: number;
+            expectedClosing: number;
+            difference: number;
+            salesCount: number;
             seller: {
                 id: string;
                 name: string;
             };
-        } & {
-            id: string;
-            createdAt: Date;
-            updatedAt: Date;
-            companyId: string;
-            sellerId: string;
-            total: import("@prisma/client/runtime/library").Decimal;
-            change: import("@prisma/client/runtime/library").Decimal;
-            clientCpfCnpj: string | null;
-            clientName: string | null;
-            isInstallment: boolean;
-            saleDate: Date;
-            cashClosureId: string | null;
-        })[];
-        company: {
-            id: string;
-            name: string;
         };
+        reportData: CashClosureReportData;
+        reportContent: string;
+        printRequested: boolean;
+        printResult: PrintResult;
+        id: string;
+        openingDate: Date;
+        closingDate: Date;
+        isClosed: boolean;
+        openingAmount: number;
+        closingAmount: number;
+        totalSales: number;
+        totalWithdrawals: number;
+        totalChange: number;
+        totalCashSales: number;
+        expectedClosing: number;
+        difference: number;
+        salesCount: number;
         seller: {
             id: string;
             name: string;
         };
-    } & {
-        id: string;
-        createdAt: Date;
-        updatedAt: Date;
-        companyId: string;
-        openingDate: Date;
-        closingDate: Date | null;
-        openingAmount: import("@prisma/client/runtime/library").Decimal;
-        closingAmount: import("@prisma/client/runtime/library").Decimal;
-        totalSales: import("@prisma/client/runtime/library").Decimal;
-        totalWithdrawals: import("@prisma/client/runtime/library").Decimal;
-        isClosed: boolean;
-        sellerId: string | null;
     }>;
     getCashClosureStats(companyId: string, sellerId?: string): Promise<{
         hasOpenClosure: boolean;
@@ -235,10 +236,10 @@ export declare class CashClosureService {
             companyId: string;
             openingDate: Date;
             closingDate: Date | null;
-            openingAmount: import("@prisma/client/runtime/library").Decimal;
-            closingAmount: import("@prisma/client/runtime/library").Decimal;
-            totalSales: import("@prisma/client/runtime/library").Decimal;
-            totalWithdrawals: import("@prisma/client/runtime/library").Decimal;
+            openingAmount: Prisma.Decimal;
+            closingAmount: Prisma.Decimal;
+            totalSales: Prisma.Decimal;
+            totalWithdrawals: Prisma.Decimal;
             isClosed: boolean;
             sellerId: string | null;
         })[];
@@ -247,7 +248,91 @@ export declare class CashClosureService {
         limit: number;
         totalPages: number;
     }>;
-    reprintReport(id: string, companyId?: string): Promise<{
-        message: string;
+    reprintReport(id: string, companyId?: string, computerId?: string | null): Promise<{
+        closure: {
+            id: string;
+            openingDate: Date;
+            closingDate: Date;
+            isClosed: boolean;
+            openingAmount: number;
+            closingAmount: number;
+            totalSales: number;
+            totalWithdrawals: number;
+            totalChange: number;
+            totalCashSales: number;
+            expectedClosing: number;
+            difference: number;
+            salesCount: number;
+            seller: {
+                id: string;
+                name: string;
+            };
+        };
+        reportData: CashClosureReportData;
+        reportContent: string;
+        printResult: PrintResult;
+        id: string;
+        openingDate: Date;
+        closingDate: Date;
+        isClosed: boolean;
+        openingAmount: number;
+        closingAmount: number;
+        totalSales: number;
+        totalWithdrawals: number;
+        totalChange: number;
+        totalCashSales: number;
+        expectedClosing: number;
+        difference: number;
+        salesCount: number;
+        seller: {
+            id: string;
+            name: string;
+        };
+        closureId: string;
     }>;
+    getReportContent(id: string, companyId?: string): Promise<{
+        closure: {
+            id: string;
+            openingDate: Date;
+            closingDate: Date;
+            isClosed: boolean;
+            openingAmount: number;
+            closingAmount: number;
+            totalSales: number;
+            totalWithdrawals: number;
+            totalChange: number;
+            totalCashSales: number;
+            expectedClosing: number;
+            difference: number;
+            salesCount: number;
+            seller: {
+                id: string;
+                name: string;
+            };
+        };
+        reportData: CashClosureReportData;
+        reportContent: string;
+        id: string;
+        openingDate: Date;
+        closingDate: Date;
+        isClosed: boolean;
+        openingAmount: number;
+        closingAmount: number;
+        totalSales: number;
+        totalWithdrawals: number;
+        totalChange: number;
+        totalCashSales: number;
+        expectedClosing: number;
+        difference: number;
+        salesCount: number;
+        seller: {
+            id: string;
+            name: string;
+        };
+        closureId: string;
+    }>;
+    private loadClosureWithDetails;
+    private buildCompanyAddress;
+    private buildCashClosureReportData;
+    private buildClosureSummary;
 }

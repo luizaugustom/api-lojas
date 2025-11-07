@@ -1,5 +1,5 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { IsOptional, IsNumber, Min } from 'class-validator';
+import { IsOptional, IsNumber, Min, IsBoolean } from 'class-validator';
 import { Type } from 'class-transformer';
 
 export class CloseCashClosureDto {
@@ -26,4 +26,14 @@ export class CloseCashClosureDto {
   @Min(0)
   @Type(() => Number)
   withdrawals?: number;
+
+  @ApiProperty({
+    description: 'Indica se o relatório completo deve ser impresso imediatamente após o fechamento',
+    example: true,
+    required: false,
+    default: false,
+  })
+  @IsOptional()
+  @IsBoolean()
+  printReport?: boolean;
 }

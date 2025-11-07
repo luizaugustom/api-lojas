@@ -9,7 +9,9 @@ import {
   Query,
   ParseIntPipe,
   ParseBoolPipe,
+  Req,
 } from '@nestjs/common';
+import { Request } from 'express';
 import {
   ApiTags,
   ApiOperation,
@@ -121,9 +123,11 @@ export class CashClosureController {
   close(
     @CurrentUser() user: any,
     @Body() closeCashClosureDto: CloseCashClosureDto,
+    @Req() req: Request,
   ) {
     const sellerId = user.role === UserRole.SELLER ? user.userId : undefined;
-    return this.cashClosureService.close(user.companyId, closeCashClosureDto, sellerId);
+    const computerId = (req.headers['x-computer-id'] as string) || null;
+    return this.cashClosureService.close(user.companyId, closeCashClosureDto, sellerId, computerId);
   }
 
   @Post(':id/reprint')
@@ -134,10 +138,26 @@ export class CashClosureController {
   reprintReport(
     @Param('id', UuidValidationPipe) id: string,
     @CurrentUser() user: any,
+    @Req() req: Request,
+  ) {
+    const computerId = (req.headers['x-computer-id'] as string) || null;
+    if (user.role === UserRole.ADMIN) {
+      return this.cashClosureService.reprintReport(id, undefined, computerId);
+    }
+    return this.cashClosureService.reprintReport(id, user.companyId, computerId);
+  }
+
+  @Get(':id/print-content')
+  @Roles(UserRole.ADMIN, UserRole.COMPANY)
+  @ApiOperation({ summary: 'Obter conteúdo do relatório de fechamento para impressão' })
+  @ApiResponse({ status: 200, description: 'Conteúdo pronto para impressão' })
+  getPrintContent(
+    @Param('id', UuidValidationPipe) id: string,
+    @CurrentUser() user: any,
   ) {
     if (user.role === UserRole.ADMIN) {
-      return this.cashClosureService.reprintReport(id);
+      return this.cashClosureService.getReportContent(id);
     }
-    return this.cashClosureService.reprintReport(id, user.companyId);
+    return this.cashClosureService.getReportContent(id, user.companyId);
   }
 }

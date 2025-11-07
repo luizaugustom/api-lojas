@@ -54,15 +54,23 @@ let CashClosureController = class CashClosureController {
         }
         return this.cashClosureService.findOne(id, user.companyId);
     }
-    close(user, closeCashClosureDto) {
+    close(user, closeCashClosureDto, req) {
         const sellerId = user.role === roles_decorator_1.UserRole.SELLER ? user.userId : undefined;
-        return this.cashClosureService.close(user.companyId, closeCashClosureDto, sellerId);
+        const computerId = req.headers['x-computer-id'] || null;
+        return this.cashClosureService.close(user.companyId, closeCashClosureDto, sellerId, computerId);
     }
-    reprintReport(id, user) {
+    reprintReport(id, user, req) {
+        const computerId = req.headers['x-computer-id'] || null;
         if (user.role === roles_decorator_1.UserRole.ADMIN) {
-            return this.cashClosureService.reprintReport(id);
+            return this.cashClosureService.reprintReport(id, undefined, computerId);
         }
-        return this.cashClosureService.reprintReport(id, user.companyId);
+        return this.cashClosureService.reprintReport(id, user.companyId, computerId);
+    }
+    getPrintContent(id, user) {
+        if (user.role === roles_decorator_1.UserRole.ADMIN) {
+            return this.cashClosureService.getReportContent(id);
+        }
+        return this.cashClosureService.getReportContent(id, user.companyId);
     }
 };
 exports.CashClosureController = CashClosureController;
@@ -149,8 +157,9 @@ __decorate([
     (0, swagger_1.ApiResponse)({ status: 404, description: 'Não há fechamento de caixa aberto' }),
     __param(0, (0, current_user_decorator_1.CurrentUser)()),
     __param(1, (0, common_1.Body)()),
+    __param(2, (0, common_1.Req)()),
     __metadata("design:type", Function),
-    __metadata("design:paramtypes", [Object, close_cash_closure_dto_1.CloseCashClosureDto]),
+    __metadata("design:paramtypes", [Object, close_cash_closure_dto_1.CloseCashClosureDto, Object]),
     __metadata("design:returntype", void 0)
 ], CashClosureController.prototype, "close", null);
 __decorate([
@@ -161,10 +170,22 @@ __decorate([
     (0, swagger_1.ApiResponse)({ status: 400, description: 'Erro ao reimprimir relatório' }),
     __param(0, (0, common_1.Param)('id', uuid_validation_pipe_1.UuidValidationPipe)),
     __param(1, (0, current_user_decorator_1.CurrentUser)()),
+    __param(2, (0, common_1.Req)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String, Object, Object]),
+    __metadata("design:returntype", void 0)
+], CashClosureController.prototype, "reprintReport", null);
+__decorate([
+    (0, common_1.Get)(':id/print-content'),
+    (0, roles_decorator_1.Roles)(roles_decorator_1.UserRole.ADMIN, roles_decorator_1.UserRole.COMPANY),
+    (0, swagger_1.ApiOperation)({ summary: 'Obter conteúdo do relatório de fechamento para impressão' }),
+    (0, swagger_1.ApiResponse)({ status: 200, description: 'Conteúdo pronto para impressão' }),
+    __param(0, (0, common_1.Param)('id', uuid_validation_pipe_1.UuidValidationPipe)),
+    __param(1, (0, current_user_decorator_1.CurrentUser)()),
     __metadata("design:type", Function),
     __metadata("design:paramtypes", [String, Object]),
     __metadata("design:returntype", void 0)
-], CashClosureController.prototype, "reprintReport", null);
+], CashClosureController.prototype, "getPrintContent", null);
 exports.CashClosureController = CashClosureController = __decorate([
     (0, swagger_1.ApiTags)('cash'),
     (0, common_1.Controller)('cash-closure'),

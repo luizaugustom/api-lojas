@@ -14,6 +14,46 @@ exports.CashClosureService = void 0;
 const common_1 = require("@nestjs/common");
 const prisma_service_1 = require("../../infrastructure/database/prisma.service");
 const printer_service_1 = require("../printer/printer.service");
+const CASH_CLOSURE_REPORT_INCLUDE = {
+    company: {
+        select: {
+            id: true,
+            name: true,
+            cnpj: true,
+            street: true,
+            number: true,
+            district: true,
+            city: true,
+            state: true,
+            zipCode: true,
+        },
+    },
+    seller: {
+        select: {
+            id: true,
+            name: true,
+        },
+    },
+    sales: {
+        orderBy: {
+            saleDate: 'asc',
+        },
+        include: {
+            seller: {
+                select: {
+                    id: true,
+                    name: true,
+                },
+            },
+            paymentMethods: true,
+            _count: {
+                select: {
+                    items: true,
+                },
+            },
+        },
+    },
+};
 let CashClosureService = CashClosureService_1 = class CashClosureService {
     constructor(prisma, printerService) {
         this.prisma = prisma;
@@ -215,7 +255,7 @@ let CashClosureService = CashClosureService_1 = class CashClosureService {
         }
         return closure;
     }
-    async close(companyId, closeCashClosureDto, sellerId) {
+    async close(companyId, closeCashClosureDto, sellerId, computerId) {
         try {
             let targetSellerId = null;
             if (sellerId) {
@@ -233,17 +273,16 @@ let CashClosureService = CashClosureService_1 = class CashClosureService {
                     isClosed: false,
                     sellerId: targetSellerId,
                 },
-                include: {
-                    sales: true,
-                },
+                include: CASH_CLOSURE_REPORT_INCLUDE,
             });
             if (!existingClosure) {
                 throw new common_1.NotFoundException('Não há fechamento de caixa aberto');
             }
             const totalSales = existingClosure.sales.reduce((sum, sale) => sum + Number(sale.total), 0);
-            const totalWithdrawals = closeCashClosureDto.withdrawals || 0;
-            const closingAmount = closeCashClosureDto.closingAmount || 0;
-            const closure = await this.prisma.cashClosure.update({
+            const totalWithdrawals = closeCashClosureDto.withdrawals ?? 0;
+            const closingAmount = closeCashClosureDto.closingAmount ?? 0;
+            const shouldPrint = closeCashClosureDto.printReport ?? false;
+            const updatedClosure = await this.prisma.cashClosure.update({
                 where: { id: existingClosure.id },
                 data: {
                     closingDate: new Date(),
@@ -252,41 +291,41 @@ let CashClosureService = CashClosureService_1 = class CashClosureService {
                     closingAmount,
                     isClosed: true,
                 },
-                include: {
-                    company: {
-                        select: {
-                            id: true,
-                            name: true,
-                        },
-                    },
-                    seller: {
-                        select: {
-                            id: true,
-                            name: true,
-                        },
-                    },
-                    sales: {
-                        include: {
-                            seller: {
-                                select: {
-                                    id: true,
-                                    name: true,
-                                },
-                            },
-                        },
-                    },
-                },
+                include: CASH_CLOSURE_REPORT_INCLUDE,
             });
-            try {
+            const reportData = this.buildCashClosureReportData(updatedClosure);
+            const reportContent = this.printerService.generateCashClosureReportContent(reportData);
+            let printResult = null;
+            if (shouldPrint) {
+                try {
+                    printResult = await this.printerService.printCashClosureReport(reportData, companyId, computerId, reportContent);
+                    if (!printResult.success) {
+                        this.logger.warn(`Falha ao imprimir relatório de fechamento ${updatedClosure.id}: ${printResult.error}`);
+                    }
+                }
+                catch (printError) {
+                    this.logger.warn(`Erro ao tentar imprimir relatório de fechamento ${updatedClosure.id}:`, printError);
+                    printResult = {
+                        success: false,
+                        error: printError instanceof Error ? printError.message : String(printError),
+                    };
+                }
             }
-            catch (printError) {
-                this.logger.warn('Failed to print cash closure report:', printError);
-            }
-            this.logger.log(`Cash closure closed: ${closure.id} for company: ${companyId}`);
-            return closure;
+            const summary = this.buildClosureSummary(updatedClosure, reportData);
+            const diff = reportData.closure.difference;
+            const diffLabel = Math.abs(diff) < 0.01 ? 'sem diferença' : diff > 0 ? 'sobra' : 'falta';
+            this.logger.log(`Fechamento ${updatedClosure.id} concluído para empresa ${companyId} (${diffLabel}: ${diff.toFixed(2)})`);
+            return {
+                ...summary,
+                closure: summary,
+                reportData,
+                reportContent,
+                printRequested: shouldPrint,
+                printResult,
+            };
         }
         catch (error) {
-            this.logger.error('Error closing cash closure:', error);
+            this.logger.error('Erro ao fechar caixa:', error);
             throw error;
         }
     }
@@ -391,18 +430,167 @@ let CashClosureService = CashClosureService_1 = class CashClosureService {
             totalPages: Math.ceil(total / limit),
         };
     }
-    async reprintReport(id, companyId) {
-        const closure = await this.findOne(id, companyId);
-        if (!closure.isClosed) {
-            throw new common_1.BadRequestException('Não é possível imprimir relatório de fechamento em aberto');
-        }
+    async reprintReport(id, companyId, computerId) {
         try {
-            return { message: 'Relatório reimpresso com sucesso' };
+            const closure = await this.loadClosureWithDetails(id, companyId);
+            if (!closure.isClosed) {
+                throw new common_1.BadRequestException('Não é possível imprimir relatório de fechamento em aberto');
+            }
+            const reportData = this.buildCashClosureReportData(closure);
+            const reportContent = this.printerService.generateCashClosureReportContent(reportData);
+            const printResult = await this.printerService.printCashClosureReport(reportData, closure.companyId, computerId, reportContent);
+            if (!printResult.success) {
+                this.logger.warn(`Falha ao reimprimir relatório do fechamento ${closure.id}: ${printResult.error}`);
+            }
+            const summary = this.buildClosureSummary(closure, reportData);
+            return {
+                closureId: closure.id,
+                ...summary,
+                closure: summary,
+                reportData,
+                reportContent,
+                printResult,
+            };
         }
         catch (error) {
-            this.logger.error('Error reprinting cash closure report:', error);
+            this.logger.error(`Erro ao reimprimir relatório do fechamento ${id}:`, error);
+            if (error instanceof common_1.NotFoundException || error instanceof common_1.BadRequestException) {
+                throw error;
+            }
             throw new common_1.BadRequestException('Erro ao reimprimir relatório');
         }
+    }
+    async getReportContent(id, companyId) {
+        const closure = await this.loadClosureWithDetails(id, companyId);
+        if (!closure.isClosed) {
+            throw new common_1.BadRequestException('O relatório completo só fica disponível após o fechamento do caixa');
+        }
+        const reportData = this.buildCashClosureReportData(closure);
+        const reportContent = this.printerService.generateCashClosureReportContent(reportData);
+        const summary = this.buildClosureSummary(closure, reportData);
+        return {
+            closureId: closure.id,
+            ...summary,
+            closure: summary,
+            reportData,
+            reportContent,
+        };
+    }
+    async loadClosureWithDetails(id, companyId) {
+        const closure = await this.prisma.cashClosure.findFirst({
+            where: {
+                id,
+                ...(companyId ? { companyId } : {}),
+            },
+            include: CASH_CLOSURE_REPORT_INCLUDE,
+        });
+        if (!closure) {
+            throw new common_1.NotFoundException('Fechamento de caixa não encontrado');
+        }
+        return closure;
+    }
+    buildCompanyAddress(company) {
+        const street = [company.street, company.number].filter(Boolean).join(', ');
+        const district = company.district;
+        const cityState = company.city && company.state ? `${company.city}/${company.state}` : company.city || company.state;
+        const zip = company.zipCode ? `CEP: ${company.zipCode}` : undefined;
+        const parts = [street, district, cityState, zip].filter((part) => part && part.trim().length > 0);
+        if (!parts.length) {
+            return undefined;
+        }
+        return parts.join(' - ');
+    }
+    buildCashClosureReportData(closure) {
+        const totalChange = closure.sales.reduce((sum, sale) => sum + Number(sale.change || 0), 0);
+        const paymentSummaryMap = new Map();
+        const sellersMap = new Map();
+        closure.sales.forEach((sale) => {
+            sale.paymentMethods.forEach((payment) => {
+                const currentTotal = paymentSummaryMap.get(payment.method) || 0;
+                paymentSummaryMap.set(payment.method, currentTotal + Number(payment.amount));
+            });
+            const sellerId = sale.seller?.id || 'sem-vendedor';
+            const sellerName = sale.seller?.name || 'Sem Vendedor';
+            if (!sellersMap.has(sellerId)) {
+                sellersMap.set(sellerId, {
+                    id: sellerId,
+                    name: sellerName,
+                    totalSales: 0,
+                    totalChange: 0,
+                    sales: [],
+                });
+            }
+            const sellerData = sellersMap.get(sellerId);
+            sellerData.totalSales += Number(sale.total);
+            sellerData.totalChange += Number(sale.change || 0);
+            sellerData.sales.push({
+                id: sale.id,
+                date: sale.saleDate,
+                total: Number(sale.total),
+                change: Number(sale.change || 0),
+                clientName: sale.clientName,
+                paymentMethods: sale.paymentMethods.map((payment) => ({
+                    method: payment.method,
+                    amount: Number(payment.amount),
+                })),
+            });
+        });
+        const paymentSummary = Array.from(paymentSummaryMap.entries())
+            .map(([method, total]) => ({ method, total }))
+            .sort((a, b) => b.total - a.total);
+        const sellers = Array.from(sellersMap.values()).map((seller) => ({
+            ...seller,
+            sales: seller.sales.sort((a, b) => a.date.getTime() - b.date.getTime()),
+        })).sort((a, b) => b.totalSales - a.totalSales);
+        const totalCashSales = paymentSummary.find((entry) => entry.method === 'cash')?.total || 0;
+        const openingAmount = Number(closure.openingAmount || 0);
+        const closingAmount = Number(closure.closingAmount || 0);
+        const totalSales = closure.sales.reduce((sum, sale) => sum + Number(sale.total), 0);
+        const totalWithdrawals = Number(closure.totalWithdrawals || 0);
+        const expectedClosing = openingAmount + totalCashSales - totalWithdrawals;
+        const difference = closingAmount - expectedClosing;
+        return {
+            company: {
+                name: closure.company.name,
+                cnpj: closure.company.cnpj,
+                address: this.buildCompanyAddress(closure.company),
+            },
+            closure: {
+                id: closure.id,
+                openingDate: closure.openingDate,
+                closingDate: closure.closingDate ?? new Date(),
+                openingAmount,
+                closingAmount,
+                totalSales,
+                totalWithdrawals,
+                totalChange,
+                totalCashSales,
+                expectedClosing,
+                difference,
+                salesCount: closure.sales.length,
+                seller: closure.seller ? { id: closure.seller.id, name: closure.seller.name } : null,
+            },
+            paymentSummary,
+            sellers,
+        };
+    }
+    buildClosureSummary(closure, reportData) {
+        return {
+            id: closure.id,
+            openingDate: closure.openingDate,
+            closingDate: closure.closingDate,
+            isClosed: closure.isClosed,
+            openingAmount: reportData.closure.openingAmount,
+            closingAmount: reportData.closure.closingAmount,
+            totalSales: reportData.closure.totalSales,
+            totalWithdrawals: reportData.closure.totalWithdrawals,
+            totalChange: reportData.closure.totalChange,
+            totalCashSales: reportData.closure.totalCashSales,
+            expectedClosing: reportData.closure.expectedClosing,
+            difference: reportData.closure.difference,
+            salesCount: reportData.closure.salesCount,
+            seller: reportData.closure.seller,
+        };
     }
 };
 exports.CashClosureService = CashClosureService;

@@ -42,4 +42,15 @@ __decorate([
     (0, class_transformer_1.Type)(() => Number),
     __metadata("design:type", Number)
 ], CloseCashClosureDto.prototype, "withdrawals", void 0);
+__decorate([
+    (0, swagger_1.ApiProperty)({
+        description: 'Indica se o relatório completo deve ser impresso imediatamente após o fechamento',
+        example: true,
+        required: false,
+        default: false,
+    }),
+    (0, class_validator_1.IsOptional)(),
+    (0, class_validator_1.IsBoolean)(),
+    __metadata("design:type", Boolean)
+], CloseCashClosureDto.prototype, "printReport", void 0);
 //# sourceMappingURL=close-cash-closure.dto.js.map

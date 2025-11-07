@@ -46,7 +46,31 @@ let ProductPhotoService = ProductPhotoService_1 = class ProductPhotoService {
         this.logger.log(`✅ Remoção concluída`);
     }
     async prepareProductPhotos(companyId, newFiles, existingPhotos = [], photosToDelete = []) {
-        const remainingPhotos = existingPhotos.filter((photo) => !photosToDelete.includes(photo));
+        this.logger.log(`📸 Preparing photos - Existing: ${existingPhotos.length}, To delete: ${photosToDelete.length}, New: ${newFiles.length}`);
+        this.logger.log(`🗑️ Photos to delete: ${JSON.stringify(photosToDelete)}`);
+        this.logger.log(`📋 Existing photos: ${JSON.stringify(existingPhotos)}`);
+        const remainingPhotos = existingPhotos.filter((photo) => {
+            const shouldKeep = !photosToDelete.some((toDelete) => {
+                if (photo === toDelete)
+                    return true;
+                try {
+                    const decodedPhoto = decodeURIComponent(photo);
+                    const decodedToDelete = decodeURIComponent(toDelete);
+                    if (decodedPhoto === decodedToDelete)
+                        return true;
+                }
+                catch {
+                }
+                if (photo.replace(/%20/g, ' ') === toDelete.replace(/%20/g, ' '))
+                    return true;
+                return false;
+            });
+            if (!shouldKeep) {
+                this.logger.log(`🗑️ Removing photo: ${photo}`);
+            }
+            return shouldKeep;
+        });
+        this.logger.log(`✅ Remaining photos after deletion: ${remainingPhotos.length}`);
         const currentCount = remainingPhotos.length;
         const maxPhotos = await this.validationService.getMaxPhotosForCompany(companyId);
         const availableSlots = maxPhotos - currentCount;

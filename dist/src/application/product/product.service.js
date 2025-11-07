@@ -45,7 +45,7 @@ let ProductService = ProductService_1 = class ProductService {
     serializePhotos(arr) {
         if (!arr || arr.length === 0)
             return null;
-        return JSON.stringify(arr);
+        return arr;
     }
     async create(companyId, createProductDto) {
         try {

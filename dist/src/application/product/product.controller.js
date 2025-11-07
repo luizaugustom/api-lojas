@@ -188,16 +188,42 @@ let ProductController = ProductController_1 = class ProductController {
                 throw new common_1.BadRequestException('Máximo de 3 fotos por produto');
             }
             let photosToDelete = [];
+            this.logger.log(`📋 photosToDeleteBody type: ${typeof photosToDeleteBody}`);
+            this.logger.log(`📋 photosToDeleteBody value: ${JSON.stringify(photosToDeleteBody)}`);
+            this.logger.log(`📋 productData.photosToDelete: ${JSON.stringify(productData.photosToDelete)}`);
             if (photosToDeleteBody) {
-                photosToDelete = Array.isArray(photosToDeleteBody)
-                    ? photosToDeleteBody
-                    : [photosToDeleteBody];
+                if (Array.isArray(photosToDeleteBody)) {
+                    photosToDelete = photosToDeleteBody;
+                }
+                else if (typeof photosToDeleteBody === 'string') {
+                    try {
+                        const parsed = JSON.parse(photosToDeleteBody);
+                        photosToDelete = Array.isArray(parsed) ? parsed : [photosToDeleteBody];
+                    }
+                    catch {
+                        photosToDelete = photosToDeleteBody.includes(',')
+                            ? photosToDeleteBody.split(',').map(s => s.trim()).filter(s => s.length > 0)
+                            : [photosToDeleteBody];
+                    }
+                }
             }
-            else if (productData.photosToDelete) {
-                photosToDelete = Array.isArray(productData.photosToDelete)
-                    ? productData.photosToDelete
-                    : [productData.photosToDelete];
+            if (photosToDelete.length === 0 && productData.photosToDelete) {
+                if (Array.isArray(productData.photosToDelete)) {
+                    photosToDelete = productData.photosToDelete;
+                }
+                else if (typeof productData.photosToDelete === 'string') {
+                    try {
+                        const parsed = JSON.parse(productData.photosToDelete);
+                        photosToDelete = Array.isArray(parsed) ? parsed : [productData.photosToDelete];
+                    }
+                    catch {
+                        photosToDelete = productData.photosToDelete.includes(',')
+                            ? productData.photosToDelete.split(',').map(s => s.trim()).filter(s => s.length > 0)
+                            : [productData.photosToDelete];
+                    }
+                }
             }
+            this.logger.log(`🗑️ Photos to delete (${photosToDelete.length}): ${JSON.stringify(photosToDelete)}`);
             const updateProductDto = {};
             if (productData.name !== undefined)
                 updateProductDto.name = productData.name;
