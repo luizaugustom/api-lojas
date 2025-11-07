@@ -1,5 +1,6 @@
 import { PrismaService } from '../../infrastructure/database/prisma.service';
 import { ThermalPrinterService } from '../../shared/services/thermal-printer.service';
+import { ClientTimeInfo } from '../../shared/utils/client-time.util';
 export interface PrinterConfig {
     type: 'usb' | 'network' | 'bluetooth';
     connectionInfo: string;
@@ -30,6 +31,9 @@ export interface ReceiptData {
     client?: {
         name?: string;
         cpfCnpj?: string;
+    };
+    metadata?: {
+        clientTimeInfo?: ClientTimeInfo;
     };
 }
 export interface NFCePrintData {
@@ -72,6 +76,9 @@ export interface NFCePrintData {
         cfop?: string;
     }>;
     customFooter?: string;
+    metadata?: {
+        clientTimeInfo?: ClientTimeInfo;
+    };
 }
 export interface CashClosureReportData {
     company: {
@@ -119,6 +126,9 @@ export interface CashClosureReportData {
         }>;
     }>;
     includeSaleDetails: boolean;
+    metadata?: {
+        clientTimeInfo?: ClientTimeInfo;
+    };
 }
 export interface PrintResult {
     success: boolean;
@@ -214,11 +224,11 @@ export declare class PrinterService {
         paperStatus: string;
         lastStatusCheck: Date | null;
     }>;
-    printReceipt(receiptData: ReceiptData, companyId?: string, computerId?: string | null): Promise<PrintResult>;
-    printCashClosureReport(reportData: CashClosureReportData, companyId?: string, computerId?: string | null, preGeneratedContent?: string): Promise<PrintResult>;
-    printNonFiscalReceipt(receiptData: ReceiptData, companyId?: string, isMocked?: boolean, computerId?: string | null): Promise<PrintResult>;
-    getNFCeContent(nfceData: NFCePrintData): Promise<string>;
-    printNFCe(nfceData: NFCePrintData, companyId?: string, computerId?: string | null): Promise<PrintResult>;
+    printReceipt(receiptData: ReceiptData, companyId?: string, computerId?: string | null, clientTimeInfo?: ClientTimeInfo): Promise<PrintResult>;
+    printCashClosureReport(reportData: CashClosureReportData, companyId?: string, computerId?: string | null, preGeneratedContent?: string, clientTimeInfo?: ClientTimeInfo): Promise<PrintResult>;
+    printNonFiscalReceipt(receiptData: ReceiptData, companyId?: string, isMocked?: boolean, computerId?: string | null, clientTimeInfo?: ClientTimeInfo): Promise<PrintResult>;
+    getNFCeContent(nfceData: NFCePrintData, clientTimeInfo?: ClientTimeInfo): Promise<string>;
+    printNFCe(nfceData: NFCePrintData, companyId?: string, computerId?: string | null, clientTimeInfo?: ClientTimeInfo): Promise<PrintResult>;
     private generateReceiptContent;
     private generateNonFiscalReceiptContent;
     private generateCashClosureReport;
@@ -248,10 +258,10 @@ export declare class PrinterService {
     openCashDrawer(printerId: string): Promise<boolean>;
     getPrintQueue(printerId: string): Promise<any[]>;
     getPrinterLogs(printerId: string): Promise<string[]>;
-    printBudget(data: any, computerId?: string | null): Promise<boolean>;
+    printBudget(data: any, computerId?: string | null, clientTimeInfo?: ClientTimeInfo): Promise<boolean>;
     private generateBudgetContent;
     private getBudgetStatus;
-    generatePrintContent(nfceData: NFCePrintData, companyId?: string): Promise<string>;
-    getNonFiscalReceiptContent(receiptData: ReceiptData, isMocked?: boolean): Promise<string>;
-    generateCashClosureReportContent(reportData: CashClosureReportData): string;
+    generatePrintContent(nfceData: NFCePrintData, companyId?: string, clientTimeInfo?: ClientTimeInfo): Promise<string>;
+    getNonFiscalReceiptContent(receiptData: ReceiptData, isMocked?: boolean, clientTimeInfo?: ClientTimeInfo): Promise<string>;
+    generateCashClosureReportContent(reportData: CashClosureReportData, clientTimeInfo?: ClientTimeInfo): string;
 }

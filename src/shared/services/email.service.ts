@@ -1,6 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import * as nodemailer from 'nodemailer';
+import { ClientTimeInfo, formatClientDate, formatClientDateOnly } from '../utils/client-time.util';
 
 export interface EmailOptions {
   to: string;
@@ -87,9 +88,10 @@ export class EmailService {
     customerEmail: string, 
     customerName: string, 
     saleData: any, 
-    companyName: string
+    companyName: string,
+    clientTimeInfo?: ClientTimeInfo,
   ): Promise<boolean> {
-    const template = this.getSaleConfirmationTemplate(customerName, saleData, companyName);
+    const template = this.getSaleConfirmationTemplate(customerName, saleData, companyName, clientTimeInfo);
     
     return this.sendEmail({
       to: customerEmail,
@@ -103,9 +105,10 @@ export class EmailService {
     customerEmail: string, 
     customerName: string, 
     promotionData: any, 
-    companyName: string
+    companyName: string,
+    clientTimeInfo?: ClientTimeInfo,
   ): Promise<boolean> {
-    const template = this.getPromotionalTemplate(customerName, promotionData, companyName);
+    const template = this.getPromotionalTemplate(customerName, promotionData, companyName, clientTimeInfo);
     
     return this.sendEmail({
       to: customerEmail,
@@ -182,7 +185,12 @@ export class EmailService {
     return { subject, html, text };
   }
 
-  private getSaleConfirmationTemplate(customerName: string, saleData: any, companyName: string): EmailTemplate {
+  private getSaleConfirmationTemplate(
+    customerName: string,
+    saleData: any,
+    companyName: string,
+    clientTimeInfo?: ClientTimeInfo,
+  ): EmailTemplate {
     const subject = `Confirmação de Compra - ${companyName}`;
     
     const itemsHtml = saleData.items?.map((item: any) => `
@@ -223,8 +231,8 @@ export class EmailService {
             
             <div class="sale-info">
               <p><strong>Número da Venda:</strong> ${saleData.id}</p>
-              <p><strong>Data:</strong> ${new Date(saleData.saleDate).toLocaleString('pt-BR')}</p>
-              <p><strong>Forma de Pagamento:</strong> ${saleData.paymentMethod?.join(', ') || 'Não informado'}</p>
+              <p><strong>Data:</strong> ${formatClientDate(saleData.saleDate, clientTimeInfo)}</p>
+              <p><strong>Forma de Pagamento:</strong> ${this.stringifyPaymentMethods(saleData.paymentMethod)}</p>
               ${saleData.change > 0 ? `<p><strong>Troco:</strong> R$ ${saleData.change.toFixed(2).replace('.', ',')}</p>` : ''}
             </div>
 
@@ -271,8 +279,8 @@ export class EmailService {
       Sua compra foi realizada com sucesso! Aqui estão os detalhes:
       
       Número da Venda: ${saleData.id}
-      Data: ${new Date(saleData.saleDate).toLocaleString('pt-BR')}
-      Forma de Pagamento: ${saleData.paymentMethod?.join(', ') || 'Não informado'}
+      Data: ${formatClientDate(saleData.saleDate, clientTimeInfo)}
+      Forma de Pagamento: ${this.stringifyPaymentMethods(saleData.paymentMethod)}
       ${saleData.change > 0 ? `Troco: R$ ${saleData.change.toFixed(2).replace('.', ',')}` : ''}
       
       Itens Comprados:
@@ -291,7 +299,12 @@ export class EmailService {
     return { subject, html, text };
   }
 
-  private getPromotionalTemplate(customerName: string, promotionData: any, companyName: string): EmailTemplate {
+  private getPromotionalTemplate(
+    customerName: string,
+    promotionData: any,
+    companyName: string,
+    clientTimeInfo?: ClientTimeInfo,
+  ): EmailTemplate {
     const subject = promotionData.subject || `Oferta Especial - ${companyName}`;
     
     const html = `
@@ -322,7 +335,7 @@ export class EmailService {
               <h3>${promotionData.title || 'Oferta Especial'}</h3>
               <p>${promotionData.description || 'Não perca esta oportunidade!'}</p>
               ${promotionData.discount ? `<p><strong>Desconto:</strong> ${promotionData.discount}</p>` : ''}
-              ${promotionData.validUntil ? `<p><strong>Válido até:</strong> ${new Date(promotionData.validUntil).toLocaleDateString('pt-BR')}</p>` : ''}
+              ${promotionData.validUntil ? `<p><strong>Válido até:</strong> ${formatClientDateOnly(promotionData.validUntil, clientTimeInfo)}</p>` : ''}
             </div>
 
             <p>Aproveite esta oportunidade na <strong>${companyName}</strong>!</p>
@@ -347,7 +360,7 @@ export class EmailService {
       ${promotionData.title || 'Oferta Especial'}
       ${promotionData.description || 'Não perca esta oportunidade!'}
       ${promotionData.discount ? `Desconto: ${promotionData.discount}` : ''}
-      ${promotionData.validUntil ? `Válido até: ${new Date(promotionData.validUntil).toLocaleDateString('pt-BR')}` : ''}
+      ${promotionData.validUntil ? `Válido até: ${formatClientDateOnly(promotionData.validUntil, clientTimeInfo)}` : ''}
       
       Aproveite esta oportunidade na ${companyName}!
       Esperamos vê-lo em breve! 😊
@@ -358,5 +371,29 @@ export class EmailService {
     `;
 
     return { subject, html, text };
+  }
+
+  private stringifyPaymentMethods(methods: any): string {
+    if (!methods) {
+      return 'Não informado';
+    }
+
+    const normalized = Array.isArray(methods) ? methods : [methods];
+    const labels = normalized
+      .map((method) => {
+        if (typeof method === 'string') {
+          return method;
+        }
+        if (method?.method) {
+          return method.method;
+        }
+        if (method?.type) {
+          return method.type;
+        }
+        return '';
+      })
+      .filter((label) => !!label);
+
+    return labels.length > 0 ? labels.join(', ') : 'Não informado';
   }
 }

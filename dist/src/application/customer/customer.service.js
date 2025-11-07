@@ -258,7 +258,7 @@ let CustomerService = CustomerService_1 = class CustomerService {
         });
         return { data: installments };
     }
-    async sendPromotionalEmail(customerId, promotionData) {
+    async sendPromotionalEmail(customerId, promotionData, clientTimeInfo) {
         try {
             const customer = await this.prisma.customer.findUnique({
                 where: { id: customerId },
@@ -277,7 +277,7 @@ let CustomerService = CustomerService_1 = class CustomerService {
                 this.logger.warn(`Customer ${customerId} does not have email address`);
                 return false;
             }
-            const success = await this.emailService.sendPromotionalEmail(customer.email, customer.name, promotionData, customer.company.name);
+            const success = await this.emailService.sendPromotionalEmail(customer.email, customer.name, promotionData, customer.company.name, clientTimeInfo);
             if (success) {
                 this.logger.log(`Promotional email sent to customer: ${customer.email}`);
             }
@@ -288,7 +288,7 @@ let CustomerService = CustomerService_1 = class CustomerService {
             return false;
         }
     }
-    async sendSaleConfirmationEmail(customerId, saleId) {
+    async sendSaleConfirmationEmail(customerId, saleId, clientTimeInfo) {
         try {
             const customer = await this.prisma.customer.findUnique({
                 where: { id: customerId },
@@ -324,7 +324,7 @@ let CustomerService = CustomerService_1 = class CustomerService {
             if (!sale) {
                 throw new common_1.NotFoundException('Venda não encontrada');
             }
-            const success = await this.emailService.sendSaleConfirmationEmail(customer.email, customer.name, sale, customer.company.name);
+            const success = await this.emailService.sendSaleConfirmationEmail(customer.email, customer.name, sale, customer.company.name, clientTimeInfo);
             if (success) {
                 this.logger.log(`Sale confirmation email sent to customer: ${customer.email}`);
             }
@@ -335,7 +335,7 @@ let CustomerService = CustomerService_1 = class CustomerService {
             return false;
         }
     }
-    async sendBulkPromotionalEmail(companyId, promotionData) {
+    async sendBulkPromotionalEmail(companyId, promotionData, clientTimeInfo) {
         try {
             const customers = await this.prisma.customer.findMany({
                 where: {
@@ -359,7 +359,7 @@ let CustomerService = CustomerService_1 = class CustomerService {
             let failed = 0;
             for (const customer of customers) {
                 try {
-                    const success = await this.emailService.sendPromotionalEmail(customer.email, customer.name, promotionData, customer.company.name);
+                    const success = await this.emailService.sendPromotionalEmail(customer.email, customer.name, promotionData, customer.company.name, clientTimeInfo);
                     if (success) {
                         sent++;
                         this.logger.log(`Promotional email sent to customer: ${customer.email}`);

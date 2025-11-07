@@ -28,6 +28,7 @@ import { RolesGuard } from '../../shared/guards/roles.guard';
 import { Roles, UserRole } from '../../shared/decorators/roles.decorator';
 import { CurrentUser } from '../../shared/decorators/current-user.decorator';
 import { UuidValidationPipe } from '../../shared/pipes/uuid-validation.pipe';
+import { extractClientTimeInfo } from '../../shared/utils/client-time.util';
 
 @ApiTags('cash')
 @Controller('cash-closure')
@@ -44,9 +45,11 @@ export class CashClosureController {
   create(
     @CurrentUser() user: any,
     @Body() createCashClosureDto: CreateCashClosureDto,
+    @Req() req: Request,
   ) {
     const sellerId = user.role === UserRole.SELLER ? user.userId : undefined;
-    return this.cashClosureService.create(user.companyId, createCashClosureDto, sellerId);
+    const clientTimeInfo = extractClientTimeInfo(req);
+    return this.cashClosureService.create(user.companyId, createCashClosureDto, sellerId, clientTimeInfo);
   }
 
   @Get()
@@ -128,7 +131,8 @@ export class CashClosureController {
   ) {
     const sellerId = user.role === UserRole.SELLER ? user.userId : undefined;
     const computerId = (req.headers['x-computer-id'] as string) || null;
-    return this.cashClosureService.close(user.companyId, closeCashClosureDto, sellerId, computerId);
+    const clientTimeInfo = extractClientTimeInfo(req);
+    return this.cashClosureService.close(user.companyId, closeCashClosureDto, sellerId, computerId, clientTimeInfo);
   }
 
   @Post(':id/reprint')
@@ -144,10 +148,11 @@ export class CashClosureController {
   ) {
     const computerId = (req.headers['x-computer-id'] as string) || null;
     const includeSaleDetails = reprintDto?.includeSaleDetails ?? false;
+    const clientTimeInfo = extractClientTimeInfo(req);
     if (user.role === UserRole.ADMIN) {
-      return this.cashClosureService.reprintReport(id, undefined, computerId, includeSaleDetails);
+      return this.cashClosureService.reprintReport(id, undefined, computerId, includeSaleDetails, clientTimeInfo);
     }
-    return this.cashClosureService.reprintReport(id, user.companyId, computerId, includeSaleDetails);
+    return this.cashClosureService.reprintReport(id, user.companyId, computerId, includeSaleDetails, clientTimeInfo);
   }
 
   @Get(':id/print-content')
@@ -157,12 +162,14 @@ export class CashClosureController {
   getPrintContent(
     @Param('id', UuidValidationPipe) id: string,
     @CurrentUser() user: any,
+    @Req() req: Request,
     @Query('includeSaleDetails', new ParseBoolPipe({ optional: true })) includeSaleDetails?: boolean,
   ) {
     const includeDetails = includeSaleDetails ?? false;
+    const clientTimeInfo = extractClientTimeInfo(req);
     if (user.role === UserRole.ADMIN) {
-      return this.cashClosureService.getReportContent(id, undefined, includeDetails);
+      return this.cashClosureService.getReportContent(id, undefined, includeDetails, clientTimeInfo);
     }
-    return this.cashClosureService.getReportContent(id, user.companyId, includeDetails);
+    return this.cashClosureService.getReportContent(id, user.companyId, includeDetails, clientTimeInfo);
   }
 }

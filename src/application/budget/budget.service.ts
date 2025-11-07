@@ -5,6 +5,7 @@ import { UpdateBudgetDto, BudgetStatus } from './dto/update-budget.dto';
 import { PrinterService } from '../printer/printer.service';
 import { SaleService } from '../sale/sale.service';
 import { PaymentMethod } from '../sale/dto/payment-method.dto';
+import { ClientTimeInfo, formatClientDate, formatClientDateOnly, getClientNow } from '../../shared/utils/client-time.util';
 import * as PDFDocument from 'pdfkit';
 import axios from 'axios';
 import * as fs from 'fs';
@@ -12,6 +13,7 @@ import * as path from 'path';
 
 export interface BudgetPrintData {
   company: {
+    id: string;
     name: string;
     cnpj: string;
     address?: string;
@@ -43,6 +45,9 @@ export interface BudgetPrintData {
   }>;
   seller?: {
     name: string;
+  };
+  metadata?: {
+    clientTimeInfo?: ClientTimeInfo;
   };
 }
 
@@ -384,11 +389,17 @@ export class BudgetService {
     return { message: 'Orçamento excluído com sucesso' };
   }
 
-  async printBudget(id: string, companyId?: string, computerId?: string | null) {
+  async printBudget(
+    id: string,
+    companyId?: string,
+    computerId?: string | null,
+    clientTimeInfo?: ClientTimeInfo,
+  ) {
     const budget = await this.findOne(id, companyId);
 
     const printData: BudgetPrintData = {
       company: {
+        id: budget.companyId,
         name: budget.company.name,
         cnpj: budget.company.cnpj,
         address: `${budget.company.street || ''}, ${budget.company.number || ''} - ${budget.company.district || ''}`,
@@ -421,16 +432,19 @@ export class BudgetService {
       seller: budget.seller ? {
         name: budget.seller.name,
       } : undefined,
+      metadata: {
+        clientTimeInfo,
+      },
     };
 
-    await this.printerService.printBudget(printData, computerId);
+    await this.printerService.printBudget(printData, computerId, clientTimeInfo);
 
     this.logger.log(`Budget ${id} printed successfully`);
 
     return { message: 'Orçamento enviado para impressão' };
   }
 
-  async generatePdf(id: string, companyId?: string): Promise<Buffer> {
+  async generatePdf(id: string, companyId?: string, clientTimeInfo?: ClientTimeInfo): Promise<Buffer> {
     const budget = await this.findOne(id, companyId);
 
     return new Promise(async (resolve, reject) => {
@@ -452,7 +466,7 @@ export class BudgetService {
         doc.on('error', reject);
 
         // Generate the PDF content
-        await this.generatePdfContent(doc, budget);
+        await this.generatePdfContent(doc, budget, clientTimeInfo);
 
         doc.end();
       } catch (error) {
@@ -462,11 +476,11 @@ export class BudgetService {
     });
   }
 
-  private async generatePdfContent(doc: PDFKit.PDFDocument, budget: any): Promise<void> {
+  private async generatePdfContent(doc: PDFKit.PDFDocument, budget: any, clientTimeInfo?: ClientTimeInfo): Promise<void> {
     const company = budget.company;
     const items = budget.items;
-    const date = new Date(budget.budgetDate).toLocaleDateString('pt-BR');
-    const validUntil = new Date(budget.validUntil).toLocaleDateString('pt-BR');
+    const date = formatClientDateOnly(budget.budgetDate, clientTimeInfo);
+    const validUntil = formatClientDateOnly(budget.validUntil, clientTimeInfo);
     
     let yPosition = doc.y;
 
@@ -624,7 +638,7 @@ export class BudgetService {
       .font('Helvetica-Bold')
       .text(`Data:`, 260, yPosition, { width: 80, continued: true })
       .font('Helvetica')
-      .text(date, { width: 150 });
+      .text(date || '-', { width: 150 });
 
     yPosition += 15;
 
@@ -632,7 +646,7 @@ export class BudgetService {
       .font('Helvetica-Bold')
       .text(`Válido até:`, 60, yPosition, { width: 100, continued: true })
       .font('Helvetica')
-      .text(validUntil, { width: 150 });
+      .text(validUntil || '-', { width: 150 });
 
     doc
       .font('Helvetica-Bold')
@@ -870,7 +884,7 @@ export class BudgetService {
       .font('Helvetica')
       .fillColor('#7F8C8D')
       .text(
-        `Documento gerado em ${new Date().toLocaleString('pt-BR')}`,
+        `Documento gerado em ${formatClientDate(getClientNow(clientTimeInfo), clientTimeInfo)}`,
         50,
         yPosition,
         { align: 'center', width: 495 }

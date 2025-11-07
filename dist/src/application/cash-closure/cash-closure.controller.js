@@ -24,13 +24,15 @@ const roles_guard_1 = require("../../shared/guards/roles.guard");
 const roles_decorator_1 = require("../../shared/decorators/roles.decorator");
 const current_user_decorator_1 = require("../../shared/decorators/current-user.decorator");
 const uuid_validation_pipe_1 = require("../../shared/pipes/uuid-validation.pipe");
+const client_time_util_1 = require("../../shared/utils/client-time.util");
 let CashClosureController = class CashClosureController {
     constructor(cashClosureService) {
         this.cashClosureService = cashClosureService;
     }
-    create(user, createCashClosureDto) {
+    create(user, createCashClosureDto, req) {
         const sellerId = user.role === roles_decorator_1.UserRole.SELLER ? user.userId : undefined;
-        return this.cashClosureService.create(user.companyId, createCashClosureDto, sellerId);
+        const clientTimeInfo = (0, client_time_util_1.extractClientTimeInfo)(req);
+        return this.cashClosureService.create(user.companyId, createCashClosureDto, sellerId, clientTimeInfo);
     }
     findAll(user, page = 1, limit = 10, isClosed) {
         if (user.role === roles_decorator_1.UserRole.ADMIN) {
@@ -58,22 +60,25 @@ let CashClosureController = class CashClosureController {
     close(user, closeCashClosureDto, req) {
         const sellerId = user.role === roles_decorator_1.UserRole.SELLER ? user.userId : undefined;
         const computerId = req.headers['x-computer-id'] || null;
-        return this.cashClosureService.close(user.companyId, closeCashClosureDto, sellerId, computerId);
+        const clientTimeInfo = (0, client_time_util_1.extractClientTimeInfo)(req);
+        return this.cashClosureService.close(user.companyId, closeCashClosureDto, sellerId, computerId, clientTimeInfo);
     }
     reprintReport(id, user, req, reprintDto) {
         const computerId = req.headers['x-computer-id'] || null;
         const includeSaleDetails = reprintDto?.includeSaleDetails ?? false;
+        const clientTimeInfo = (0, client_time_util_1.extractClientTimeInfo)(req);
         if (user.role === roles_decorator_1.UserRole.ADMIN) {
-            return this.cashClosureService.reprintReport(id, undefined, computerId, includeSaleDetails);
+            return this.cashClosureService.reprintReport(id, undefined, computerId, includeSaleDetails, clientTimeInfo);
         }
-        return this.cashClosureService.reprintReport(id, user.companyId, computerId, includeSaleDetails);
+        return this.cashClosureService.reprintReport(id, user.companyId, computerId, includeSaleDetails, clientTimeInfo);
     }
-    getPrintContent(id, user, includeSaleDetails) {
+    getPrintContent(id, user, req, includeSaleDetails) {
         const includeDetails = includeSaleDetails ?? false;
+        const clientTimeInfo = (0, client_time_util_1.extractClientTimeInfo)(req);
         if (user.role === roles_decorator_1.UserRole.ADMIN) {
-            return this.cashClosureService.getReportContent(id, undefined, includeDetails);
+            return this.cashClosureService.getReportContent(id, undefined, includeDetails, clientTimeInfo);
         }
-        return this.cashClosureService.getReportContent(id, user.companyId, includeDetails);
+        return this.cashClosureService.getReportContent(id, user.companyId, includeDetails, clientTimeInfo);
     }
 };
 exports.CashClosureController = CashClosureController;
@@ -85,8 +90,9 @@ __decorate([
     (0, swagger_1.ApiResponse)({ status: 400, description: 'Já existe um fechamento de caixa aberto' }),
     __param(0, (0, current_user_decorator_1.CurrentUser)()),
     __param(1, (0, common_1.Body)()),
+    __param(2, (0, common_1.Req)()),
     __metadata("design:type", Function),
-    __metadata("design:paramtypes", [Object, create_cash_closure_dto_1.CreateCashClosureDto]),
+    __metadata("design:paramtypes", [Object, create_cash_closure_dto_1.CreateCashClosureDto, Object]),
     __metadata("design:returntype", void 0)
 ], CashClosureController.prototype, "create", null);
 __decorate([
@@ -186,9 +192,10 @@ __decorate([
     (0, swagger_1.ApiResponse)({ status: 200, description: 'Conteúdo pronto para impressão' }),
     __param(0, (0, common_1.Param)('id', uuid_validation_pipe_1.UuidValidationPipe)),
     __param(1, (0, current_user_decorator_1.CurrentUser)()),
-    __param(2, (0, common_1.Query)('includeSaleDetails', new common_1.ParseBoolPipe({ optional: true }))),
+    __param(2, (0, common_1.Req)()),
+    __param(3, (0, common_1.Query)('includeSaleDetails', new common_1.ParseBoolPipe({ optional: true }))),
     __metadata("design:type", Function),
-    __metadata("design:paramtypes", [String, Object, Boolean]),
+    __metadata("design:paramtypes", [String, Object, Object, Boolean]),
     __metadata("design:returntype", void 0)
 ], CashClosureController.prototype, "getPrintContent", null);
 exports.CashClosureController = CashClosureController = __decorate([

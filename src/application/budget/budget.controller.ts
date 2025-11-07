@@ -21,6 +21,7 @@ import { JwtAuthGuard } from '../../shared/guards/jwt-auth.guard';
 import { RolesGuard } from '../../shared/guards/roles.guard';
 import { Roles, UserRole } from '../../shared/decorators/roles.decorator';
 import { CurrentUser } from '../../shared/decorators/current-user.decorator';
+import { extractClientTimeInfo } from '../../shared/utils/client-time.util';
 
 @ApiTags('budgets')
 @Controller('budget')
@@ -145,7 +146,8 @@ export class BudgetController {
     const companyId = user.role === UserRole.COMPANY ? user.id : user.companyId;
     // Obter computerId do header (enviado pelo cliente desktop/web)
     const computerId = (req.headers['x-computer-id'] as string) || null;
-    return this.budgetService.printBudget(id, companyId, computerId);
+    const clientTimeInfo = extractClientTimeInfo(req);
+    return this.budgetService.printBudget(id, companyId, computerId, clientTimeInfo);
   }
 
   @Get(':id/pdf')
@@ -162,11 +164,13 @@ export class BudgetController {
   async generatePdf(
     @CurrentUser() user: any,
     @Param('id') id: string,
+    @Req() req: Request,
     @Res() res: Response,
   ) {
     const companyId = user.role === UserRole.COMPANY ? user.id : user.companyId;
     const budget = await this.budgetService.findOne(id, companyId);
-    const pdfBuffer = await this.budgetService.generatePdf(id, companyId);
+    const clientTimeInfo = extractClientTimeInfo(req);
+    const pdfBuffer = await this.budgetService.generatePdf(id, companyId, clientTimeInfo);
 
     res.setHeader('Content-Type', 'application/pdf');
     res.setHeader(

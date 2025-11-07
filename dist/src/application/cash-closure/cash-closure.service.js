@@ -14,6 +14,7 @@ exports.CashClosureService = void 0;
 const common_1 = require("@nestjs/common");
 const prisma_service_1 = require("../../infrastructure/database/prisma.service");
 const printer_service_1 = require("../printer/printer.service");
+const client_time_util_1 = require("../../shared/utils/client-time.util");
 const CASH_CLOSURE_REPORT_INCLUDE = {
     company: {
         select: {
@@ -60,18 +61,20 @@ let CashClosureService = CashClosureService_1 = class CashClosureService {
         this.printerService = printerService;
         this.logger = new common_1.Logger(CashClosureService_1.name);
     }
-    parseClientDate(value) {
-        if (!value) {
-            return undefined;
-        }
-        const parsed = new Date(value);
-        if (Number.isNaN(parsed.getTime())) {
+    parseClientDate(value, clientTimeInfo) {
+        if (value) {
+            const parsed = new Date(value);
+            if (!Number.isNaN(parsed.getTime())) {
+                return parsed;
+            }
             this.logger.warn(`Data inválida recebida do cliente: ${value}`);
-            return undefined;
         }
-        return parsed;
+        if (clientTimeInfo?.currentDate && !Number.isNaN(clientTimeInfo.currentDate.getTime())) {
+            return clientTimeInfo.currentDate;
+        }
+        return undefined;
     }
-    async create(companyId, createCashClosureDto, sellerId) {
+    async create(companyId, createCashClosureDto, sellerId, clientTimeInfo) {
         try {
             let targetSellerId = null;
             if (sellerId) {
@@ -96,12 +99,12 @@ let CashClosureService = CashClosureService_1 = class CashClosureService {
                     : 'Já existe um fechamento de caixa compartilhado aberto';
                 throw new common_1.BadRequestException(msg);
             }
-            const openingDate = this.parseClientDate(createCashClosureDto.openingDate);
+            const openingDate = this.parseClientDate(createCashClosureDto.openingDate, clientTimeInfo) ?? (0, client_time_util_1.getClientNow)(clientTimeInfo);
             const openingAmount = Number(createCashClosureDto.openingAmount ?? 0);
             const cashClosure = await this.prisma.cashClosure.create({
                 data: {
                     openingAmount,
-                    ...(openingDate ? { openingDate } : {}),
+                    openingDate,
                     companyId,
                     sellerId: targetSellerId,
                 },
@@ -269,7 +272,7 @@ let CashClosureService = CashClosureService_1 = class CashClosureService {
         }
         return closure;
     }
-    async close(companyId, closeCashClosureDto, sellerId, computerId) {
+    async close(companyId, closeCashClosureDto, sellerId, computerId, clientTimeInfo) {
         try {
             let targetSellerId = null;
             if (sellerId) {
@@ -298,7 +301,7 @@ let CashClosureService = CashClosureService_1 = class CashClosureService {
             const totalWithdrawals = Number(closeCashClosureDto.withdrawals ?? 0);
             const closingAmount = Number(closeCashClosureDto.closingAmount ?? 0);
             const shouldPrint = closeCashClosureDto.printReport ?? false;
-            const closingDate = this.parseClientDate(closeCashClosureDto.closingDate) ?? new Date();
+            const closingDate = this.parseClientDate(closeCashClosureDto.closingDate, clientTimeInfo) ?? (0, client_time_util_1.getClientNow)(clientTimeInfo);
             const includeSaleDetails = closeCashClosureDto.includeSaleDetails ?? false;
             const updatedClosure = await this.prisma.cashClosure.update({
                 where: { id: existingClosure.id },
@@ -311,12 +314,15 @@ let CashClosureService = CashClosureService_1 = class CashClosureService {
                 },
                 include: CASH_CLOSURE_REPORT_INCLUDE,
             });
-            const reportData = await this.buildCashClosureReportData(updatedClosure, { includeSaleDetails });
-            const reportContent = this.printerService.generateCashClosureReportContent(reportData);
+            const reportData = await this.buildCashClosureReportData(updatedClosure, {
+                includeSaleDetails,
+                clientTimeInfo,
+            });
+            const reportContent = this.printerService.generateCashClosureReportContent(reportData, clientTimeInfo);
             let printResult = null;
             if (shouldPrint) {
                 try {
-                    printResult = await this.printerService.printCashClosureReport(reportData, companyId, computerId, reportContent);
+                    printResult = await this.printerService.printCashClosureReport(reportData, companyId, computerId, reportContent, clientTimeInfo);
                     if (!printResult.success) {
                         this.logger.warn(`Falha ao imprimir relatório de fechamento ${updatedClosure.id}: ${printResult.error}`);
                     }
@@ -471,15 +477,15 @@ let CashClosureService = CashClosureService_1 = class CashClosureService {
             totalPages: Math.ceil(total / limit),
         };
     }
-    async reprintReport(id, companyId, computerId, includeSaleDetails = false) {
+    async reprintReport(id, companyId, computerId, includeSaleDetails = false, clientTimeInfo) {
         try {
             const closure = await this.loadClosureWithDetails(id, companyId);
             if (!closure.isClosed) {
                 throw new common_1.BadRequestException('Não é possível imprimir relatório de fechamento em aberto');
             }
-            const reportData = await this.buildCashClosureReportData(closure, { includeSaleDetails });
-            const reportContent = this.printerService.generateCashClosureReportContent(reportData);
-            const printResult = await this.printerService.printCashClosureReport(reportData, closure.companyId, computerId, reportContent);
+            const reportData = await this.buildCashClosureReportData(closure, { includeSaleDetails, clientTimeInfo });
+            const reportContent = this.printerService.generateCashClosureReportContent(reportData, clientTimeInfo);
+            const printResult = await this.printerService.printCashClosureReport(reportData, closure.companyId, computerId, reportContent, clientTimeInfo);
             if (!printResult.success) {
                 this.logger.warn(`Falha ao reimprimir relatório do fechamento ${closure.id}: ${printResult.error}`);
             }
@@ -501,13 +507,13 @@ let CashClosureService = CashClosureService_1 = class CashClosureService {
             throw new common_1.BadRequestException('Erro ao reimprimir relatório');
         }
     }
-    async getReportContent(id, companyId, includeSaleDetails = false) {
+    async getReportContent(id, companyId, includeSaleDetails = false, clientTimeInfo) {
         const closure = await this.loadClosureWithDetails(id, companyId);
         if (!closure.isClosed) {
             throw new common_1.BadRequestException('O relatório completo só fica disponível após o fechamento do caixa');
         }
-        const reportData = await this.buildCashClosureReportData(closure, { includeSaleDetails });
-        const reportContent = this.printerService.generateCashClosureReportContent(reportData);
+        const reportData = await this.buildCashClosureReportData(closure, { includeSaleDetails, clientTimeInfo });
+        const reportContent = this.printerService.generateCashClosureReportContent(reportData, clientTimeInfo);
         const summary = this.buildClosureSummary(closure, reportData);
         return {
             closureId: closure.id,
@@ -583,6 +589,7 @@ let CashClosureService = CashClosureService_1 = class CashClosureService {
     }
     async buildCashClosureReportData(closure, options = {}) {
         const includeSaleDetails = options.includeSaleDetails ?? true;
+        const clientTimeInfo = options.clientTimeInfo;
         const sales = await this.fetchSalesForClosure(closure);
         const totalChange = sales.reduce((sum, sale) => sum + Number(sale.change || 0), 0);
         const paymentSummaryMap = new Map();
@@ -643,7 +650,7 @@ let CashClosureService = CashClosureService_1 = class CashClosureService {
             closure: {
                 id: closure.id,
                 openingDate: closure.openingDate,
-                closingDate: closure.closingDate ?? new Date(),
+                closingDate: closure.closingDate ?? (0, client_time_util_1.getClientNow)(clientTimeInfo),
                 openingAmount,
                 closingAmount,
                 totalSales,
@@ -658,6 +665,7 @@ let CashClosureService = CashClosureService_1 = class CashClosureService {
             paymentSummary,
             sellers,
             includeSaleDetails,
+            metadata: clientTimeInfo ? { clientTimeInfo } : undefined,
         };
     }
     buildClosureSummary(closure, reportData) {

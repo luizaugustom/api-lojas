@@ -20,6 +20,7 @@ const update_budget_dto_1 = require("./dto/update-budget.dto");
 const printer_service_1 = require("../printer/printer.service");
 const sale_service_1 = require("../sale/sale.service");
 const payment_method_dto_1 = require("../sale/dto/payment-method.dto");
+const client_time_util_1 = require("../../shared/utils/client-time.util");
 const PDFDocument = require("pdfkit");
 const axios_1 = require("axios");
 const fs = require("fs");
@@ -307,10 +308,11 @@ let BudgetService = BudgetService_1 = class BudgetService {
         this.logger.log(`Budget ${id} deleted successfully`);
         return { message: 'Orçamento excluído com sucesso' };
     }
-    async printBudget(id, companyId, computerId) {
+    async printBudget(id, companyId, computerId, clientTimeInfo) {
         const budget = await this.findOne(id, companyId);
         const printData = {
             company: {
+                id: budget.companyId,
                 name: budget.company.name,
                 cnpj: budget.company.cnpj,
                 address: `${budget.company.street || ''}, ${budget.company.number || ''} - ${budget.company.district || ''}`,
@@ -343,12 +345,15 @@ let BudgetService = BudgetService_1 = class BudgetService {
             seller: budget.seller ? {
                 name: budget.seller.name,
             } : undefined,
+            metadata: {
+                clientTimeInfo,
+            },
         };
-        await this.printerService.printBudget(printData, computerId);
+        await this.printerService.printBudget(printData, computerId, clientTimeInfo);
         this.logger.log(`Budget ${id} printed successfully`);
         return { message: 'Orçamento enviado para impressão' };
     }
-    async generatePdf(id, companyId) {
+    async generatePdf(id, companyId, clientTimeInfo) {
         const budget = await this.findOne(id, companyId);
         return new Promise(async (resolve, reject) => {
             try {
@@ -365,7 +370,7 @@ let BudgetService = BudgetService_1 = class BudgetService {
                     resolve(pdfBuffer);
                 });
                 doc.on('error', reject);
-                await this.generatePdfContent(doc, budget);
+                await this.generatePdfContent(doc, budget, clientTimeInfo);
                 doc.end();
             }
             catch (error) {
@@ -374,11 +379,11 @@ let BudgetService = BudgetService_1 = class BudgetService {
             }
         });
     }
-    async generatePdfContent(doc, budget) {
+    async generatePdfContent(doc, budget, clientTimeInfo) {
         const company = budget.company;
         const items = budget.items;
-        const date = new Date(budget.budgetDate).toLocaleDateString('pt-BR');
-        const validUntil = new Date(budget.validUntil).toLocaleDateString('pt-BR');
+        const date = (0, client_time_util_1.formatClientDateOnly)(budget.budgetDate, clientTimeInfo);
+        const validUntil = (0, client_time_util_1.formatClientDateOnly)(budget.validUntil, clientTimeInfo);
         let yPosition = doc.y;
         let hasLogo = false;
         if (company.logoUrl) {
@@ -492,13 +497,13 @@ let BudgetService = BudgetService_1 = class BudgetService {
             .font('Helvetica-Bold')
             .text(`Data:`, 260, yPosition, { width: 80, continued: true })
             .font('Helvetica')
-            .text(date, { width: 150 });
+            .text(date || '-', { width: 150 });
         yPosition += 15;
         doc
             .font('Helvetica-Bold')
             .text(`Válido até:`, 60, yPosition, { width: 100, continued: true })
             .font('Helvetica')
-            .text(validUntil, { width: 150 });
+            .text(validUntil || '-', { width: 150 });
         doc
             .font('Helvetica-Bold')
             .text(`Status:`, 260, yPosition, { width: 80, continued: true })
@@ -664,7 +669,7 @@ let BudgetService = BudgetService_1 = class BudgetService {
             .fontSize(8)
             .font('Helvetica')
             .fillColor('#7F8C8D')
-            .text(`Documento gerado em ${new Date().toLocaleString('pt-BR')}`, 50, yPosition, { align: 'center', width: 495 });
+            .text(`Documento gerado em ${(0, client_time_util_1.formatClientDate)((0, client_time_util_1.getClientNow)(clientTimeInfo), clientTimeInfo)}`, 50, yPosition, { align: 'center', width: 495 });
         if (budget.seller) {
             yPosition = doc.y + 5;
             doc.text(`Vendedor(a): ${budget.seller.name}`, 50, yPosition, { align: 'center', width: 495 });

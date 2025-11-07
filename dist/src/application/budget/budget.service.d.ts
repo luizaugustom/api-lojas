@@ -3,8 +3,10 @@ import { CreateBudgetDto } from './dto/create-budget.dto';
 import { UpdateBudgetDto } from './dto/update-budget.dto';
 import { PrinterService } from '../printer/printer.service';
 import { SaleService } from '../sale/sale.service';
+import { ClientTimeInfo } from '../../shared/utils/client-time.util';
 export interface BudgetPrintData {
     company: {
+        id: string;
         name: string;
         cnpj: string;
         address?: string;
@@ -36,6 +38,9 @@ export interface BudgetPrintData {
     }>;
     seller?: {
         name: string;
+    };
+    metadata?: {
+        clientTimeInfo?: ClientTimeInfo;
     };
 }
 export declare class BudgetService {
@@ -245,10 +250,10 @@ export declare class BudgetService {
     remove(id: string, companyId: string): Promise<{
         message: string;
     }>;
-    printBudget(id: string, companyId?: string, computerId?: string | null): Promise<{
+    printBudget(id: string, companyId?: string, computerId?: string | null, clientTimeInfo?: ClientTimeInfo): Promise<{
         message: string;
     }>;
-    generatePdf(id: string, companyId?: string): Promise<Buffer>;
+    generatePdf(id: string, companyId?: string, clientTimeInfo?: ClientTimeInfo): Promise<Buffer>;
     private generatePdfContent;
     private translateStatus;
     convertToSale(id: string, companyId: string, sellerId: string): Promise<{

@@ -209,7 +209,7 @@ export declare class BudgetController {
     print(user: any, id: string, req: Request): Promise<{
         message: string;
     }>;
-    generatePdf(user: any, id: string, res: Response): Promise<Response<any, Record<string, any>>>;
+    generatePdf(user: any, id: string, req: Request, res: Response): Promise<Response<any, Record<string, any>>>;
     convertToSale(user: any, id: string): Promise<{
         message: string;
         budgetData: {

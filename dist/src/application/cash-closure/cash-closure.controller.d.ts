@@ -6,7 +6,7 @@ import { ReprintCashClosureDto } from './dto/reprint-cash-closure.dto';
 export declare class CashClosureController {
     private readonly cashClosureService;
     constructor(cashClosureService: CashClosureService);
-    create(user: any, createCashClosureDto: CreateCashClosureDto): Promise<{
+    create(user: any, createCashClosureDto: CreateCashClosureDto, req: Request): Promise<{
         company: {
             id: string;
             name: string;
@@ -295,7 +295,7 @@ export declare class CashClosureController {
         includeSaleDetails: boolean;
         closureId: string;
     }>;
-    getPrintContent(id: string, user: any, includeSaleDetails?: boolean): Promise<{
+    getPrintContent(id: string, user: any, req: Request, includeSaleDetails?: boolean): Promise<{
         closure: {
             id: string;
             openingDate: Date;

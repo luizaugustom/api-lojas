@@ -20,6 +20,7 @@ import { InstallmentService } from './installment.service';
 import { CreateInstallmentDto } from './dto/create-installment.dto';
 import { UpdateInstallmentDto } from './dto/update-installment.dto';
 import { PayInstallmentDto } from './dto/pay-installment.dto';
+import { BulkPayInstallmentsDto } from './dto/bulk-pay-installments.dto';
 import { JwtAuthGuard } from '../../shared/guards/jwt-auth.guard';
 import { RolesGuard } from '../../shared/guards/roles.guard';
 import { Roles, UserRole } from '../../shared/decorators/roles.decorator';
@@ -142,6 +143,22 @@ export class InstallmentController {
     @CurrentUser() user: any,
   ) {
     return this.installmentService.payInstallment(id, payInstallmentDto, user.companyId);
+  }
+
+  @Post('customer/:customerId/pay/bulk')
+  @Roles(UserRole.COMPANY, UserRole.SELLER)
+  @ApiOperation({ summary: 'Pagar múltiplas parcelas de um cliente' })
+  @ApiResponse({ status: 200, description: 'Pagamentos registrados com sucesso' })
+  bulkPay(
+    @Param('customerId', UuidValidationPipe) customerId: string,
+    @Body() bulkPayInstallmentsDto: BulkPayInstallmentsDto,
+    @CurrentUser() user: any,
+  ) {
+    return this.installmentService.payCustomerInstallments(
+      customerId,
+      bulkPayInstallmentsDto,
+      user.companyId,
+    );
   }
 
   @Delete(':id')

@@ -2,6 +2,7 @@ import { PrismaService } from '../../infrastructure/database/prisma.service';
 import { CreateInstallmentDto } from './dto/create-installment.dto';
 import { UpdateInstallmentDto } from './dto/update-installment.dto';
 import { PayInstallmentDto } from './dto/pay-installment.dto';
+import { BulkPayInstallmentsDto } from './dto/bulk-pay-installments.dto';
 export declare class InstallmentService {
     private readonly prisma;
     private readonly logger;
@@ -254,6 +255,19 @@ export declare class InstallmentService {
             installmentId: string;
         };
         message: string;
+    }>;
+    payCustomerInstallments(customerId: string, bulkPayInstallmentsDto: BulkPayInstallmentsDto, companyId?: string): Promise<{
+        message: string;
+        customerId: string;
+        totalPaid: number;
+        payments: {
+            installmentId: string;
+            amountPaid: number;
+            remainingAmount: number;
+            isPaid: boolean;
+            dueDate: Date | null;
+            message: string;
+        }[];
     }>;
     getCustomerDebtSummary(customerId: string, companyId?: string): Promise<{
         totalDebt: number;

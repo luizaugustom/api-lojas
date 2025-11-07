@@ -7,6 +7,7 @@ import { IBPTService } from '../../shared/services/ibpt.service';
 import { CreateSaleDto } from './dto/create-sale.dto';
 import { UpdateSaleDto } from './dto/update-sale.dto';
 import { ProcessExchangeDto } from './dto/process-exchange.dto';
+import { ClientTimeInfo } from '../../shared/utils/client-time.util';
 export declare class SaleService {
     private readonly prisma;
     private readonly productService;
@@ -16,7 +17,7 @@ export declare class SaleService {
     private readonly ibptService;
     private readonly logger;
     constructor(prisma: PrismaService, productService: ProductService, printerService: PrinterService, fiscalService: FiscalService, emailService: EmailService, ibptService: IBPTService);
-    create(companyId: string, sellerId: string, createSaleDto: CreateSaleDto, computerId?: string | null): Promise<{
+    create(companyId: string, sellerId: string, createSaleDto: CreateSaleDto, computerId?: string | null, clientTimeInfo?: ClientTimeInfo): Promise<{
         company: {
             number: string;
             id: string;
@@ -240,7 +241,7 @@ export declare class SaleService {
         averageTicket: number | import("@prisma/client/runtime/library").Decimal;
         salesByPaymentMethod: {};
     }>;
-    reprintReceipt(id: string, companyId?: string, computerId?: string | null): Promise<{
+    reprintReceipt(id: string, companyId?: string, computerId?: string | null, clientTimeInfo?: ClientTimeInfo): Promise<{
         message: string;
         warning: string;
         printContent: string;
@@ -251,7 +252,7 @@ export declare class SaleService {
         printType: string;
         warning?: undefined;
     }>;
-    getPrintContent(id: string, companyId?: string): Promise<{
+    getPrintContent(id: string, companyId?: string, clientTimeInfo?: ClientTimeInfo): Promise<{
         content: string;
         isMock: boolean;
     }>;

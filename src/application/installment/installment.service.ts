@@ -3,6 +3,7 @@ import { PrismaService } from '../../infrastructure/database/prisma.service';
 import { CreateInstallmentDto } from './dto/create-installment.dto';
 import { UpdateInstallmentDto } from './dto/update-installment.dto';
 import { PayInstallmentDto } from './dto/pay-installment.dto';
+import { BulkPayInstallmentsDto } from './dto/bulk-pay-installments.dto';
 
 @Injectable()
 export class InstallmentService {
@@ -328,13 +329,23 @@ export class InstallmentService {
       // Atualizar o valor restante da parcela
       const newRemainingAmount = installment.remainingAmount.toNumber() - payInstallmentDto.amount;
       const isPaid = newRemainingAmount <= 0.01; // Considera pago se restar menos de 1 centavo
+      const normalizedRemainingAmount = Math.max(0, Math.round(newRemainingAmount * 100) / 100);
+
+      let nextDueDate: Date | undefined;
+      if (!isPaid) {
+        const now = new Date();
+        const referenceDate = installment.dueDate > now ? installment.dueDate : now;
+        nextDueDate = new Date(referenceDate);
+        nextDueDate.setMonth(nextDueDate.getMonth() + 1);
+      }
 
       const updatedInstallment = await this.prisma.installment.update({
         where: { id },
         data: {
-          remainingAmount: Math.max(0, newRemainingAmount),
+          remainingAmount: normalizedRemainingAmount,
           isPaid,
           paidAt: isPaid ? new Date() : undefined,
+          ...(nextDueDate ? { dueDate: nextDueDate } : {}),
         },
         include: {
           sale: {
@@ -366,10 +377,162 @@ export class InstallmentService {
         payment,
         message: isPaid 
           ? 'Parcela paga completamente!' 
-          : `Pagamento de ${payInstallmentDto.amount} registrado. Restam ${newRemainingAmount.toFixed(2)} a pagar.`,
+          : `Pagamento de ${payInstallmentDto.amount.toFixed(2)} registrado. Restam ${normalizedRemainingAmount.toFixed(2)} a pagar. Novo vencimento em ${updatedInstallment.dueDate.toISOString().split('T')[0]}.`,
       };
     } catch (error) {
       this.logger.error('Error paying installment:', error);
+      throw error;
+    }
+  }
+
+  async payCustomerInstallments(
+    customerId: string,
+    bulkPayInstallmentsDto: BulkPayInstallmentsDto,
+    companyId?: string,
+  ) {
+    try {
+      const { payAll, installments, paymentMethod, notes } = bulkPayInstallmentsDto;
+
+      if (!payAll && (!installments || installments.length === 0)) {
+        throw new BadRequestException('Selecione ao menos uma parcela para pagamento.');
+      }
+
+      if (!paymentMethod) {
+        throw new BadRequestException('Método de pagamento é obrigatório.');
+      }
+
+      const baseWhere: any = {
+        customerId,
+        isPaid: false,
+      };
+
+      if (companyId) {
+        baseWhere.companyId = companyId;
+      }
+
+      let targetInstallments = [];
+
+      if (payAll) {
+        targetInstallments = await this.prisma.installment.findMany({
+          where: baseWhere,
+        });
+      } else {
+        const installmentIds = installments!.map((item) => item.installmentId);
+        targetInstallments = await this.prisma.installment.findMany({
+          where: {
+            ...baseWhere,
+            id: {
+              in: installmentIds,
+            },
+          },
+        });
+
+        if (targetInstallments.length === 0) {
+          throw new NotFoundException('Nenhuma parcela encontrada para pagamento.');
+        }
+
+        if (targetInstallments.length !== installmentIds.length) {
+          const foundIds = new Set(targetInstallments.map((inst) => inst.id));
+          const missing = installmentIds.filter((id) => !foundIds.has(id));
+          throw new NotFoundException(
+            `Parcela(s) não encontrada(s) ou já quitada(s): ${missing.join(', ')}`,
+          );
+        }
+      }
+
+      if (targetInstallments.length === 0) {
+        throw new BadRequestException('Não há parcelas pendentes para este cliente.');
+      }
+
+      const toNumber = (value: any): number => {
+        if (value === null || value === undefined) {
+          return 0;
+        }
+        if (typeof value === 'number') {
+          return value;
+        }
+        if (typeof value === 'string') {
+          return Number(value);
+        }
+        if (typeof value === 'object' && typeof value.toNumber === 'function') {
+          return value.toNumber();
+        }
+        return Number(value);
+      };
+
+      const detailMap = new Map<string, { amount?: number }>();
+      installments?.forEach((item) => {
+        detailMap.set(item.installmentId, {
+          amount: item.amount,
+        });
+      });
+
+      const responses: Array<{
+        installmentId: string;
+        amountPaid: number;
+        remainingAmount: number;
+        isPaid: boolean;
+        dueDate: Date | null;
+        message: string;
+      }> = [];
+      let totalPaid = 0;
+
+      for (const installment of targetInstallments) {
+        const remaining = toNumber(installment.remainingAmount);
+        if (remaining <= 0) {
+          continue;
+        }
+
+        const detail = detailMap.get(installment.id);
+        const rawAmount = detail?.amount ?? remaining;
+        const amountToPay = Math.round(rawAmount * 100) / 100;
+
+        if (amountToPay <= 0) {
+          throw new BadRequestException(
+            `Valor inválido para pagamento da parcela ${installment.installmentNumber}.`,
+          );
+        }
+
+        if (amountToPay > remaining + 0.0001) {
+          throw new BadRequestException(
+            `Valor do pagamento (${amountToPay.toFixed(2)}) é maior que o valor restante (${remaining.toFixed(2)}) da parcela ${installment.installmentNumber}.`,
+          );
+        }
+
+        const result = await this.payInstallment(
+          installment.id,
+          {
+            amount: amountToPay,
+            paymentMethod,
+            notes,
+          },
+          companyId,
+        );
+
+        totalPaid += amountToPay;
+
+        responses.push({
+          installmentId: result.installment.id,
+          amountPaid: toNumber(result.payment.amount),
+          remainingAmount: toNumber(result.installment.remainingAmount),
+          isPaid: result.installment.isPaid,
+          dueDate: result.installment.dueDate ?? null,
+          message: result.message,
+        });
+      }
+
+      const roundedTotal = Math.round(totalPaid * 100) / 100;
+
+      return {
+        message: payAll
+          ? 'Todas as dívidas do cliente foram processadas com sucesso.'
+          : `${responses.length} parcela(s) foram pagas com sucesso.`,
+        customerId,
+        totalPaid: roundedTotal,
+        payments: responses,
+      };
+    } catch (error) {
+      this.logger.error('Error paying multiple installments:', error);
       throw error;
     }
   }

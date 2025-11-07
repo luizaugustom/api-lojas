@@ -1,10 +1,11 @@
 import { PrismaService } from '../../infrastructure/database/prisma.service';
 import { GenerateReportDto, ReportType } from './dto/generate-report.dto';
+import { ClientTimeInfo } from '../../shared/utils/client-time.util';
 export declare class ReportsService {
     private readonly prisma;
     private readonly logger;
     constructor(prisma: PrismaService);
-    generateReport(companyId: string, generateReportDto: GenerateReportDto): Promise<{
+    generateReport(companyId: string, generateReportDto: GenerateReportDto, clientTimeInfo?: ClientTimeInfo): Promise<{
         contentType: string;
         data: {
             company: {
@@ -22,6 +23,12 @@ export declare class ReportsService {
                 period: {
                     startDate: string;
                     endDate: string;
+                };
+                clientTimeInfo: {
+                    timeZone: string;
+                    locale: string;
+                    utcOffsetMinutes: number;
+                    currentDate: string;
                 };
             };
             data: any;

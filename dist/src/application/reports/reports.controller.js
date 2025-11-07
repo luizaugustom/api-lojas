@@ -21,13 +21,15 @@ const jwt_auth_guard_1 = require("../../shared/guards/jwt-auth.guard");
 const roles_guard_1 = require("../../shared/guards/roles.guard");
 const roles_decorator_1 = require("../../shared/decorators/roles.decorator");
 const current_user_decorator_1 = require("../../shared/decorators/current-user.decorator");
+const client_time_util_1 = require("../../shared/utils/client-time.util");
 let ReportsController = class ReportsController {
     constructor(reportsService) {
         this.reportsService = reportsService;
     }
-    async generateReport(user, generateReportDto, res) {
-        const result = await this.reportsService.generateReport(user.companyId, generateReportDto);
-        const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+    async generateReport(user, generateReportDto, req, res) {
+        const clientTimeInfo = (0, client_time_util_1.extractClientTimeInfo)(req);
+        const result = await this.reportsService.generateReport(user.companyId, generateReportDto, clientTimeInfo);
+        const timestamp = (0, client_time_util_1.getClientNow)(clientTimeInfo).toISOString().replace(/[:.]/g, '-');
         const reportType = generateReportDto.reportType;
         if (generateReportDto.format === generate_report_dto_1.ReportFormat.JSON) {
             res.setHeader('Content-Type', result.contentType);
@@ -68,9 +70,10 @@ __decorate([
     }),
     __param(0, (0, current_user_decorator_1.CurrentUser)()),
     __param(1, (0, common_1.Body)()),
-    __param(2, (0, common_1.Res)()),
+    __param(2, (0, common_1.Req)()),
+    __param(3, (0, common_1.Res)()),
     __metadata("design:type", Function),
-    __metadata("design:paramtypes", [Object, generate_report_dto_1.GenerateReportDto, Object]),
+    __metadata("design:paramtypes", [Object, generate_report_dto_1.GenerateReportDto, Object, Object]),
     __metadata("design:returntype", Promise)
 ], ReportsController.prototype, "generateReport", null);
 exports.ReportsController = ReportsController = __decorate([

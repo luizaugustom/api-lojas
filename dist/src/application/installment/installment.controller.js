@@ -19,6 +19,7 @@ const installment_service_1 = require("./installment.service");
 const create_installment_dto_1 = require("./dto/create-installment.dto");
 const update_installment_dto_1 = require("./dto/update-installment.dto");
 const pay_installment_dto_1 = require("./dto/pay-installment.dto");
+const bulk_pay_installments_dto_1 = require("./dto/bulk-pay-installments.dto");
 const jwt_auth_guard_1 = require("../../shared/guards/jwt-auth.guard");
 const roles_guard_1 = require("../../shared/guards/roles.guard");
 const roles_decorator_1 = require("../../shared/decorators/roles.decorator");
@@ -67,6 +68,9 @@ let InstallmentController = class InstallmentController {
     }
     pay(id, payInstallmentDto, user) {
         return this.installmentService.payInstallment(id, payInstallmentDto, user.companyId);
+    }
+    bulkPay(customerId, bulkPayInstallmentsDto, user) {
+        return this.installmentService.payCustomerInstallments(customerId, bulkPayInstallmentsDto, user.companyId);
     }
     remove(id, user) {
         if (user.role === roles_decorator_1.UserRole.ADMIN) {
@@ -172,6 +176,18 @@ __decorate([
     __metadata("design:paramtypes", [String, pay_installment_dto_1.PayInstallmentDto, Object]),
     __metadata("design:returntype", void 0)
 ], InstallmentController.prototype, "pay", null);
+__decorate([
+    (0, common_1.Post)('customer/:customerId/pay/bulk'),
+    (0, roles_decorator_1.Roles)(roles_decorator_1.UserRole.COMPANY, roles_decorator_1.UserRole.SELLER),
+    (0, swagger_1.ApiOperation)({ summary: 'Pagar múltiplas parcelas de um cliente' }),
+    (0, swagger_1.ApiResponse)({ status: 200, description: 'Pagamentos registrados com sucesso' }),
+    __param(0, (0, common_1.Param)('customerId', uuid_validation_pipe_1.UuidValidationPipe)),
+    __param(1, (0, common_1.Body)()),
+    __param(2, (0, current_user_decorator_1.CurrentUser)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String, bulk_pay_installments_dto_1.BulkPayInstallmentsDto, Object]),
+    __metadata("design:returntype", void 0)
+], InstallmentController.prototype, "bulkPay", null);
 __decorate([
     (0, common_1.Delete)(':id'),
     (0, roles_decorator_1.Roles)(roles_decorator_1.UserRole.ADMIN, roles_decorator_1.UserRole.COMPANY),

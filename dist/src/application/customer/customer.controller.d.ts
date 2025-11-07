@@ -1,3 +1,4 @@
+import { Request } from 'express';
 import { CustomerService } from './customer.service';
 import { CreateCustomerDto } from './dto/create-customer.dto';
 import { UpdateCustomerDto } from './dto/update-customer.dto';
@@ -189,9 +190,9 @@ export declare class CustomerController {
         companyId: string;
         cpfCnpj: string | null;
     }>;
-    sendPromotionalEmail(id: string, promotionalEmailDto: SendPromotionalEmailDto, user: any): Promise<boolean>;
-    sendSaleConfirmationEmail(id: string, saleId: string, user: any): Promise<boolean>;
-    sendBulkPromotionalEmail(bulkPromotionalEmailDto: SendBulkPromotionalEmailDto, user: any): Promise<{
+    sendPromotionalEmail(id: string, promotionalEmailDto: SendPromotionalEmailDto, user: any, req: Request): Promise<boolean>;
+    sendSaleConfirmationEmail(id: string, saleId: string, user: any, req: Request): Promise<boolean>;
+    sendBulkPromotionalEmail(bulkPromotionalEmailDto: SendBulkPromotionalEmailDto, user: any, req: Request): Promise<{
         sent: number;
         failed: number;
     }>;

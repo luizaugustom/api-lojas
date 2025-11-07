@@ -16,12 +16,13 @@ const prisma_service_1 = require("../../infrastructure/database/prisma.service")
 const generate_report_dto_1 = require("./dto/generate-report.dto");
 const ExcelJS = require("exceljs");
 const xml2js_1 = require("xml2js");
+const client_time_util_1 = require("../../shared/utils/client-time.util");
 let ReportsService = ReportsService_1 = class ReportsService {
     constructor(prisma) {
         this.prisma = prisma;
         this.logger = new common_1.Logger(ReportsService_1.name);
     }
-    async generateReport(companyId, generateReportDto) {
+    async generateReport(companyId, generateReportDto, clientTimeInfo) {
         this.logger.log(`Generating ${generateReportDto.reportType} report for company: ${companyId}`);
         const company = await this.prisma.company.findUnique({
             where: { id: companyId },
@@ -57,11 +58,19 @@ let ReportsService = ReportsService_1 = class ReportsService {
             },
             reportMetadata: {
                 type: reportType,
-                generatedAt: new Date().toISOString(),
+                generatedAt: (0, client_time_util_1.getClientNow)(clientTimeInfo).toISOString(),
                 period: {
                     startDate: startDate || null,
                     endDate: endDate || null,
                 },
+                clientTimeInfo: clientTimeInfo
+                    ? {
+                        timeZone: clientTimeInfo.timeZone,
+                        locale: clientTimeInfo.locale,
+                        utcOffsetMinutes: clientTimeInfo.utcOffsetMinutes,
+                        currentDate: clientTimeInfo.currentDate?.toISOString(),
+                    }
+                    : undefined,
             },
             data: reportData,
         };
@@ -79,7 +88,7 @@ let ReportsService = ReportsService_1 = class ReportsService {
             case generate_report_dto_1.ReportFormat.EXCEL:
                 return {
                     contentType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-                    data: await this.convertToExcel(reportWithCompany, reportType),
+                    data: await this.convertToExcel(reportWithCompany, reportType, clientTimeInfo),
                 };
         }
     }
@@ -354,24 +363,24 @@ let ReportsService = ReportsService_1 = class ReportsService {
         });
         return builder.buildObject({ report: data });
     }
-    async convertToExcel(data, reportType) {
+    async convertToExcel(data, reportType, clientTimeInfo) {
         const workbook = new ExcelJS.Workbook();
         workbook.creator = 'API Lojas SaaS';
-        workbook.created = new Date();
+        workbook.created = (0, client_time_util_1.getClientNow)(clientTimeInfo);
         const companySheet = workbook.addWorksheet('Empresa');
         this.addCompanyInfo(companySheet, data.company);
         if (reportType === generate_report_dto_1.ReportType.SALES || reportType === generate_report_dto_1.ReportType.COMPLETE) {
-            this.addSalesSheet(workbook, data.data.sales || data.data);
+            this.addSalesSheet(workbook, data.data.sales || data.data, clientTimeInfo);
         }
         if (reportType === generate_report_dto_1.ReportType.PRODUCTS || reportType === generate_report_dto_1.ReportType.COMPLETE) {
             this.addProductsSheet(workbook, data.data.products || data.data);
         }
         if (reportType === generate_report_dto_1.ReportType.INVOICES || reportType === generate_report_dto_1.ReportType.COMPLETE) {
-            this.addInvoicesSheet(workbook, data.data.invoices || data.data);
+            this.addInvoicesSheet(workbook, data.data.invoices || data.data, clientTimeInfo);
         }
         if (reportType === generate_report_dto_1.ReportType.COMPLETE) {
-            this.addBillsSheet(workbook, data.data.billsToPay);
-            this.addCashClosuresSheet(workbook, data.data.cashClosures);
+            this.addBillsSheet(workbook, data.data.billsToPay, clientTimeInfo);
+            this.addCashClosuresSheet(workbook, data.data.cashClosures, clientTimeInfo);
             this.addCommissionsSheet(workbook, data.data.commissions);
         }
         return (await workbook.xlsx.writeBuffer());
@@ -387,7 +396,7 @@ let ReportsService = ReportsService_1 = class ReportsService {
         sheet.addRow({ field: 'Telefone', value: company.phone });
         sheet.getRow(1).font = { bold: true };
     }
-    addSalesSheet(workbook, salesData) {
+    addSalesSheet(workbook, salesData, clientTimeInfo) {
         const sheet = workbook.addWorksheet('Vendas');
         sheet.columns = [
             { header: 'Data', key: 'saleDate', width: 20 },
@@ -396,13 +405,17 @@ let ReportsService = ReportsService_1 = class ReportsService {
             { header: 'Vendedor', key: 'sellerName', width: 30 },
             { header: 'Pagamento', key: 'paymentMethods', width: 30 },
         ];
-        (salesData?.sales || []).forEach((sale) => {
+        const sales = Array.isArray(salesData) ? salesData : salesData?.sales || [];
+        sales.forEach((sale) => {
+            const paymentLabels = Array.isArray(sale.paymentMethods)
+                ? sale.paymentMethods.map((pm) => pm.method ?? pm).filter(Boolean).join(', ')
+                : '';
             sheet.addRow({
-                saleDate: sale.saleDate,
+                saleDate: (0, client_time_util_1.formatClientDate)(sale.saleDate, clientTimeInfo),
                 total: sale.total,
                 clientName: sale.clientName,
-                sellerName: sale.seller.name,
-                paymentMethods: sale.paymentMethods.join(', '),
+                sellerName: sale.seller?.name || '-',
+                paymentMethods: paymentLabels || 'Não informado',
             });
         });
         sheet.getRow(1).font = { bold: true };
@@ -421,7 +434,7 @@ let ReportsService = ReportsService_1 = class ReportsService {
         });
         sheet.getRow(1).font = { bold: true };
     }
-    addInvoicesSheet(workbook, invoicesData) {
+    addInvoicesSheet(workbook, invoicesData, clientTimeInfo) {
         const sheet = workbook.addWorksheet('Notas Fiscais');
         sheet.columns = [
             { header: 'Tipo', key: 'documentType', width: 15 },
@@ -430,12 +443,16 @@ let ReportsService = ReportsService_1 = class ReportsService {
             { header: 'Status', key: 'status', width: 15 },
             { header: 'Emissão', key: 'emissionDate', width: 20 },
         ];
-        invoicesData.invoices.forEach((invoice) => {
-            sheet.addRow(invoice);
+        const invoices = Array.isArray(invoicesData) ? invoicesData : invoicesData?.invoices || [];
+        invoices.forEach((invoice) => {
+            sheet.addRow({
+                ...invoice,
+                emissionDate: (0, client_time_util_1.formatClientDate)(invoice.emissionDate, clientTimeInfo),
+            });
         });
         sheet.getRow(1).font = { bold: true };
     }
-    addBillsSheet(workbook, billsData) {
+    addBillsSheet(workbook, billsData, clientTimeInfo) {
         const sheet = workbook.addWorksheet('Contas a Pagar');
         sheet.columns = [
             { header: 'Título', key: 'title', width: 30 },
@@ -443,15 +460,17 @@ let ReportsService = ReportsService_1 = class ReportsService {
             { header: 'Valor', key: 'amount', width: 15 },
             { header: 'Pago', key: 'isPaid', width: 10 },
         ];
-        billsData.bills.forEach((bill) => {
+        const bills = Array.isArray(billsData) ? billsData : billsData?.bills || [];
+        bills.forEach((bill) => {
             sheet.addRow({
                 ...bill,
+                dueDate: (0, client_time_util_1.formatClientDateOnly)(bill.dueDate, clientTimeInfo),
                 isPaid: bill.isPaid ? 'Sim' : 'Não',
             });
         });
         sheet.getRow(1).font = { bold: true };
     }
-    addCashClosuresSheet(workbook, closuresData) {
+    addCashClosuresSheet(workbook, closuresData, clientTimeInfo) {
         const sheet = workbook.addWorksheet('Fechamentos');
         sheet.columns = [
             { header: 'Abertura', key: 'openingDate', width: 20 },
@@ -459,9 +478,12 @@ let ReportsService = ReportsService_1 = class ReportsService {
             { header: 'Total Vendas', key: 'totalSales', width: 20 },
             { header: 'Fechado', key: 'isClosed', width: 15 },
         ];
-        closuresData.closures.forEach((closure) => {
+        const closures = Array.isArray(closuresData) ? closuresData : closuresData?.closures || [];
+        closures.forEach((closure) => {
             sheet.addRow({
                 ...closure,
+                openingDate: (0, client_time_util_1.formatClientDate)(closure.openingDate, clientTimeInfo),
+                closingDate: closure.closingDate ? (0, client_time_util_1.formatClientDate)(closure.closingDate, clientTimeInfo) : '',
                 isClosed: closure.isClosed ? 'Sim' : 'Não',
             });
         });

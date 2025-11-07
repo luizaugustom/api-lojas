@@ -2,6 +2,7 @@ import { PrismaService } from '../../infrastructure/database/prisma.service';
 import { EmailService } from '../../shared/services/email.service';
 import { CreateCustomerDto } from './dto/create-customer.dto';
 import { UpdateCustomerDto } from './dto/update-customer.dto';
+import { ClientTimeInfo } from '../../shared/utils/client-time.util';
 export declare class CustomerService {
     private readonly prisma;
     private readonly emailService;
@@ -194,9 +195,9 @@ export declare class CustomerService {
             customerId: string;
         })[];
     }>;
-    sendPromotionalEmail(customerId: string, promotionData: any): Promise<boolean>;
-    sendSaleConfirmationEmail(customerId: string, saleId: string): Promise<boolean>;
-    sendBulkPromotionalEmail(companyId: string, promotionData: any): Promise<{
+    sendPromotionalEmail(customerId: string, promotionData: any, clientTimeInfo?: ClientTimeInfo): Promise<boolean>;
+    sendSaleConfirmationEmail(customerId: string, saleId: string, clientTimeInfo?: ClientTimeInfo): Promise<boolean>;
+    sendBulkPromotionalEmail(companyId: string, promotionData: any, clientTimeInfo?: ClientTimeInfo): Promise<{
         sent: number;
         failed: number;
     }>;

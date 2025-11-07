@@ -2,6 +2,7 @@ import { Injectable, Logger, BadRequestException } from '@nestjs/common';
 import { PrismaService } from '../../infrastructure/database/prisma.service';
 import { ThermalPrinterService } from '../../shared/services/thermal-printer.service';
 import * as QRCode from 'qrcode';
+import { ClientTimeInfo } from '../../shared/utils/client-time.util';
 
 export interface PrinterConfig {
   type: 'usb' | 'network' | 'bluetooth';
@@ -34,6 +35,9 @@ export interface ReceiptData {
   client?: {
     name?: string;
     cpfCnpj?: string;
+  };
+  metadata?: {
+    clientTimeInfo?: ClientTimeInfo;
   };
 }
 
@@ -77,6 +81,9 @@ export interface NFCePrintData {
     cfop?: string;
   }>;
   customFooter?: string;
+  metadata?: {
+    clientTimeInfo?: ClientTimeInfo;
+  };
 }
 
 export interface CashClosureReportData {
@@ -125,6 +132,9 @@ export interface CashClosureReportData {
     }>;
   }>;
   includeSaleDetails: boolean;
+  metadata?: {
+    clientTimeInfo?: ClientTimeInfo;
+  };
 }
 
 export interface PrintResult {
@@ -452,9 +462,14 @@ export class PrinterService {
     });
   }
 
-  async printReceipt(receiptData: ReceiptData, companyId?: string, computerId?: string | null): Promise<PrintResult> {
+  async printReceipt(
+    receiptData: ReceiptData,
+    companyId?: string,
+    computerId?: string | null,
+    clientTimeInfo?: ClientTimeInfo,
+  ): Promise<PrintResult> {
     try {
-      const receipt = this.generateReceiptContent(receiptData);
+      const receipt = this.generateReceiptContent(receiptData, clientTimeInfo);
       const result = await this.sendToPrinter(receipt, companyId, computerId);
       
       if (result.success) {
@@ -482,8 +497,9 @@ export class PrinterService {
     companyId?: string,
     computerId?: string | null,
     preGeneratedContent?: string,
+    clientTimeInfo?: ClientTimeInfo,
   ): Promise<PrintResult> {
-    const report = preGeneratedContent ?? this.generateCashClosureReport(reportData);
+    const report = preGeneratedContent ?? this.generateCashClosureReport(reportData, clientTimeInfo);
 
     try {
       const result = await this.sendToPrinter(report, companyId, computerId);
@@ -512,11 +528,17 @@ export class PrinterService {
     }
   }
 
-  async printNonFiscalReceipt(receiptData: ReceiptData, companyId?: string, isMocked: boolean = false, computerId?: string | null): Promise<PrintResult> {
+  async printNonFiscalReceipt(
+    receiptData: ReceiptData,
+    companyId?: string,
+    isMocked: boolean = false,
+    computerId?: string | null,
+    clientTimeInfo?: ClientTimeInfo,
+  ): Promise<PrintResult> {
     try {
       this.logger.log(`Iniciando impressão de cupom não fiscal para venda: ${receiptData.sale.id}${isMocked ? ' (DADOS MOCKADOS)' : ''}${computerId ? ` (computador: ${computerId})` : ''}`);
       
-      const receipt = this.generateNonFiscalReceiptContent(receiptData, isMocked);
+      const receipt = this.generateNonFiscalReceiptContent(receiptData, isMocked, clientTimeInfo);
       const result = await this.sendToPrinter(receipt, companyId, computerId);
       
       if (result.success) {
@@ -542,7 +564,7 @@ export class PrinterService {
   /**
    * Gera o conteúdo de NFCe sem imprimir (para impressão local no cliente)
    */
-  async getNFCeContent(nfceData: NFCePrintData): Promise<string> {
+  async getNFCeContent(nfceData: NFCePrintData, clientTimeInfo?: ClientTimeInfo): Promise<string> {
     try {
       this.logger.log(`Gerando conteúdo de NFCe para venda: ${nfceData.sale.id}`);
       
@@ -581,10 +603,10 @@ export class PrinterService {
           },
         };
         
-        return this.generateNonFiscalReceiptContent(receiptData, true);
+        return this.generateNonFiscalReceiptContent(receiptData, true, clientTimeInfo);
       }
       
-      return await this.generateNFCeContent(nfceData);
+      return await this.generateNFCeContent(nfceData, clientTimeInfo);
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error);
       this.logger.error(`❌ Erro ao gerar conteúdo de NFCe para venda ${nfceData.sale.id}:`, error);
@@ -592,7 +614,12 @@ export class PrinterService {
     }
   }
 
-  async printNFCe(nfceData: NFCePrintData, companyId?: string, computerId?: string | null): Promise<PrintResult> {
+  async printNFCe(
+    nfceData: NFCePrintData,
+    companyId?: string,
+    computerId?: string | null,
+    clientTimeInfo?: ClientTimeInfo,
+  ): Promise<PrintResult> {
     try {
       this.logger.log(`Iniciando impressão de NFCe para venda: ${nfceData.sale.id}${computerId ? ` (computador: ${computerId})` : ''}`);
       
@@ -631,10 +658,10 @@ export class PrinterService {
           },
         };
         
-        return await this.printNonFiscalReceipt(receiptData, companyId, true, computerId);
+        return await this.printNonFiscalReceipt(receiptData, companyId, true, computerId, clientTimeInfo);
       }
       
-      const nfce = await this.generateNFCeContent(nfceData);
+      const nfce = await this.generateNFCeContent(nfceData, clientTimeInfo);
       const result = await this.sendToPrinter(nfce, companyId, computerId);
       
       if (result.success) {
@@ -657,8 +684,9 @@ export class PrinterService {
     }
   }
 
-  private generateReceiptContent(data: ReceiptData): string {
+  private generateReceiptContent(data: ReceiptData, clientTimeInfo?: ClientTimeInfo): string {
     const { company, sale, items, seller, client } = data;
+    const timeInfo = clientTimeInfo ?? data.metadata?.clientTimeInfo;
     
     let receipt = '';
     
@@ -674,7 +702,7 @@ export class PrinterService {
     
     // Sale info
     receipt += `Venda: ${sale.id}\n`;
-    receipt += `Data: ${this.formatDate(sale.date)}\n`;
+    receipt += `Data: ${this.formatDate(sale.date, timeInfo)}\n`;
     receipt += `Vendedor: ${seller.name}\n`;
     
     if (client?.name) {
@@ -720,8 +748,13 @@ export class PrinterService {
     return receipt;
   }
 
-  private generateNonFiscalReceiptContent(data: ReceiptData, isMocked: boolean = false): string {
+  private generateNonFiscalReceiptContent(
+    data: ReceiptData,
+    isMocked: boolean = false,
+    clientTimeInfo?: ClientTimeInfo,
+  ): string {
     const { company, sale, items, seller, client } = data;
+    const timeInfo = clientTimeInfo ?? data.metadata?.clientTimeInfo;
     
     let receipt = '';
     
@@ -738,7 +771,7 @@ export class PrinterService {
     
     // Sale info
     receipt += `Venda: ${sale.id}\n`;
-    receipt += `Data: ${this.formatDate(sale.date)}\n`;
+    receipt += `Data: ${this.formatDate(sale.date, timeInfo)}\n`;
     receipt += `Vendedor: ${seller.name}\n`;
     
     if (client?.name) {
@@ -791,8 +824,9 @@ export class PrinterService {
     return receipt;
   }
 
-  private generateCashClosureReport(data: CashClosureReportData): string {
+  private generateCashClosureReport(data: CashClosureReportData, clientTimeInfo?: ClientTimeInfo): string {
     const { company, closure, paymentSummary, sellers, includeSaleDetails } = data;
+    const timeInfo = clientTimeInfo ?? data.metadata?.clientTimeInfo;
 
     let report = '';
 
@@ -811,8 +845,8 @@ export class PrinterService {
     report += closure.seller
       ? `Caixa: Individual - ${closure.seller.name}\n`
       : 'Caixa: Compartilhado\n';
-    report += `Abertura: ${this.formatDate(closure.openingDate)}\n`;
-    report += `Fechamento: ${this.formatDate(closure.closingDate)}\n`;
+    report += `Abertura: ${this.formatDate(closure.openingDate, timeInfo)}\n`;
+    report += `Fechamento: ${this.formatDate(closure.closingDate, timeInfo)}\n`;
     report += `Valor inicial: ${this.formatCurrency(closure.openingAmount)}\n`;
     report += `Total vendas: ${this.formatCurrency(closure.totalSales)}\n`;
     report += `Retiradas: ${this.formatCurrency(closure.totalWithdrawals)}\n`;
@@ -859,7 +893,7 @@ export class PrinterService {
         report += this.centerText('--------------------------------') + '\n';
 
         seller.sales.forEach((sale, index) => {
-          report += `#${(index + 1).toString().padStart(2, '0')} ${this.formatDate(sale.date)}\n`;
+        report += `#${(index + 1).toString().padStart(2, '0')} ${this.formatDate(sale.date, timeInfo)}\n`;
           report += `Venda: ${sale.id}\n`;
           report += `Total: ${this.formatCurrency(sale.total)}\n`;
           if (sale.clientName) {
@@ -882,14 +916,15 @@ export class PrinterService {
 
     // Rodapé
     report += this.centerText('RELATÓRIO GERADO EM:') + '\n';
-    report += this.centerText(this.formatDate(new Date())) + '\n';
+    report += this.centerText(this.formatDate(new Date(), timeInfo)) + '\n';
     report += this.centerText('================================') + '\n\n\n';
 
     return report;
   }
 
-  private async generateNFCeContent(data: NFCePrintData): Promise<string> {
+  private async generateNFCeContent(data: NFCePrintData, clientTimeInfo?: ClientTimeInfo): Promise<string> {
     const { company, fiscal, sale, items, customFooter } = data;
+    const timeInfo = clientTimeInfo ?? data.metadata?.clientTimeInfo;
     
     let nfce = '';
     
@@ -925,7 +960,7 @@ export class PrinterService {
       nfce += ` Série: ${fiscal.serieNumber}`;
     }
     nfce += '\n';
-    nfce += `Emissão: ${this.formatDate(fiscal.emissionDate)}\n`;
+    nfce += `Emissão: ${this.formatDate(fiscal.emissionDate, timeInfo)}\n`;
     
     // ===== CHAVE DE ACESSO =====
     nfce += '\n';
@@ -1039,7 +1074,7 @@ export class PrinterService {
     if (fiscal.protocol) {
       nfce += this.centerText('NFC-e AUTORIZADA') + '\n';
       nfce += `Protocolo: ${fiscal.protocol}\n`;
-      nfce += `Data Autorização: ${this.formatDate(fiscal.emissionDate)}\n`;
+      nfce += `Data Autorização: ${this.formatDate(fiscal.emissionDate, timeInfo)}\n`;
     } else {
       nfce += this.centerText(`STATUS: ${fiscal.status}`) + '\n';
     }
@@ -1066,7 +1101,7 @@ export class PrinterService {
     nfce += this.centerText('================================') + '\n';
     nfce += this.centerText('🚀SISTEMA MONTSHOP! 🚀') + '\n';
     nfce += this.centerText('==========') + '\n';
-    nfce += this.centerText(this.formatDate(new Date())) + '\n';
+    nfce += this.centerText(this.formatDate(new Date(), timeInfo)) + '\n';
     nfce += '\n\n\n';
     
     return nfce;
@@ -1258,8 +1293,39 @@ export class PrinterService {
     return ' '.repeat(padding) + text;
   }
 
-  private formatDate(date: Date): string {
-    return date.toLocaleString('pt-BR');
+  private formatDate(
+    dateInput: Date | string,
+    clientTimeInfo?: ClientTimeInfo,
+    options: Intl.DateTimeFormatOptions = {},
+  ): string {
+    const date = typeof dateInput === 'string' ? new Date(dateInput) : dateInput;
+    if (Number.isNaN(date.getTime())) {
+      return '';
+    }
+
+    const locale = clientTimeInfo?.locale ?? 'pt-BR';
+    const baseOptions: Intl.DateTimeFormatOptions = {
+      day: '2-digit',
+      month: '2-digit',
+      year: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+      second: '2-digit',
+      ...options,
+    };
+
+    if (clientTimeInfo?.timeZone) {
+      baseOptions.timeZone = clientTimeInfo.timeZone;
+    }
+
+    try {
+      return new Intl.DateTimeFormat(locale, baseOptions).format(date);
+    } catch (error) {
+      if (process.env.NODE_ENV !== 'test') {
+        this.logger.warn(`Falha ao formatar data com timezone ${clientTimeInfo?.timeZone}: ${error}`);
+      }
+      return date.toLocaleString(locale);
+    }
   }
 
   private formatCurrency(value: number): string {
@@ -1528,12 +1594,16 @@ export class PrinterService {
   /**
    * Imprime orçamento
    */
-  async printBudget(data: any, computerId?: string | null): Promise<boolean> {
+  async printBudget(
+    data: any,
+    computerId?: string | null,
+    clientTimeInfo?: ClientTimeInfo,
+  ): Promise<boolean> {
     try {
       this.logger.log(`Printing budget: ${data.budget.id}${computerId ? ` (computador: ${computerId})` : ''}`);
       
-      const content = this.generateBudgetContent(data);
-      const result = await this.sendToPrinter(content, data.company.id, computerId);
+      const content = this.generateBudgetContent(data, clientTimeInfo);
+      const result = await this.sendToPrinter(content, data.company?.id, computerId);
       
       if (result.success) {
         this.logger.log(`Budget ${data.budget.id} printed successfully`);
@@ -1551,8 +1621,9 @@ export class PrinterService {
   /**
    * Gera conteúdo de orçamento para impressão térmica
    */
-  private generateBudgetContent(data: any): string {
+  private generateBudgetContent(data: any, clientTimeInfo?: ClientTimeInfo): string {
     const { company, budget, client, items, seller } = data;
+    const timeInfo = clientTimeInfo ?? data.metadata?.clientTimeInfo;
     let content = '';
     
     // ===== CABEÇALHO =====
@@ -1579,8 +1650,8 @@ export class PrinterService {
     content += '\n';
     content += this.centerText('================================') + '\n';
     content += `ORÇAMENTO Nº: ${budget.budgetNumber.toString().padStart(6, '0')}\n`;
-    content += `Data: ${this.formatDate(new Date(budget.budgetDate))}\n`;
-    content += `Validade: ${this.formatDate(new Date(budget.validUntil))}\n`;
+    content += `Data: ${this.formatDate(budget.budgetDate, timeInfo, { day: '2-digit', month: '2-digit', year: 'numeric' })}\n`;
+    content += `Validade: ${this.formatDate(budget.validUntil, timeInfo, { day: '2-digit', month: '2-digit', year: 'numeric' })}\n`;
     content += `Status: ${this.getBudgetStatus(budget.status)}\n`;
     
     // ===== DADOS DO CLIENTE =====
@@ -1664,7 +1735,7 @@ export class PrinterService {
     content += this.centerText('================================') + '\n';
     content += this.centerText('🚀SISTEMA MONTSHOP! 🚀') + '\n';
     content += this.centerText('==========') + '\n';
-    content += this.centerText(this.formatDate(new Date())) + '\n';
+    content += this.centerText(this.formatDate(new Date(), timeInfo)) + '\n';
     content += '\n\n\n';
     
     return content;
@@ -1685,9 +1756,13 @@ export class PrinterService {
    * Gera conteúdo de impressão NFCe sem enviar para impressora
    * Retorna o texto formatado para impressão no cliente
    */
-  async generatePrintContent(nfceData: NFCePrintData, companyId?: string): Promise<string> {
+  async generatePrintContent(
+    nfceData: NFCePrintData,
+    companyId?: string,
+    clientTimeInfo?: ClientTimeInfo,
+  ): Promise<string> {
     try {
-      const content = await this.generateNFCeContent(nfceData);
+      const content = await this.generateNFCeContent(nfceData, clientTimeInfo);
       return content;
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error);
@@ -1699,9 +1774,13 @@ export class PrinterService {
   /**
    * Gera conteúdo de cupom não fiscal sem enviar para impressora (método público)
    */
-  async getNonFiscalReceiptContent(receiptData: ReceiptData, isMocked: boolean = false): Promise<string> {
+  async getNonFiscalReceiptContent(
+    receiptData: ReceiptData,
+    isMocked: boolean = false,
+    clientTimeInfo?: ClientTimeInfo,
+  ): Promise<string> {
     try {
-      return this.generateNonFiscalReceiptContent(receiptData, isMocked);
+      return this.generateNonFiscalReceiptContent(receiptData, isMocked, clientTimeInfo);
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error);
       this.logger.error('Erro ao gerar conteúdo de cupom não fiscal:', error);
@@ -1709,7 +1788,7 @@ export class PrinterService {
     }
   }
 
-  generateCashClosureReportContent(reportData: CashClosureReportData): string {
-    return this.generateCashClosureReport(reportData);
+  generateCashClosureReportContent(reportData: CashClosureReportData, clientTimeInfo?: ClientTimeInfo): string {
+    return this.generateCashClosureReport(reportData, clientTimeInfo);
   }
 }

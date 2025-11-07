@@ -19,6 +19,7 @@ const fiscal_service_1 = require("../fiscal/fiscal.service");
 const email_service_1 = require("../../shared/services/email.service");
 const ibpt_service_1 = require("../../shared/services/ibpt.service");
 const payment_method_dto_1 = require("./dto/payment-method.dto");
+const client_time_util_1 = require("../../shared/utils/client-time.util");
 let SaleService = SaleService_1 = class SaleService {
     constructor(prisma, productService, printerService, fiscalService, emailService, ibptService) {
         this.prisma = prisma;
@@ -29,7 +30,7 @@ let SaleService = SaleService_1 = class SaleService {
         this.ibptService = ibptService;
         this.logger = new common_1.Logger(SaleService_1.name);
     }
-    async create(companyId, sellerId, createSaleDto, computerId) {
+    async create(companyId, sellerId, createSaleDto, computerId, clientTimeInfo) {
         try {
             let total = 0;
             const validatedItems = [];
@@ -91,12 +92,14 @@ let SaleService = SaleService_1 = class SaleService {
                     throw new common_1.NotFoundException('Cliente não encontrado');
                 }
             }
-            if (Math.abs(totalPaid - total) > 0.01) {
+            const paymentDifference = totalPaid - total;
+            if (paymentDifference < -0.01) {
                 throw new common_1.BadRequestException(`Total pago (${totalPaid}) não confere com o total da venda (${total})`);
             }
             const cashPayment = createSaleDto.paymentMethods.find(pm => pm.method === payment_method_dto_1.PaymentMethod.CASH);
             const cashAmount = cashPayment ? cashPayment.amount : 0;
-            const change = totalPaid > total ? totalPaid - total : 0;
+            const change = paymentDifference > 0 ? paymentDifference : 0;
+            const saleDate = (0, client_time_util_1.getClientNow)(clientTimeInfo);
             const result = await this.prisma.$transaction(async (tx) => {
                 const sale = await tx.sale.create({
                     data: {
@@ -107,6 +110,7 @@ let SaleService = SaleService_1 = class SaleService {
                         isInstallment: hasInstallment,
                         companyId,
                         sellerId,
+                        saleDate,
                     },
                 });
                 for (const paymentMethod of createSaleDto.paymentMethods) {
@@ -130,7 +134,7 @@ let SaleService = SaleService_1 = class SaleService {
                     }
                     catch (error) {
                         this.logger.warn(`Data de vencimento inválida para venda ${sale.id}, usando data padrão`);
-                        firstDueDate = new Date();
+                        firstDueDate = new Date((0, client_time_util_1.getClientNow)(clientTimeInfo));
                         firstDueDate.setMonth(firstDueDate.getMonth() + 1);
                     }
                     for (let i = 0; i < installmentPayment.installments; i++) {
@@ -242,16 +246,19 @@ let SaleService = SaleService_1 = class SaleService {
                                 name: completeSale.clientName || undefined,
                                 cpfCnpj: completeSale.clientCpfCnpj || undefined,
                             } : undefined,
+                            metadata: {
+                                clientTimeInfo,
+                            },
                         };
                         let printContent = null;
                         try {
-                            printContent = await this.printerService.getNonFiscalReceiptContent(receiptData, true);
+                            printContent = await this.printerService.getNonFiscalReceiptContent(receiptData, true, clientTimeInfo);
                         }
                         catch (generateError) {
                             this.logger.warn('Erro ao gerar conteúdo de cupom não fiscal, continuando sem conteúdo:', generateError);
                         }
                         try {
-                            const printResult = await this.printerService.printNonFiscalReceipt(receiptData, companyId, true, computerId);
+                            const printResult = await this.printerService.printNonFiscalReceipt(receiptData, companyId, true, computerId, clientTimeInfo);
                             if (!printResult.success) {
                                 this.logger.warn(`⚠️ Falha na impressão do cupom não fiscal no servidor para venda: ${completeSale.id}`);
                                 this.logger.warn(`Erro: ${printResult.error}`);
@@ -339,16 +346,19 @@ let SaleService = SaleService_1 = class SaleService {
                                 cfop: item.product.cfop || '5102',
                             })),
                             customFooter: completeSale.company.customFooter,
+                            metadata: {
+                                clientTimeInfo,
+                            },
                         };
                         let printContent = null;
                         try {
-                            printContent = await this.printerService.generatePrintContent(nfcePrintData, companyId);
+                            printContent = await this.printerService.generatePrintContent(nfcePrintData, companyId, clientTimeInfo);
                         }
                         catch (generateError) {
                             this.logger.warn('Erro ao gerar conteúdo de impressão, continuando sem conteúdo:', generateError);
                         }
                         try {
-                            const printResult = await this.printerService.printNFCe(nfcePrintData, companyId, computerId);
+                            const printResult = await this.printerService.printNFCe(nfcePrintData, companyId, computerId, clientTimeInfo);
                             if (!printResult.success) {
                                 this.logger.warn(`⚠️ Falha na impressão no servidor para venda: ${completeSale.id}`);
                                 this.logger.warn(`Erro: ${printResult.error}`);
@@ -399,7 +409,7 @@ let SaleService = SaleService_1 = class SaleService {
                         },
                     });
                     if (customer && customer.email) {
-                        await this.emailService.sendSaleConfirmationEmail(customer.email, customer.name, completeSale, customer.company.name);
+                        await this.emailService.sendSaleConfirmationEmail(customer.email, customer.name, completeSale, customer.company.name, clientTimeInfo);
                         this.logger.log(`Sale confirmation email sent to customer: ${customer.email}`);
                     }
                 }
@@ -725,7 +735,7 @@ let SaleService = SaleService_1 = class SaleService {
             salesByPaymentMethod: paymentMethodsSummary,
         };
     }
-    async reprintReceipt(id, companyId, computerId) {
+    async reprintReceipt(id, companyId, computerId, clientTimeInfo) {
         const sale = await this.prisma.sale.findUnique({
             where: { id },
             include: {
@@ -789,16 +799,19 @@ let SaleService = SaleService_1 = class SaleService {
                             name: sale.clientName || undefined,
                             cpfCnpj: sale.clientCpfCnpj || undefined,
                         } : undefined,
+                        metadata: {
+                            clientTimeInfo,
+                        },
                     };
                     let printContent = null;
                     try {
-                        printContent = await this.printerService.getNonFiscalReceiptContent(receiptData, true);
+                        printContent = await this.printerService.getNonFiscalReceiptContent(receiptData, true, clientTimeInfo);
                     }
                     catch (generateError) {
                         this.logger.warn('Erro ao gerar conteúdo de cupom não fiscal para reprint, continuando sem conteúdo:', generateError);
                     }
                     try {
-                        const printResult = await this.printerService.printNonFiscalReceipt(receiptData, sale.companyId, true, computerId);
+                        const printResult = await this.printerService.printNonFiscalReceipt(receiptData, sale.companyId, true, computerId, clientTimeInfo);
                         if (!printResult.success) {
                             this.logger.warn(`⚠️ Falha na reimpressão do cupom não fiscal no servidor para venda: ${sale.id}`);
                             this.logger.warn(`Erro: ${printResult.error}`);
@@ -877,8 +890,11 @@ let SaleService = SaleService_1 = class SaleService {
                         cfop: item.product.cfop || '5102',
                     })),
                     customFooter: sale.company.customFooter,
+                    metadata: {
+                        clientTimeInfo,
+                    },
                 };
-                const printResult = await this.printerService.printNFCe(nfcePrintData, sale.companyId, computerId);
+                const printResult = await this.printerService.printNFCe(nfcePrintData, sale.companyId, computerId, clientTimeInfo);
                 if (!printResult.success) {
                     const errorMessage = printResult.details?.reason || printResult.error || 'Erro ao reimprimir NFC-e';
                     this.logger.error(`Erro ao reimprimir NFC-e para venda ${sale.id}: ${errorMessage}`);
@@ -927,16 +943,19 @@ let SaleService = SaleService_1 = class SaleService {
                         cfop: item.product.cfop || '5102',
                     })),
                     customFooter: sale.company.customFooter,
+                    metadata: {
+                        clientTimeInfo,
+                    },
                 };
                 let printContent = null;
                 try {
-                    printContent = await this.printerService.generatePrintContent(nfcePrintData, sale.companyId);
+                    printContent = await this.printerService.generatePrintContent(nfcePrintData, sale.companyId, clientTimeInfo);
                 }
                 catch (generateError) {
                     this.logger.warn('Erro ao gerar conteúdo de impressão para reprint, continuando sem conteúdo:', generateError);
                 }
                 try {
-                    const printResult = await this.printerService.printNFCe(nfcePrintData, sale.companyId, computerId);
+                    const printResult = await this.printerService.printNFCe(nfcePrintData, sale.companyId, computerId, clientTimeInfo);
                     if (!printResult.success) {
                         const errorMessage = printResult.details?.reason || printResult.error || 'Erro ao reimprimir NFC-e no servidor';
                         this.logger.warn(`Aviso ao reimprimir NFC-e no servidor para venda ${sale.id}: ${errorMessage}`);
@@ -965,7 +984,7 @@ let SaleService = SaleService_1 = class SaleService {
             throw new common_1.BadRequestException(`Erro ao reimprimir NFC-e: ${errorMessage}`);
         }
     }
-    async getPrintContent(id, companyId) {
+    async getPrintContent(id, companyId, clientTimeInfo) {
         const sale = await this.prisma.sale.findUnique({
             where: { id },
             include: {
@@ -1022,6 +1041,9 @@ let SaleService = SaleService_1 = class SaleService {
                         name: sale.clientName || undefined,
                         cpfCnpj: sale.clientCpfCnpj || undefined,
                     } : undefined,
+                    metadata: {
+                        clientTimeInfo,
+                    },
                 };
                 const content = await this.printerService.getNFCeContent({
                     company: receiptData.company,
@@ -1043,7 +1065,10 @@ let SaleService = SaleService_1 = class SaleService {
                         unitPrice: item.unitPrice,
                         totalPrice: item.totalPrice,
                     })),
-                });
+                    metadata: {
+                        clientTimeInfo,
+                    },
+                }, clientTimeInfo);
                 return { content, isMock: true };
             }
             const isMocked = fiscalDocument.status === 'MOCK' || fiscalDocument.isMock === true;
@@ -1087,8 +1112,11 @@ let SaleService = SaleService_1 = class SaleService {
                     cfop: item.product.cfop || '5102',
                 })),
                 customFooter: sale.company.customFooter,
+                metadata: {
+                    clientTimeInfo,
+                },
             };
-            const content = await this.printerService.getNFCeContent(nfcePrintData);
+            const content = await this.printerService.getNFCeContent(nfcePrintData, clientTimeInfo);
             return { content, isMock: isMocked };
         }
         catch (error) {

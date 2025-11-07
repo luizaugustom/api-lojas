@@ -257,7 +257,7 @@ export declare class SaleController {
         printType: string;
         warning?: undefined;
     }>;
-    getPrintContent(id: string, user: any): Promise<{
+    getPrintContent(id: string, user: any, req: Request): Promise<{
         content: string;
         isMock: boolean;
     }>;

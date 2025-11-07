@@ -3,6 +3,7 @@ import { PrismaService } from '../../infrastructure/database/prisma.service';
 import { EmailService } from '../../shared/services/email.service';
 import { CreateCustomerDto } from './dto/create-customer.dto';
 import { UpdateCustomerDto } from './dto/update-customer.dto';
+import { ClientTimeInfo } from '../../shared/utils/client-time.util';
 
 @Injectable()
 export class CustomerService {
@@ -287,7 +288,11 @@ export class CustomerService {
     return { data: installments };
   }
 
-  async sendPromotionalEmail(customerId: string, promotionData: any): Promise<boolean> {
+  async sendPromotionalEmail(
+    customerId: string,
+    promotionData: any,
+    clientTimeInfo?: ClientTimeInfo,
+  ): Promise<boolean> {
     try {
       const customer = await this.prisma.customer.findUnique({
         where: { id: customerId },
@@ -313,7 +318,8 @@ export class CustomerService {
         customer.email,
         customer.name,
         promotionData,
-        customer.company.name
+        customer.company.name,
+        clientTimeInfo,
       );
 
       if (success) {
@@ -327,7 +333,11 @@ export class CustomerService {
     }
   }
 
-  async sendSaleConfirmationEmail(customerId: string, saleId: string): Promise<boolean> {
+  async sendSaleConfirmationEmail(
+    customerId: string,
+    saleId: string,
+    clientTimeInfo?: ClientTimeInfo,
+  ): Promise<boolean> {
     try {
       const customer = await this.prisma.customer.findUnique({
         where: { id: customerId },
@@ -372,7 +382,8 @@ export class CustomerService {
         customer.email,
         customer.name,
         sale,
-        customer.company.name
+        customer.company.name,
+        clientTimeInfo,
       );
 
       if (success) {
@@ -386,7 +397,11 @@ export class CustomerService {
     }
   }
 
-  async sendBulkPromotionalEmail(companyId: string, promotionData: any): Promise<{ sent: number; failed: number }> {
+  async sendBulkPromotionalEmail(
+    companyId: string,
+    promotionData: any,
+    clientTimeInfo?: ClientTimeInfo,
+  ): Promise<{ sent: number; failed: number }> {
     try {
       const customers = await this.prisma.customer.findMany({
         where: {
@@ -416,7 +431,8 @@ export class CustomerService {
             customer.email!,
             customer.name,
             promotionData,
-            customer.company.name
+            customer.company.name,
+            clientTimeInfo,
           );
 
           if (success) {

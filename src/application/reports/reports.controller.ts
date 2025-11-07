@@ -5,6 +5,7 @@ import {
   UseGuards,
   Res,
   HttpStatus,
+  Req,
 } from '@nestjs/common';
 import {
   ApiTags,
@@ -12,13 +13,14 @@ import {
   ApiResponse,
   ApiBearerAuth,
 } from '@nestjs/swagger';
-import { Response } from 'express';
+import { Request, Response } from 'express';
 import { ReportsService } from './reports.service';
 import { GenerateReportDto, ReportFormat } from './dto/generate-report.dto';
 import { JwtAuthGuard } from '../../shared/guards/jwt-auth.guard';
 import { RolesGuard } from '../../shared/guards/roles.guard';
 import { Roles, UserRole } from '../../shared/decorators/roles.decorator';
 import { CurrentUser } from '../../shared/decorators/current-user.decorator';
+import { extractClientTimeInfo, getClientNow } from '../../shared/utils/client-time.util';
 
 @ApiTags('reports')
 @Controller('reports')
@@ -49,14 +51,17 @@ export class ReportsController {
   async generateReport(
     @CurrentUser() user: any,
     @Body() generateReportDto: GenerateReportDto,
+    @Req() req: Request,
     @Res() res: Response,
   ) {
+    const clientTimeInfo = extractClientTimeInfo(req);
     const result = await this.reportsService.generateReport(
       user.companyId,
       generateReportDto,
+      clientTimeInfo,
     );
 
-    const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+    const timestamp = getClientNow(clientTimeInfo).toISOString().replace(/[:.]/g, '-');
     const reportType = generateReportDto.reportType;
 
     // Set appropriate headers based on format

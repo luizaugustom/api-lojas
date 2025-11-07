@@ -9,6 +9,7 @@ import {
   UseGuards,
   Query,
   ParseIntPipe,
+  Req,
 } from '@nestjs/common';
 import {
   ApiTags,
@@ -17,6 +18,7 @@ import {
   ApiBearerAuth,
   ApiQuery,
 } from '@nestjs/swagger';
+import { Request } from 'express';
 import { CustomerService } from './customer.service';
 import { CreateCustomerDto } from './dto/create-customer.dto';
 import { UpdateCustomerDto } from './dto/update-customer.dto';
@@ -26,6 +28,7 @@ import { RolesGuard } from '../../shared/guards/roles.guard';
 import { Roles, UserRole } from '../../shared/decorators/roles.decorator';
 import { CurrentUser } from '../../shared/decorators/current-user.decorator';
 import { UuidValidationPipe } from '../../shared/pipes/uuid-validation.pipe';
+import { extractClientTimeInfo } from '../../shared/utils/client-time.util';
 
 @ApiTags('customer')
 @Controller('customer')
@@ -144,8 +147,10 @@ export class CustomerController {
     @Param('id', UuidValidationPipe) id: string,
     @Body() promotionalEmailDto: SendPromotionalEmailDto,
     @CurrentUser() user: any,
+    @Req() req: Request,
   ) {
-    return this.customerService.sendPromotionalEmail(id, promotionalEmailDto);
+    const clientTimeInfo = extractClientTimeInfo(req);
+    return this.customerService.sendPromotionalEmail(id, promotionalEmailDto, clientTimeInfo);
   }
 
   @Post(':id/send-sale-confirmation/:saleId')
@@ -157,8 +162,10 @@ export class CustomerController {
     @Param('id', UuidValidationPipe) id: string,
     @Param('saleId') saleId: string,
     @CurrentUser() user: any,
+    @Req() req: Request,
   ) {
-    return this.customerService.sendSaleConfirmationEmail(id, saleId);
+    const clientTimeInfo = extractClientTimeInfo(req);
+    return this.customerService.sendSaleConfirmationEmail(id, saleId, clientTimeInfo);
   }
 
   @Post('send-bulk-promotional-email')
@@ -168,8 +175,10 @@ export class CustomerController {
   sendBulkPromotionalEmail(
     @Body() bulkPromotionalEmailDto: SendBulkPromotionalEmailDto,
     @CurrentUser() user: any,
+    @Req() req: Request,
   ) {
-    return this.customerService.sendBulkPromotionalEmail(user.companyId, bulkPromotionalEmailDto);
+    const clientTimeInfo = extractClientTimeInfo(req);
+    return this.customerService.sendBulkPromotionalEmail(user.companyId, bulkPromotionalEmailDto, clientTimeInfo);
   }
 
   @Delete(':id')

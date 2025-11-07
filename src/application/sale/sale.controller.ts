@@ -29,6 +29,7 @@ import { RolesGuard } from '../../shared/guards/roles.guard';
 import { Roles, UserRole } from '../../shared/decorators/roles.decorator';
 import { CurrentUser } from '../../shared/decorators/current-user.decorator';
 import { UuidValidationPipe } from '../../shared/pipes/uuid-validation.pipe';
+import { extractClientTimeInfo } from '../../shared/utils/client-time.util';
 
 @ApiTags('sale')
 @Controller('sale')
@@ -54,8 +55,9 @@ export class SaleController {
     
     // Obter computerId do header (enviado pelo cliente desktop/web)
     const computerId = (req.headers['x-computer-id'] as string) || null;
+    const clientTimeInfo = extractClientTimeInfo(req);
     
-    return this.saleService.create(user.companyId, sellerId, createSaleDto, computerId);
+    return this.saleService.create(user.companyId, sellerId, createSaleDto, computerId, clientTimeInfo);
   }
 
   @Get()
@@ -169,7 +171,8 @@ export class SaleController {
     const companyId = user.role === UserRole.ADMIN ? undefined : user.companyId;
     // Obter computerId do header (enviado pelo cliente desktop/web)
     const computerId = (req.headers['x-computer-id'] as string) || null;
-    return this.saleService.reprintReceipt(id, companyId, computerId);
+    const clientTimeInfo = extractClientTimeInfo(req);
+    return this.saleService.reprintReceipt(id, companyId, computerId, clientTimeInfo);
   }
 
   @Get(':id/print-content')
@@ -180,9 +183,11 @@ export class SaleController {
   getPrintContent(
     @Param('id', UuidValidationPipe) id: string,
     @CurrentUser() user: any,
+    @Req() req: Request,
   ) {
     const companyId = user.role === UserRole.ADMIN ? undefined : user.companyId;
-    return this.saleService.getPrintContent(id, companyId);
+    const clientTimeInfo = extractClientTimeInfo(req);
+    return this.saleService.getPrintContent(id, companyId, clientTimeInfo);
   }
 
   @Patch(':id')

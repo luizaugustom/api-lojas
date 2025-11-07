@@ -9,6 +9,7 @@ import { CreateSaleDto } from './dto/create-sale.dto';
 import { UpdateSaleDto } from './dto/update-sale.dto';
 import { ProcessExchangeDto } from './dto/process-exchange.dto';
 import { PaymentMethodDto, PaymentMethod } from './dto/payment-method.dto';
+import { ClientTimeInfo, getClientNow } from '../../shared/utils/client-time.util';
 
 
 @Injectable()
@@ -24,7 +25,13 @@ export class SaleService {
     private readonly ibptService: IBPTService,
   ) {}
 
-  async create(companyId: string, sellerId: string, createSaleDto: CreateSaleDto, computerId?: string | null) {
+  async create(
+    companyId: string,
+    sellerId: string,
+    createSaleDto: CreateSaleDto,
+    computerId?: string | null,
+    clientTimeInfo?: ClientTimeInfo,
+  ) {
     try {
       // Validate products and calculate total
       let total = 0;
@@ -117,6 +124,8 @@ export class SaleService {
       const cashAmount = cashPayment ? cashPayment.amount : 0;
       const change = paymentDifference > 0 ? paymentDifference : 0;
 
+      const saleDate = getClientNow(clientTimeInfo);
+
       // Create sale with items in a transaction
       const result = await this.prisma.$transaction(async (tx) => {
         // Create sale
@@ -129,6 +138,7 @@ export class SaleService {
             isInstallment: hasInstallment,
             companyId,
             sellerId,
+            saleDate,
           },
         });
 
@@ -157,7 +167,7 @@ export class SaleService {
             }
           } catch (error) {
             this.logger.warn(`Data de vencimento inválida para venda ${sale.id}, usando data padrão`);
-            firstDueDate = new Date();
+            firstDueDate = new Date(getClientNow(clientTimeInfo));
             firstDueDate.setMonth(firstDueDate.getMonth() + 1);
           }
 
@@ -284,19 +294,22 @@ export class SaleService {
               name: completeSale.clientName || undefined,
               cpfCnpj: completeSale.clientCpfCnpj || undefined,
             } : undefined,
+            metadata: {
+              clientTimeInfo,
+            },
           };
 
           // Gerar conteúdo de impressão para retornar ao cliente
           let printContent: string | null = null;
           try {
-            printContent = await this.printerService.getNonFiscalReceiptContent(receiptData, true);
+            printContent = await this.printerService.getNonFiscalReceiptContent(receiptData, true, clientTimeInfo);
           } catch (generateError) {
             this.logger.warn('Erro ao gerar conteúdo de cupom não fiscal, continuando sem conteúdo:', generateError);
           }
 
           // Tentar imprimir no servidor (opcional)
           try {
-            const printResult = await this.printerService.printNonFiscalReceipt(receiptData, companyId, true, computerId);
+            const printResult = await this.printerService.printNonFiscalReceipt(receiptData, companyId, true, computerId, clientTimeInfo);
             if (!printResult.success) {
               this.logger.warn(`⚠️ Falha na impressão do cupom não fiscal no servidor para venda: ${completeSale.id}`);
               this.logger.warn(`Erro: ${printResult.error}`);
@@ -403,19 +416,22 @@ export class SaleService {
               cfop: item.product.cfop || '5102',
             })),
             customFooter: completeSale.company.customFooter,
+            metadata: {
+              clientTimeInfo,
+            },
           };
 
           // Gerar conteúdo de impressão para retornar ao cliente
           let printContent: string | null = null;
           try {
-            printContent = await this.printerService.generatePrintContent(nfcePrintData, companyId);
+            printContent = await this.printerService.generatePrintContent(nfcePrintData, companyId, clientTimeInfo);
           } catch (generateError) {
             this.logger.warn('Erro ao gerar conteúdo de impressão, continuando sem conteúdo:', generateError);
           }
 
           // Tentar imprimir no servidor (opcional, pode falhar se não houver impressora)
           try {
-            const printResult = await this.printerService.printNFCe(nfcePrintData, companyId, computerId);
+            const printResult = await this.printerService.printNFCe(nfcePrintData, companyId, computerId, clientTimeInfo);
             if (!printResult.success) {
               this.logger.warn(`⚠️ Falha na impressão no servidor para venda: ${completeSale.id}`);
               this.logger.warn(`Erro: ${printResult.error}`);
@@ -475,7 +491,8 @@ export class SaleService {
               customer.email,
               customer.name,
               completeSale,
-              customer.company.name
+              customer.company.name,
+              clientTimeInfo,
             );
             this.logger.log(`Sale confirmation email sent to customer: ${customer.email}`);
           }
@@ -852,7 +869,12 @@ export class SaleService {
     };
   }
 
-  async reprintReceipt(id: string, companyId?: string, computerId?: string | null) {
+  async reprintReceipt(
+    id: string,
+    companyId?: string,
+    computerId?: string | null,
+    clientTimeInfo?: ClientTimeInfo,
+  ) {
     // Buscar venda com todas as relações necessárias
     const sale = await this.prisma.sale.findUnique({
       where: { id },
@@ -928,19 +950,22 @@ export class SaleService {
               name: sale.clientName || undefined,
               cpfCnpj: sale.clientCpfCnpj || undefined,
             } : undefined,
+            metadata: {
+              clientTimeInfo,
+            },
           };
 
           // Gerar conteúdo de impressão para retornar ao cliente
           let printContent: string | null = null;
           try {
-            printContent = await this.printerService.getNonFiscalReceiptContent(receiptData, true);
+            printContent = await this.printerService.getNonFiscalReceiptContent(receiptData, true, clientTimeInfo);
           } catch (generateError) {
             this.logger.warn('Erro ao gerar conteúdo de cupom não fiscal para reprint, continuando sem conteúdo:', generateError);
           }
 
           // Tentar imprimir no servidor (opcional)
           try {
-            const printResult = await this.printerService.printNonFiscalReceipt(receiptData, sale.companyId, true, computerId);
+            const printResult = await this.printerService.printNonFiscalReceipt(receiptData, sale.companyId, true, computerId, clientTimeInfo);
             if (!printResult.success) {
               // Não falha se a impressão no servidor falhar, apenas registra
               this.logger.warn(`⚠️ Falha na reimpressão do cupom não fiscal no servidor para venda: ${sale.id}`);
@@ -1027,9 +1052,12 @@ export class SaleService {
             cfop: item.product.cfop || '5102',
           })),
           customFooter: sale.company.customFooter,
+          metadata: {
+            clientTimeInfo,
+          },
         };
 
-        const printResult = await this.printerService.printNFCe(nfcePrintData, sale.companyId, computerId);
+        const printResult = await this.printerService.printNFCe(nfcePrintData, sale.companyId, computerId, clientTimeInfo);
         
         if (!printResult.success) {
           const errorMessage = printResult.details?.reason || printResult.error || 'Erro ao reimprimir NFC-e';
@@ -1081,19 +1109,22 @@ export class SaleService {
             cfop: item.product.cfop || '5102',
           })),
           customFooter: sale.company.customFooter,
+          metadata: {
+            clientTimeInfo,
+          },
         };
 
                   // Gerar conteúdo de impressão para retornar ao cliente
           let printContent: string | null = null;
           try {
-            printContent = await this.printerService.generatePrintContent(nfcePrintData, sale.companyId);
+            printContent = await this.printerService.generatePrintContent(nfcePrintData, sale.companyId, clientTimeInfo);
           } catch (generateError) {
             this.logger.warn('Erro ao gerar conteúdo de impressão para reprint, continuando sem conteúdo:', generateError);
           }
 
           // Tentar imprimir no servidor (opcional)
           try {
-            const printResult = await this.printerService.printNFCe(nfcePrintData, sale.companyId, computerId);
+        const printResult = await this.printerService.printNFCe(nfcePrintData, sale.companyId, computerId, clientTimeInfo);
             if (!printResult.success) {
               // Não falha se a impressão no servidor falhar, apenas registra
               const errorMessage = printResult.details?.reason || printResult.error || 'Erro ao reimprimir NFC-e no servidor';
@@ -1128,7 +1159,11 @@ export class SaleService {
   /**
    * Gera conteúdo de impressão para venda (para impressão local no cliente)
    */
-  async getPrintContent(id: string, companyId?: string): Promise<{ content: string; isMock: boolean }> {
+  async getPrintContent(
+    id: string,
+    companyId?: string,
+    clientTimeInfo?: ClientTimeInfo,
+  ): Promise<{ content: string; isMock: boolean }> {
     // Buscar venda com todas as relações necessárias
     const sale = await this.prisma.sale.findUnique({
       where: { id },
@@ -1194,6 +1229,9 @@ export class SaleService {
             name: sale.clientName || undefined,
             cpfCnpj: sale.clientCpfCnpj || undefined,
           } : undefined,
+          metadata: {
+            clientTimeInfo,
+          },
         };
 
         const content = await this.printerService.getNFCeContent({
@@ -1216,7 +1254,10 @@ export class SaleService {
             unitPrice: item.unitPrice,
             totalPrice: item.totalPrice,
           })),
-        });
+          metadata: {
+            clientTimeInfo,
+          },
+        }, clientTimeInfo);
         
         return { content, isMock: true };
       }
@@ -1265,9 +1306,12 @@ export class SaleService {
           cfop: item.product.cfop || '5102',
         })),
         customFooter: sale.company.customFooter,
+        metadata: {
+          clientTimeInfo,
+        },
       };
 
-      const content = await this.printerService.getNFCeContent(nfcePrintData);
+      const content = await this.printerService.getNFCeContent(nfcePrintData, clientTimeInfo);
       return { content, isMock: isMocked };
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Erro desconhecido';

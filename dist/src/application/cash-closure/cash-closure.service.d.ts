@@ -3,13 +3,14 @@ import { PrismaService } from '../../infrastructure/database/prisma.service';
 import { PrinterService, CashClosureReportData, PrintResult } from '../printer/printer.service';
 import { CreateCashClosureDto } from './dto/create-cash-closure.dto';
 import { CloseCashClosureDto } from './dto/close-cash-closure.dto';
+import { ClientTimeInfo } from '../../shared/utils/client-time.util';
 export declare class CashClosureService {
     private readonly prisma;
     private readonly printerService;
     private readonly logger;
     constructor(prisma: PrismaService, printerService: PrinterService);
     private parseClientDate;
-    create(companyId: string, createCashClosureDto: CreateCashClosureDto, sellerId?: string): Promise<{
+    create(companyId: string, createCashClosureDto: CreateCashClosureDto, sellerId?: string, clientTimeInfo?: ClientTimeInfo): Promise<{
         company: {
             id: string;
             name: string;
@@ -160,7 +161,7 @@ export declare class CashClosureService {
         isClosed: boolean;
         sellerId: string | null;
     }>;
-    close(companyId: string, closeCashClosureDto: CloseCashClosureDto, sellerId?: string, computerId?: string | null): Promise<{
+    close(companyId: string, closeCashClosureDto: CloseCashClosureDto, sellerId?: string, computerId?: string | null, clientTimeInfo?: ClientTimeInfo): Promise<{
         closure: {
             id: string;
             openingDate: Date;
@@ -254,7 +255,7 @@ export declare class CashClosureService {
         limit: number;
         totalPages: number;
     }>;
-    reprintReport(id: string, companyId?: string, computerId?: string | null, includeSaleDetails?: boolean): Promise<{
+    reprintReport(id: string, companyId?: string, computerId?: string | null, includeSaleDetails?: boolean, clientTimeInfo?: ClientTimeInfo): Promise<{
         closure: {
             id: string;
             openingDate: Date;
@@ -298,7 +299,7 @@ export declare class CashClosureService {
         includeSaleDetails: boolean;
         closureId: string;
     }>;
-    getReportContent(id: string, companyId?: string, includeSaleDetails?: boolean): Promise<{
+    getReportContent(id: string, companyId?: string, includeSaleDetails?: boolean, clientTimeInfo?: ClientTimeInfo): Promise<{
         closure: {
             id: string;
             openingDate: Date;

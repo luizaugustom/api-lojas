@@ -24,6 +24,7 @@ const roles_guard_1 = require("../../shared/guards/roles.guard");
 const roles_decorator_1 = require("../../shared/decorators/roles.decorator");
 const current_user_decorator_1 = require("../../shared/decorators/current-user.decorator");
 const uuid_validation_pipe_1 = require("../../shared/pipes/uuid-validation.pipe");
+const client_time_util_1 = require("../../shared/utils/client-time.util");
 let SaleController = class SaleController {
     constructor(saleService) {
         this.saleService = saleService;
@@ -34,7 +35,8 @@ let SaleController = class SaleController {
             throw new common_1.BadRequestException('Vendedor é obrigatório');
         }
         const computerId = req.headers['x-computer-id'] || null;
-        return this.saleService.create(user.companyId, sellerId, createSaleDto, computerId);
+        const clientTimeInfo = (0, client_time_util_1.extractClientTimeInfo)(req);
+        return this.saleService.create(user.companyId, sellerId, createSaleDto, computerId, clientTimeInfo);
     }
     findAll(user, page = 1, limit = 10, sellerId, startDate, endDate) {
         const companyId = user.role === roles_decorator_1.UserRole.ADMIN ? undefined : user.companyId;
@@ -61,11 +63,13 @@ let SaleController = class SaleController {
     reprintReceipt(id, user, req) {
         const companyId = user.role === roles_decorator_1.UserRole.ADMIN ? undefined : user.companyId;
         const computerId = req.headers['x-computer-id'] || null;
-        return this.saleService.reprintReceipt(id, companyId, computerId);
+        const clientTimeInfo = (0, client_time_util_1.extractClientTimeInfo)(req);
+        return this.saleService.reprintReceipt(id, companyId, computerId, clientTimeInfo);
     }
-    getPrintContent(id, user) {
+    getPrintContent(id, user, req) {
         const companyId = user.role === roles_decorator_1.UserRole.ADMIN ? undefined : user.companyId;
-        return this.saleService.getPrintContent(id, companyId);
+        const clientTimeInfo = (0, client_time_util_1.extractClientTimeInfo)(req);
+        return this.saleService.getPrintContent(id, companyId, clientTimeInfo);
     }
     update(id, updateSaleDto, user) {
         const companyId = user.role === roles_decorator_1.UserRole.ADMIN ? undefined : user.companyId;
@@ -204,8 +208,9 @@ __decorate([
     (0, swagger_1.ApiResponse)({ status: 400, description: 'ID inválido ou erro ao gerar conteúdo' }),
     __param(0, (0, common_1.Param)('id', uuid_validation_pipe_1.UuidValidationPipe)),
     __param(1, (0, current_user_decorator_1.CurrentUser)()),
+    __param(2, (0, common_1.Req)()),
     __metadata("design:type", Function),
-    __metadata("design:paramtypes", [String, Object]),
+    __metadata("design:paramtypes", [String, Object, Object]),
     __metadata("design:returntype", void 0)
 ], SaleController.prototype, "getPrintContent", null);
 __decorate([

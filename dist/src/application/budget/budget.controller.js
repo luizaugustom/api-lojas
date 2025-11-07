@@ -22,6 +22,7 @@ const jwt_auth_guard_1 = require("../../shared/guards/jwt-auth.guard");
 const roles_guard_1 = require("../../shared/guards/roles.guard");
 const roles_decorator_1 = require("../../shared/decorators/roles.decorator");
 const current_user_decorator_1 = require("../../shared/decorators/current-user.decorator");
+const client_time_util_1 = require("../../shared/utils/client-time.util");
 let BudgetController = class BudgetController {
     constructor(budgetService) {
         this.budgetService = budgetService;
@@ -57,12 +58,14 @@ let BudgetController = class BudgetController {
     async print(user, id, req) {
         const companyId = user.role === roles_decorator_1.UserRole.COMPANY ? user.id : user.companyId;
         const computerId = req.headers['x-computer-id'] || null;
-        return this.budgetService.printBudget(id, companyId, computerId);
+        const clientTimeInfo = (0, client_time_util_1.extractClientTimeInfo)(req);
+        return this.budgetService.printBudget(id, companyId, computerId, clientTimeInfo);
     }
-    async generatePdf(user, id, res) {
+    async generatePdf(user, id, req, res) {
         const companyId = user.role === roles_decorator_1.UserRole.COMPANY ? user.id : user.companyId;
         const budget = await this.budgetService.findOne(id, companyId);
-        const pdfBuffer = await this.budgetService.generatePdf(id, companyId);
+        const clientTimeInfo = (0, client_time_util_1.extractClientTimeInfo)(req);
+        const pdfBuffer = await this.budgetService.generatePdf(id, companyId, clientTimeInfo);
         res.setHeader('Content-Type', 'application/pdf');
         res.setHeader('Content-Disposition', `attachment; filename="orcamento-${budget.budgetNumber}.pdf"`);
         return res.status(common_1.HttpStatus.OK).send(pdfBuffer);
@@ -195,9 +198,10 @@ __decorate([
     }),
     __param(0, (0, current_user_decorator_1.CurrentUser)()),
     __param(1, (0, common_1.Param)('id')),
-    __param(2, (0, common_1.Res)()),
+    __param(2, (0, common_1.Req)()),
+    __param(3, (0, common_1.Res)()),
     __metadata("design:type", Function),
-    __metadata("design:paramtypes", [Object, String, Object]),
+    __metadata("design:paramtypes", [Object, String, Object, Object]),
     __metadata("design:returntype", Promise)
 ], BudgetController.prototype, "generatePdf", null);
 __decorate([

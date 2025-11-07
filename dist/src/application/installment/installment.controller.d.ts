@@ -2,6 +2,7 @@ import { InstallmentService } from './installment.service';
 import { CreateInstallmentDto } from './dto/create-installment.dto';
 import { UpdateInstallmentDto } from './dto/update-installment.dto';
 import { PayInstallmentDto } from './dto/pay-installment.dto';
+import { BulkPayInstallmentsDto } from './dto/bulk-pay-installments.dto';
 export declare class InstallmentController {
     private readonly installmentService;
     constructor(installmentService: InstallmentService);
@@ -272,6 +273,19 @@ export declare class InstallmentController {
             installmentId: string;
         };
         message: string;
+    }>;
+    bulkPay(customerId: string, bulkPayInstallmentsDto: BulkPayInstallmentsDto, user: any): Promise<{
+        message: string;
+        customerId: string;
+        totalPaid: number;
+        payments: {
+            installmentId: string;
+            amountPaid: number;
+            remainingAmount: number;
+            isPaid: boolean;
+            dueDate: Date | null;
+            message: string;
+        }[];
     }>;
     remove(id: string, user: any): Promise<{
         message: string;

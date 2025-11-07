@@ -24,6 +24,7 @@ const roles_guard_1 = require("../../shared/guards/roles.guard");
 const roles_decorator_1 = require("../../shared/decorators/roles.decorator");
 const current_user_decorator_1 = require("../../shared/decorators/current-user.decorator");
 const uuid_validation_pipe_1 = require("../../shared/pipes/uuid-validation.pipe");
+const client_time_util_1 = require("../../shared/utils/client-time.util");
 let CustomerController = class CustomerController {
     constructor(customerService) {
         this.customerService = customerService;
@@ -67,14 +68,17 @@ let CustomerController = class CustomerController {
         }
         return this.customerService.update(id, updateCustomerDto, user.companyId);
     }
-    sendPromotionalEmail(id, promotionalEmailDto, user) {
-        return this.customerService.sendPromotionalEmail(id, promotionalEmailDto);
+    sendPromotionalEmail(id, promotionalEmailDto, user, req) {
+        const clientTimeInfo = (0, client_time_util_1.extractClientTimeInfo)(req);
+        return this.customerService.sendPromotionalEmail(id, promotionalEmailDto, clientTimeInfo);
     }
-    sendSaleConfirmationEmail(id, saleId, user) {
-        return this.customerService.sendSaleConfirmationEmail(id, saleId);
+    sendSaleConfirmationEmail(id, saleId, user, req) {
+        const clientTimeInfo = (0, client_time_util_1.extractClientTimeInfo)(req);
+        return this.customerService.sendSaleConfirmationEmail(id, saleId, clientTimeInfo);
     }
-    sendBulkPromotionalEmail(bulkPromotionalEmailDto, user) {
-        return this.customerService.sendBulkPromotionalEmail(user.companyId, bulkPromotionalEmailDto);
+    sendBulkPromotionalEmail(bulkPromotionalEmailDto, user, req) {
+        const clientTimeInfo = (0, client_time_util_1.extractClientTimeInfo)(req);
+        return this.customerService.sendBulkPromotionalEmail(user.companyId, bulkPromotionalEmailDto, clientTimeInfo);
     }
     remove(id, user) {
         if (user.role === roles_decorator_1.UserRole.ADMIN) {
@@ -178,8 +182,9 @@ __decorate([
     __param(0, (0, common_1.Param)('id', uuid_validation_pipe_1.UuidValidationPipe)),
     __param(1, (0, common_1.Body)()),
     __param(2, (0, current_user_decorator_1.CurrentUser)()),
+    __param(3, (0, common_1.Req)()),
     __metadata("design:type", Function),
-    __metadata("design:paramtypes", [String, send_email_dto_1.SendPromotionalEmailDto, Object]),
+    __metadata("design:paramtypes", [String, send_email_dto_1.SendPromotionalEmailDto, Object, Object]),
     __metadata("design:returntype", void 0)
 ], CustomerController.prototype, "sendPromotionalEmail", null);
 __decorate([
@@ -191,8 +196,9 @@ __decorate([
     __param(0, (0, common_1.Param)('id', uuid_validation_pipe_1.UuidValidationPipe)),
     __param(1, (0, common_1.Param)('saleId')),
     __param(2, (0, current_user_decorator_1.CurrentUser)()),
+    __param(3, (0, common_1.Req)()),
     __metadata("design:type", Function),
-    __metadata("design:paramtypes", [String, String, Object]),
+    __metadata("design:paramtypes", [String, String, Object, Object]),
     __metadata("design:returntype", void 0)
 ], CustomerController.prototype, "sendSaleConfirmationEmail", null);
 __decorate([
@@ -202,8 +208,9 @@ __decorate([
     (0, swagger_1.ApiResponse)({ status: 200, description: 'Emails promocionais enviados' }),
     __param(0, (0, common_1.Body)()),
     __param(1, (0, current_user_decorator_1.CurrentUser)()),
+    __param(2, (0, common_1.Req)()),
     __metadata("design:type", Function),
-    __metadata("design:paramtypes", [send_email_dto_1.SendBulkPromotionalEmailDto, Object]),
+    __metadata("design:paramtypes", [send_email_dto_1.SendBulkPromotionalEmailDto, Object, Object]),
     __metadata("design:returntype", void 0)
 ], CustomerController.prototype, "sendBulkPromotionalEmail", null);
 __decorate([
