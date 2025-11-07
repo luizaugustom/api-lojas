@@ -280,9 +280,14 @@ export class SellerService {
       throw new NotFoundException('Vendedor não encontrado');
     }
 
+    const saleWhere: any = { sellerId: id };
+    if (companyId) {
+      saleWhere.companyId = companyId;
+    }
+
     // Calculate total sales value
     const totalSalesAggregate = await this.prisma.sale.aggregate({
-      where: { sellerId: id },
+      where: saleWhere,
       _sum: {
         total: true,
       },
@@ -295,7 +300,7 @@ export class SellerService {
 
     const monthlySales = await this.prisma.sale.aggregate({
       where: {
-        sellerId: id,
+        ...saleWhere,
         saleDate: {
           gte: startOfMonth,
         },
@@ -308,6 +313,90 @@ export class SellerService {
       },
     });
 
+    // Sales trend for last 30 days
+    const startOfPeriod = new Date();
+    startOfPeriod.setDate(startOfPeriod.getDate() - 30);
+    startOfPeriod.setHours(0, 0, 0, 0);
+
+    const salesInPeriod = await this.prisma.sale.findMany({
+      where: {
+        ...saleWhere,
+        saleDate: {
+          gte: startOfPeriod,
+        },
+      },
+      select: {
+        saleDate: true,
+        total: true,
+      },
+      orderBy: {
+        saleDate: 'asc',
+      },
+    });
+
+    const salesByDateMap = new Map<string, { total: number; revenue: number }>();
+    for (const sale of salesInPeriod) {
+      const dateKey = sale.saleDate.toISOString().split('T')[0];
+      const entry = salesByDateMap.get(dateKey) ?? { total: 0, revenue: 0 };
+      entry.total += 1;
+      entry.revenue += Number(sale.total || 0);
+      salesByDateMap.set(dateKey, entry);
+    }
+
+    const salesByPeriod = Array.from(salesByDateMap.entries())
+      .sort(([dateA], [dateB]) => dateA.localeCompare(dateB))
+      .map(([date, data]) => ({
+        date,
+        total: data.total,
+        revenue: Number(data.revenue),
+      }));
+
+    // Top products sold by the seller (last 30 days)
+    const topProductsRaw = await this.prisma.saleItem.groupBy({
+      by: ['productId'],
+      where: {
+        sale: {
+          ...saleWhere,
+          saleDate: {
+            gte: startOfPeriod,
+          },
+        },
+      },
+      _sum: {
+        quantity: true,
+        totalPrice: true,
+      },
+      orderBy: {
+        _sum: {
+          quantity: 'desc',
+        },
+      },
+      take: 5,
+    });
+
+    const productIds = topProductsRaw.map((item) => item.productId);
+    const products = productIds.length
+      ? await this.prisma.product.findMany({
+          where: {
+            id: {
+              in: productIds,
+            },
+          },
+          select: {
+            id: true,
+            name: true,
+          },
+        })
+      : [];
+    const productNameMap = new Map(products.map((product) => [product.id, product.name]));
+
+    const topProducts = topProductsRaw.map((item) => ({
+      productId: item.productId,
+      productName: productNameMap.get(item.productId) ?? 'Produto desconhecido',
+      quantity: item._sum.quantity ?? 0,
+      revenue: Number(item._sum.totalPrice ?? 0),
+    }));
+
     const totalSalesCount = seller._count.sales;
     const totalRevenue = Number(totalSalesAggregate._sum.total || 0);
     const averageSaleValue = totalSalesCount > 0 ? totalRevenue / totalSalesCount : 0;
@@ -318,6 +407,8 @@ export class SellerService {
       averageSaleValue: averageSaleValue,
       monthlySales: monthlySales._count.id,
       monthlySalesValue: Number(monthlySales._sum.total || 0),
+      salesByPeriod,
+      topProducts,
     };
   }
 
