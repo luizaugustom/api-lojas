@@ -38,6 +38,16 @@ export class CloseCashClosureDto {
   printReport?: boolean;
 
   @ApiProperty({
+    description: 'Indica se o relatório deve incluir os detalhes de cada venda',
+    example: false,
+    required: false,
+    default: false,
+  })
+  @IsOptional()
+  @IsBoolean()
+  includeSaleDetails?: boolean;
+
+  @ApiProperty({
     description: 'Data e hora de fechamento informada pelo dispositivo do usuário (ISO8601)',
     example: '2025-11-07T18:15:00-03:00',
     required: false,

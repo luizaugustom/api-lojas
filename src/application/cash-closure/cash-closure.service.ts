@@ -62,6 +62,10 @@ type SaleWithDetails = Prisma.SaleGetPayload<{
   };
 }>;
 
+interface BuildReportOptions {
+  includeSaleDetails?: boolean;
+}
+
 
 @Injectable()
 export class CashClosureService {
@@ -351,6 +355,7 @@ export class CashClosureService {
       const closingAmount = Number(closeCashClosureDto.closingAmount ?? 0);
       const shouldPrint = closeCashClosureDto.printReport ?? false;
       const closingDate = this.parseClientDate(closeCashClosureDto.closingDate) ?? new Date();
+      const includeSaleDetails = closeCashClosureDto.includeSaleDetails ?? false;
 
       const updatedClosure = await this.prisma.cashClosure.update({
         where: { id: existingClosure.id },
@@ -364,7 +369,7 @@ export class CashClosureService {
         include: CASH_CLOSURE_REPORT_INCLUDE,
       }) as CashClosureWithDetails;
 
-      const reportData = await this.buildCashClosureReportData(updatedClosure);
+      const reportData = await this.buildCashClosureReportData(updatedClosure, { includeSaleDetails });
       const reportContent = this.printerService.generateCashClosureReportContent(reportData);
       let printResult: PrintResult | null = null;
 
@@ -539,7 +544,7 @@ export class CashClosureService {
     const closures = await Promise.all(
       closuresRaw.map(async (closure) => {
         const detailedClosure = closure as CashClosureWithDetails;
-        const reportData = await this.buildCashClosureReportData(detailedClosure);
+        const reportData = await this.buildCashClosureReportData(detailedClosure, { includeSaleDetails: false });
         const summary = this.buildClosureSummary(detailedClosure, reportData);
 
         return {
@@ -558,7 +563,12 @@ export class CashClosureService {
     };
   }
 
-  async reprintReport(id: string, companyId?: string, computerId?: string | null) {
+  async reprintReport(
+    id: string,
+    companyId?: string,
+    computerId?: string | null,
+    includeSaleDetails: boolean = false,
+  ) {
     try {
       const closure = await this.loadClosureWithDetails(id, companyId);
 
@@ -566,7 +576,7 @@ export class CashClosureService {
         throw new BadRequestException('Não é possível imprimir relatório de fechamento em aberto');
       }
 
-      const reportData = await this.buildCashClosureReportData(closure);
+      const reportData = await this.buildCashClosureReportData(closure, { includeSaleDetails });
       const reportContent = this.printerService.generateCashClosureReportContent(reportData);
       const printResult = await this.printerService.printCashClosureReport(
         reportData,
@@ -600,14 +610,14 @@ export class CashClosureService {
     }
   }
 
-  async getReportContent(id: string, companyId?: string) {
+  async getReportContent(id: string, companyId?: string, includeSaleDetails: boolean = false) {
     const closure = await this.loadClosureWithDetails(id, companyId);
 
     if (!closure.isClosed) {
       throw new BadRequestException('O relatório completo só fica disponível após o fechamento do caixa');
     }
 
-    const reportData = await this.buildCashClosureReportData(closure);
+    const reportData = await this.buildCashClosureReportData(closure, { includeSaleDetails });
     const reportContent = this.printerService.generateCashClosureReportContent(reportData);
     const summary = this.buildClosureSummary(closure, reportData);
 
@@ -696,7 +706,11 @@ export class CashClosureService {
     return parts.join(' - ');
   }
 
-  private async buildCashClosureReportData(closure: CashClosureWithDetails): Promise<CashClosureReportData> {
+  private async buildCashClosureReportData(
+    closure: CashClosureWithDetails,
+    options: BuildReportOptions = {},
+  ): Promise<CashClosureReportData> {
+    const includeSaleDetails = options.includeSaleDetails ?? true;
     const sales = await this.fetchSalesForClosure(closure);
 
     const totalChange = sales.reduce((sum, sale) => sum + Number(sale.change || 0), 0);
@@ -758,7 +772,9 @@ export class CashClosureService {
 
     const sellers = Array.from(sellersMap.values()).map((seller) => ({
       ...seller,
-      sales: seller.sales.sort((a, b) => a.date.getTime() - b.date.getTime()),
+      sales: (includeSaleDetails
+        ? seller.sales.sort((a, b) => a.date.getTime() - b.date.getTime())
+        : []),
     })).sort((a, b) => b.totalSales - a.totalSales);
 
     const totalCashSales = paymentSummary.find((entry) => entry.method === 'cash')?.total || 0;
@@ -792,10 +808,14 @@ export class CashClosureService {
       },
       paymentSummary,
       sellers,
+      includeSaleDetails,
     };
   }
 
-  private buildClosureSummary(closure: CashClosureWithDetails, reportData: CashClosureReportData) {
+  private buildClosureSummary(
+    closure: CashClosureWithDetails,
+    reportData: CashClosureReportData,
+  ) {
     return {
       id: closure.id,
       openingDate: closure.openingDate,
@@ -811,6 +831,7 @@ export class CashClosureService {
       difference: reportData.closure.difference,
       salesCount: reportData.closure.salesCount,
       seller: reportData.closure.seller,
+      includeSaleDetails: reportData.includeSaleDetails,
     };
   }
 }

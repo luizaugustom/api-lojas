@@ -124,6 +124,7 @@ export interface CashClosureReportData {
       }>;
     }>;
   }>;
+  includeSaleDetails: boolean;
 }
 
 export interface PrintResult {
@@ -791,7 +792,7 @@ export class PrinterService {
   }
 
   private generateCashClosureReport(data: CashClosureReportData): string {
-    const { company, closure, paymentSummary, sellers } = data;
+    const { company, closure, paymentSummary, sellers, includeSaleDetails } = data;
 
     let report = '';
 
@@ -847,32 +848,37 @@ export class PrinterService {
       });
     }
 
-    // Detalhamento por vendedor e venda
-    sellers.forEach((seller) => {
-      report += '\n' + this.centerText('--------------------------------') + '\n';
-      report += this.centerText(`Vendedor: ${seller.name}`) + '\n';
-      report += `Total vendido: ${this.formatCurrency(seller.totalSales)}\n`;
-      report += `Troco concedido: ${this.formatCurrency(seller.totalChange)}\n`;
-      report += `Vendas registradas: ${seller.sales.length}\n`;
-      report += this.centerText('--------------------------------') + '\n';
-
-      seller.sales.forEach((sale, index) => {
-        report += `#${(index + 1).toString().padStart(2, '0')} ${this.formatDate(sale.date)}\n`;
-        report += `Venda: ${sale.id}\n`;
-        report += `Total: ${this.formatCurrency(sale.total)}\n`;
-        if (sale.clientName) {
-          report += `Cliente: ${sale.clientName}\n`;
-        }
-        report += 'Pagamentos:\n';
-        sale.paymentMethods.forEach((payment) => {
-          report += `  - ${this.getPaymentMethodName(payment.method)}: ${this.formatCurrency(payment.amount)}\n`;
-        });
-        if (sale.change > 0) {
-          report += `  Troco: ${this.formatCurrency(sale.change)}\n`;
-        }
+    if (includeSaleDetails) {
+      // Detalhamento por vendedor e venda
+      sellers.forEach((seller) => {
+        report += '\n' + this.centerText('--------------------------------') + '\n';
+        report += this.centerText(`Vendedor: ${seller.name}`) + '\n';
+        report += `Total vendido: ${this.formatCurrency(seller.totalSales)}\n`;
+        report += `Troco concedido: ${this.formatCurrency(seller.totalChange)}\n`;
+        report += `Vendas registradas: ${seller.sales.length}\n`;
         report += this.centerText('--------------------------------') + '\n';
+
+        seller.sales.forEach((sale, index) => {
+          report += `#${(index + 1).toString().padStart(2, '0')} ${this.formatDate(sale.date)}\n`;
+          report += `Venda: ${sale.id}\n`;
+          report += `Total: ${this.formatCurrency(sale.total)}\n`;
+          if (sale.clientName) {
+            report += `Cliente: ${sale.clientName}\n`;
+          }
+          report += 'Pagamentos:\n';
+          sale.paymentMethods.forEach((payment) => {
+            report += `  - ${this.getPaymentMethodName(payment.method)}: ${this.formatCurrency(payment.amount)}\n`;
+          });
+          if (sale.change > 0) {
+            report += `  Troco: ${this.formatCurrency(sale.change)}\n`;
+          }
+          report += this.centerText('--------------------------------') + '\n';
+        });
       });
-    });
+    } else {
+      report += '\nDETALHES INDIVIDUAIS NÃO INCLUÍDOS NESTE RELATÓRIO\n';
+      report += this.centerText('--------------------------------') + '\n';
+    }
 
     // Rodapé
     report += this.centerText('RELATÓRIO GERADO EM:') + '\n';

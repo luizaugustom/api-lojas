@@ -22,6 +22,7 @@ import {
 import { CashClosureService } from './cash-closure.service';
 import { CreateCashClosureDto } from './dto/create-cash-closure.dto';
 import { CloseCashClosureDto } from './dto/close-cash-closure.dto';
+import { ReprintCashClosureDto } from './dto/reprint-cash-closure.dto';
 import { JwtAuthGuard } from '../../shared/guards/jwt-auth.guard';
 import { RolesGuard } from '../../shared/guards/roles.guard';
 import { Roles, UserRole } from '../../shared/decorators/roles.decorator';
@@ -139,12 +140,14 @@ export class CashClosureController {
     @Param('id', UuidValidationPipe) id: string,
     @CurrentUser() user: any,
     @Req() req: Request,
+    @Body() reprintDto: ReprintCashClosureDto,
   ) {
     const computerId = (req.headers['x-computer-id'] as string) || null;
+    const includeSaleDetails = reprintDto?.includeSaleDetails ?? false;
     if (user.role === UserRole.ADMIN) {
-      return this.cashClosureService.reprintReport(id, undefined, computerId);
+      return this.cashClosureService.reprintReport(id, undefined, computerId, includeSaleDetails);
     }
-    return this.cashClosureService.reprintReport(id, user.companyId, computerId);
+    return this.cashClosureService.reprintReport(id, user.companyId, computerId, includeSaleDetails);
   }
 
   @Get(':id/print-content')
@@ -154,10 +157,12 @@ export class CashClosureController {
   getPrintContent(
     @Param('id', UuidValidationPipe) id: string,
     @CurrentUser() user: any,
+    @Query('includeSaleDetails', new ParseBoolPipe({ optional: true })) includeSaleDetails?: boolean,
   ) {
+    const includeDetails = includeSaleDetails ?? false;
     if (user.role === UserRole.ADMIN) {
-      return this.cashClosureService.getReportContent(id);
+      return this.cashClosureService.getReportContent(id, undefined, includeDetails);
     }
-    return this.cashClosureService.getReportContent(id, user.companyId);
+    return this.cashClosureService.getReportContent(id, user.companyId, includeDetails);
   }
 }
