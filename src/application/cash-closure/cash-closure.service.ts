@@ -60,6 +60,20 @@ export class CashClosureService {
     private readonly printerService: PrinterService,
   ) {}
 
+  private parseClientDate(value?: string): Date | undefined {
+    if (!value) {
+      return undefined;
+    }
+
+    const parsed = new Date(value);
+    if (Number.isNaN(parsed.getTime())) {
+      this.logger.warn(`Data inválida recebida do cliente: ${value}`);
+      return undefined;
+    }
+
+    return parsed;
+  }
+
   async create(companyId: string, createCashClosureDto: CreateCashClosureDto, sellerId?: string) {
     try {
       // Se vendedor foi passado, verificar se tem caixa individual
@@ -92,9 +106,13 @@ export class CashClosureService {
         throw new BadRequestException(msg);
       }
 
+      const openingDate = this.parseClientDate(createCashClosureDto.openingDate);
+      const openingAmount = Number(createCashClosureDto.openingAmount ?? 0);
+
       const cashClosure = await this.prisma.cashClosure.create({
         data: {
-          ...createCashClosureDto,
+          openingAmount,
+          ...(openingDate ? { openingDate } : {}),
           companyId,
           sellerId: targetSellerId,
         },
@@ -314,14 +332,15 @@ export class CashClosureService {
       }
 
       const totalSales = existingClosure.sales.reduce((sum, sale) => sum + Number(sale.total), 0);
-      const totalWithdrawals = closeCashClosureDto.withdrawals ?? 0;
-      const closingAmount = closeCashClosureDto.closingAmount ?? 0;
+      const totalWithdrawals = Number(closeCashClosureDto.withdrawals ?? 0);
+      const closingAmount = Number(closeCashClosureDto.closingAmount ?? 0);
       const shouldPrint = closeCashClosureDto.printReport ?? false;
+      const closingDate = this.parseClientDate(closeCashClosureDto.closingDate) ?? new Date();
 
       const updatedClosure = await this.prisma.cashClosure.update({
         where: { id: existingClosure.id },
         data: {
-          closingDate: new Date(),
+          closingDate,
           totalSales,
           totalWithdrawals,
           closingAmount,
@@ -460,19 +479,13 @@ export class CashClosureService {
   }
 
   async getClosureHistory(companyId: string, page = 1, limit = 10) {
-    const [closures, total] = await Promise.all([
+    const [closuresRaw, total] = await Promise.all([
       this.prisma.cashClosure.findMany({
         where: {
           companyId,
           isClosed: true,
         },
-        include: {
-          _count: {
-            select: {
-              sales: true,
-            },
-          },
-        },
+        include: CASH_CLOSURE_REPORT_INCLUDE,
         orderBy: {
           closingDate: 'desc',
         },
@@ -486,6 +499,17 @@ export class CashClosureService {
         },
       }),
     ]);
+
+    const closures = closuresRaw.map((closure) => {
+      const detailedClosure = closure as CashClosureWithDetails;
+      const reportData = this.buildCashClosureReportData(detailedClosure);
+      const summary = this.buildClosureSummary(detailedClosure, reportData);
+
+      return {
+        ...summary,
+        reportData,
+      };
+    });
 
     return {
       closures,

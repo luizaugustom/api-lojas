@@ -60,6 +60,17 @@ let CashClosureService = CashClosureService_1 = class CashClosureService {
         this.printerService = printerService;
         this.logger = new common_1.Logger(CashClosureService_1.name);
     }
+    parseClientDate(value) {
+        if (!value) {
+            return undefined;
+        }
+        const parsed = new Date(value);
+        if (Number.isNaN(parsed.getTime())) {
+            this.logger.warn(`Data inválida recebida do cliente: ${value}`);
+            return undefined;
+        }
+        return parsed;
+    }
     async create(companyId, createCashClosureDto, sellerId) {
         try {
             let targetSellerId = null;
@@ -85,9 +96,12 @@ let CashClosureService = CashClosureService_1 = class CashClosureService {
                     : 'Já existe um fechamento de caixa compartilhado aberto';
                 throw new common_1.BadRequestException(msg);
             }
+            const openingDate = this.parseClientDate(createCashClosureDto.openingDate);
+            const openingAmount = Number(createCashClosureDto.openingAmount ?? 0);
             const cashClosure = await this.prisma.cashClosure.create({
                 data: {
-                    ...createCashClosureDto,
+                    openingAmount,
+                    ...(openingDate ? { openingDate } : {}),
                     companyId,
                     sellerId: targetSellerId,
                 },
@@ -279,13 +293,14 @@ let CashClosureService = CashClosureService_1 = class CashClosureService {
                 throw new common_1.NotFoundException('Não há fechamento de caixa aberto');
             }
             const totalSales = existingClosure.sales.reduce((sum, sale) => sum + Number(sale.total), 0);
-            const totalWithdrawals = closeCashClosureDto.withdrawals ?? 0;
-            const closingAmount = closeCashClosureDto.closingAmount ?? 0;
+            const totalWithdrawals = Number(closeCashClosureDto.withdrawals ?? 0);
+            const closingAmount = Number(closeCashClosureDto.closingAmount ?? 0);
             const shouldPrint = closeCashClosureDto.printReport ?? false;
+            const closingDate = this.parseClientDate(closeCashClosureDto.closingDate) ?? new Date();
             const updatedClosure = await this.prisma.cashClosure.update({
                 where: { id: existingClosure.id },
                 data: {
-                    closingDate: new Date(),
+                    closingDate,
                     totalSales,
                     totalWithdrawals,
                     closingAmount,
@@ -396,19 +411,13 @@ let CashClosureService = CashClosureService_1 = class CashClosureService {
         };
     }
     async getClosureHistory(companyId, page = 1, limit = 10) {
-        const [closures, total] = await Promise.all([
+        const [closuresRaw, total] = await Promise.all([
             this.prisma.cashClosure.findMany({
                 where: {
                     companyId,
                     isClosed: true,
                 },
-                include: {
-                    _count: {
-                        select: {
-                            sales: true,
-                        },
-                    },
-                },
+                include: CASH_CLOSURE_REPORT_INCLUDE,
                 orderBy: {
                     closingDate: 'desc',
                 },
@@ -422,6 +431,15 @@ let CashClosureService = CashClosureService_1 = class CashClosureService {
                 },
             }),
         ]);
+        const closures = closuresRaw.map((closure) => {
+            const detailedClosure = closure;
+            const reportData = this.buildCashClosureReportData(detailedClosure);
+            const summary = this.buildClosureSummary(detailedClosure, reportData);
+            return {
+                ...summary,
+                reportData,
+            };
+        });
         return {
             closures,
             total,

@@ -29,4 +29,14 @@ __decorate([
     (0, class_transformer_1.Type)(() => Number),
     __metadata("design:type", Number)
 ], CreateCashClosureDto.prototype, "openingAmount", void 0);
+__decorate([
+    (0, swagger_1.ApiProperty)({
+        description: 'Data e hora de abertura informada pelo dispositivo do usuário (ISO8601)',
+        example: '2025-11-07T08:00:00-03:00',
+        required: false,
+    }),
+    (0, class_validator_1.IsOptional)(),
+    (0, class_validator_1.IsISO8601)(),
+    __metadata("design:type", String)
+], CreateCashClosureDto.prototype, "openingDate", void 0);
 //# sourceMappingURL=create-cash-closure.dto.js.map

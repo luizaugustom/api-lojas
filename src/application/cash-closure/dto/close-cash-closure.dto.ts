@@ -1,5 +1,5 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { IsOptional, IsNumber, Min, IsBoolean } from 'class-validator';
+import { IsOptional, IsNumber, Min, IsBoolean, IsISO8601 } from 'class-validator';
 import { Type } from 'class-transformer';
 
 export class CloseCashClosureDto {
@@ -36,4 +36,13 @@ export class CloseCashClosureDto {
   @IsOptional()
   @IsBoolean()
   printReport?: boolean;
+
+  @ApiProperty({
+    description: 'Data e hora de fechamento informada pelo dispositivo do usuário (ISO8601)',
+    example: '2025-11-07T18:15:00-03:00',
+    required: false,
+  })
+  @IsOptional()
+  @IsISO8601()
+  closingDate?: string;
 }

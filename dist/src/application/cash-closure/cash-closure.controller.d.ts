@@ -125,24 +125,26 @@ export declare class CashClosureController {
         message?: undefined;
     }>;
     getHistory(user: any, page?: number, limit?: number): Promise<{
-        closures: ({
-            _count: {
-                sales: number;
-            };
-        } & {
+        closures: {
+            reportData: import("../printer/printer.service").CashClosureReportData;
             id: string;
-            createdAt: Date;
-            updatedAt: Date;
-            companyId: string;
             openingDate: Date;
-            closingDate: Date | null;
-            openingAmount: import("@prisma/client/runtime/library").Decimal;
-            closingAmount: import("@prisma/client/runtime/library").Decimal;
-            totalSales: import("@prisma/client/runtime/library").Decimal;
-            totalWithdrawals: import("@prisma/client/runtime/library").Decimal;
+            closingDate: Date;
             isClosed: boolean;
-            sellerId: string | null;
-        })[];
+            openingAmount: number;
+            closingAmount: number;
+            totalSales: number;
+            totalWithdrawals: number;
+            totalChange: number;
+            totalCashSales: number;
+            expectedClosing: number;
+            difference: number;
+            salesCount: number;
+            seller: {
+                id: string;
+                name: string;
+            };
+        }[];
         total: number;
         page: number;
         limit: number;

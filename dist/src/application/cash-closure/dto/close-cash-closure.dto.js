@@ -53,4 +53,14 @@ __decorate([
     (0, class_validator_1.IsBoolean)(),
     __metadata("design:type", Boolean)
 ], CloseCashClosureDto.prototype, "printReport", void 0);
+__decorate([
+    (0, swagger_1.ApiProperty)({
+        description: 'Data e hora de fechamento informada pelo dispositivo do usuário (ISO8601)',
+        example: '2025-11-07T18:15:00-03:00',
+        required: false,
+    }),
+    (0, class_validator_1.IsOptional)(),
+    (0, class_validator_1.IsISO8601)(),
+    __metadata("design:type", String)
+], CloseCashClosureDto.prototype, "closingDate", void 0);
 //# sourceMappingURL=close-cash-closure.dto.js.map

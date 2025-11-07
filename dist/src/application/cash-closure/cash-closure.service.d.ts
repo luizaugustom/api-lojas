@@ -8,6 +8,7 @@ export declare class CashClosureService {
     private readonly printerService;
     private readonly logger;
     constructor(prisma: PrismaService, printerService: PrinterService);
+    private parseClientDate;
     create(companyId: string, createCashClosureDto: CreateCashClosureDto, sellerId?: string): Promise<{
         company: {
             id: string;
@@ -225,24 +226,26 @@ export declare class CashClosureService {
         message?: undefined;
     }>;
     getClosureHistory(companyId: string, page?: number, limit?: number): Promise<{
-        closures: ({
-            _count: {
-                sales: number;
-            };
-        } & {
+        closures: {
+            reportData: CashClosureReportData;
             id: string;
-            createdAt: Date;
-            updatedAt: Date;
-            companyId: string;
             openingDate: Date;
-            closingDate: Date | null;
-            openingAmount: Prisma.Decimal;
-            closingAmount: Prisma.Decimal;
-            totalSales: Prisma.Decimal;
-            totalWithdrawals: Prisma.Decimal;
+            closingDate: Date;
             isClosed: boolean;
-            sellerId: string | null;
-        })[];
+            openingAmount: number;
+            closingAmount: number;
+            totalSales: number;
+            totalWithdrawals: number;
+            totalChange: number;
+            totalCashSales: number;
+            expectedClosing: number;
+            difference: number;
+            salesCount: number;
+            seller: {
+                id: string;
+                name: string;
+            };
+        }[];
         total: number;
         page: number;
         limit: number;
