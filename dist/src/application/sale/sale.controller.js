@@ -88,7 +88,8 @@ let SaleController = class SaleController {
         return this.saleService.findOne(id, companyId);
     }
     processExchange(user, processExchangeDto) {
-        return this.saleService.processExchange(user.companyId, processExchangeDto);
+        const processedById = user.role === roles_decorator_1.UserRole.SELLER ? user.id : undefined;
+        return this.saleService.processExchange(user.companyId, processExchangeDto, processedById);
     }
     reprintReceipt(id, user, req) {
         const companyId = user.role === roles_decorator_1.UserRole.ADMIN ? undefined : user.companyId;

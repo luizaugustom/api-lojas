@@ -24,8 +24,11 @@ export declare class FiscalController {
             createdAt: Date;
             updatedAt: Date;
             companyId: string;
+            metadata: import("@prisma/client/runtime/library").JsonValue | null;
+            origin: string;
+            saleId: string | null;
             documentNumber: string;
-            accessKey: string;
+            accessKey: string | null;
             status: string;
             xmlContent: string | null;
             pdfUrl: string | null;
@@ -36,6 +39,7 @@ export declare class FiscalController {
             protocol: string | null;
             serieNumber: string | null;
             emissionDate: Date;
+            productExchangeId: string | null;
         })[];
         total: number;
         page: number;
@@ -97,8 +101,11 @@ export declare class FiscalController {
         createdAt: Date;
         updatedAt: Date;
         companyId: string;
+        metadata: import("@prisma/client/runtime/library").JsonValue | null;
+        origin: string;
+        saleId: string | null;
         documentNumber: string;
-        accessKey: string;
+        accessKey: string | null;
         status: string;
         xmlContent: string | null;
         pdfUrl: string | null;
@@ -109,6 +116,7 @@ export declare class FiscalController {
         protocol: string | null;
         serieNumber: string | null;
         emissionDate: Date;
+        productExchangeId: string | null;
     }>;
     getFiscalDocument(id: string, user: any): Promise<{
         company: {
@@ -121,8 +129,11 @@ export declare class FiscalController {
         createdAt: Date;
         updatedAt: Date;
         companyId: string;
+        metadata: import("@prisma/client/runtime/library").JsonValue | null;
+        origin: string;
+        saleId: string | null;
         documentNumber: string;
-        accessKey: string;
+        accessKey: string | null;
         status: string;
         xmlContent: string | null;
         pdfUrl: string | null;
@@ -133,6 +144,7 @@ export declare class FiscalController {
         protocol: string | null;
         serieNumber: string | null;
         emissionDate: Date;
+        productExchangeId: string | null;
     }>;
     downloadFiscalDocument(id: string, format: 'xml' | 'pdf', user: any, res: Response): Promise<void | Response<any, Record<string, any>>>;
     getDownloadInfo(id: string, user: any): Promise<{
@@ -149,8 +161,11 @@ export declare class FiscalController {
         createdAt: Date;
         updatedAt: Date;
         companyId: string;
+        metadata: import("@prisma/client/runtime/library").JsonValue | null;
+        origin: string;
+        saleId: string | null;
         documentNumber: string;
-        accessKey: string;
+        accessKey: string | null;
         status: string;
         xmlContent: string | null;
         pdfUrl: string | null;
@@ -161,6 +176,7 @@ export declare class FiscalController {
         protocol: string | null;
         serieNumber: string | null;
         emissionDate: Date;
+        productExchangeId: string | null;
     }>;
     deleteInboundInvoice(id: string, user: any): Promise<{
         message: string;

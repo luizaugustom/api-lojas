@@ -33,22 +33,39 @@ export interface NFeData {
     };
     additionalInfo?: string;
 }
+export interface NFCeItemData {
+    productId: string;
+    productName: string;
+    barcode: string;
+    quantity: number;
+    unitPrice: number;
+    totalPrice: number;
+    ncm?: string;
+    cfop?: string;
+    unitOfMeasure?: string;
+}
+export interface NFCePaymentData {
+    method: string;
+    amount: number;
+}
 export interface NFCeData {
     companyId: string;
     clientCpfCnpj?: string;
     clientName?: string;
-    items: Array<{
-        productId: string;
-        productName: string;
-        barcode: string;
-        quantity: number;
-        unitPrice: number;
-        totalPrice: number;
-    }>;
+    items: NFCeItemData[];
     totalValue: number;
-    paymentMethod: string[];
+    payments: NFCePaymentData[];
     saleId: string;
     sellerName: string;
+    apiReference?: string;
+    operationNature?: string;
+    emissionPurpose?: number;
+    referenceAccessKey?: string;
+    documentType?: number;
+    additionalInfo?: string;
+    productExchangeId?: string;
+    source?: string;
+    metadata?: Record<string, any>;
 }
 export interface NFSeData {
     companyId: string;
@@ -83,8 +100,11 @@ export declare class FiscalService {
             createdAt: Date;
             updatedAt: Date;
             companyId: string;
+            metadata: import("@prisma/client/runtime/library").JsonValue | null;
+            origin: string;
+            saleId: string | null;
             documentNumber: string;
-            accessKey: string;
+            accessKey: string | null;
             status: string;
             xmlContent: string | null;
             pdfUrl: string | null;
@@ -95,6 +115,7 @@ export declare class FiscalService {
             protocol: string | null;
             serieNumber: string | null;
             emissionDate: Date;
+            productExchangeId: string | null;
         })[];
         total: number;
         page: number;
@@ -112,8 +133,11 @@ export declare class FiscalService {
         createdAt: Date;
         updatedAt: Date;
         companyId: string;
+        metadata: import("@prisma/client/runtime/library").JsonValue | null;
+        origin: string;
+        saleId: string | null;
         documentNumber: string;
-        accessKey: string;
+        accessKey: string | null;
         status: string;
         xmlContent: string | null;
         pdfUrl: string | null;
@@ -124,14 +148,18 @@ export declare class FiscalService {
         protocol: string | null;
         serieNumber: string | null;
         emissionDate: Date;
+        productExchangeId: string | null;
     }>;
     cancelFiscalDocument(id: string, reason: string, companyId?: string): Promise<{
         id: string;
         createdAt: Date;
         updatedAt: Date;
         companyId: string;
+        metadata: import("@prisma/client/runtime/library").JsonValue | null;
+        origin: string;
+        saleId: string | null;
         documentNumber: string;
-        accessKey: string;
+        accessKey: string | null;
         status: string;
         xmlContent: string | null;
         pdfUrl: string | null;
@@ -142,6 +170,7 @@ export declare class FiscalService {
         protocol: string | null;
         serieNumber: string | null;
         emissionDate: Date;
+        productExchangeId: string | null;
     }>;
     downloadFiscalDocument(id: string, format: 'xml' | 'pdf', companyId?: string): Promise<{
         content: string;
@@ -190,8 +219,11 @@ export declare class FiscalService {
         createdAt: Date;
         updatedAt: Date;
         companyId: string;
+        metadata: import("@prisma/client/runtime/library").JsonValue | null;
+        origin: string;
+        saleId: string | null;
         documentNumber: string;
-        accessKey: string;
+        accessKey: string | null;
         status: string;
         xmlContent: string | null;
         pdfUrl: string | null;
@@ -202,6 +234,7 @@ export declare class FiscalService {
         protocol: string | null;
         serieNumber: string | null;
         emissionDate: Date;
+        productExchangeId: string | null;
     }>;
     getFiscalApiStatus(): Promise<any>;
     uploadCertificate(certificatePath: string, password: string): Promise<boolean>;
@@ -242,6 +275,7 @@ export declare class FiscalService {
         supplierName?: string;
         totalValue?: number;
         documentNumber?: string;
+        pdfUrl?: string | null;
     }): Promise<{
         id: string;
         documentNumber: string;

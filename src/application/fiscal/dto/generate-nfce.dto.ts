@@ -8,6 +8,7 @@ export enum PaymentMethod {
   CASH = 'cash',
   PIX = 'pix',
   INSTALLMENT = 'installment',
+  STORE_CREDIT = 'store_credit',
 }
 
 export class NFCeItemDto {
@@ -61,6 +62,26 @@ export class NFCeItemDto {
   @Min(0)
   @Type(() => Number)
   totalPrice: number;
+}
+
+export class NFCePaymentDto {
+  @ApiProperty({
+    description: 'Método de pagamento',
+    enum: PaymentMethod,
+    example: PaymentMethod.CASH,
+  })
+  @IsEnum(PaymentMethod)
+  method: PaymentMethod;
+
+  @ApiProperty({
+    description: 'Valor pago com este método',
+    example: 150.0,
+    minimum: 0,
+  })
+  @IsNumber()
+  @Min(0)
+  @Type(() => Number)
+  amount: number;
 }
 
 export class GenerateNFCeDto {
@@ -121,8 +142,55 @@ export class GenerateNFCeDto {
     enum: PaymentMethod,
     isArray: true,
   })
+  @IsOptional()
   @IsArray()
   @IsEnum(PaymentMethod, { each: true })
-  paymentMethod: PaymentMethod[];
+  paymentMethod?: PaymentMethod[];
+
+  @ApiProperty({
+    description: 'Pagamentos detalhados com valores',
+    type: [NFCePaymentDto],
+    required: false,
+  })
+  @IsOptional()
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => NFCePaymentDto)
+  payments?: NFCePaymentDto[];
+
+  @ApiProperty({
+    description: 'Informações adicionais para a NFC-e',
+    required: false,
+  })
+  @IsOptional()
+  @IsString()
+  additionalInfo?: string;
+
+  @ApiProperty({
+    description: 'Natureza da operação',
+    required: false,
+    example: 'Venda de mercadorias',
+  })
+  @IsOptional()
+  @IsString()
+  operationNature?: string;
+
+  @ApiProperty({
+    description: 'Finalidade da emissão (1=normal, 4=devolução, etc.)',
+    required: false,
+    example: 1,
+  })
+  @IsOptional()
+  @IsNumber()
+  @Type(() => Number)
+  emissionPurpose?: number;
+
+  @ApiProperty({
+    description: 'Chave de acesso da NFC-e referenciada (para devoluções)',
+    required: false,
+  })
+  @IsOptional()
+  @IsString()
+  referenceAccessKey?: string;
 }
 

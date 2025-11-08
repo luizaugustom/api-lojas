@@ -194,7 +194,8 @@ export class SaleController {
     @CurrentUser() user: any,
     @Body() processExchangeDto: ProcessExchangeDto,
   ) {
-    return this.saleService.processExchange(user.companyId, processExchangeDto);
+    const processedById = user.role === UserRole.SELLER ? user.id : undefined;
+    return this.saleService.processExchange(user.companyId, processExchangeDto, processedById);
   }
 
   @Post(':id/reprint')

@@ -44,22 +44,41 @@ export interface NFeData {
   additionalInfo?: string;
 }
 
+export interface NFCeItemData {
+  productId: string;
+  productName: string;
+  barcode: string;
+  quantity: number;
+  unitPrice: number;
+  totalPrice: number;
+  ncm?: string;
+  cfop?: string;
+  unitOfMeasure?: string;
+}
+
+export interface NFCePaymentData {
+  method: string;
+  amount: number;
+}
+
 export interface NFCeData {
   companyId: string;
   clientCpfCnpj?: string;
   clientName?: string;
-  items: Array<{
-    productId: string;
-    productName: string;
-    barcode: string;
-    quantity: number;
-    unitPrice: number;
-    totalPrice: number;
-  }>;
+  items: NFCeItemData[];
   totalValue: number;
-  paymentMethod: string[];
+  payments: NFCePaymentData[];
   saleId: string;
   sellerName: string;
+  apiReference?: string;
+  operationNature?: string;
+  emissionPurpose?: number;
+  referenceAccessKey?: string;
+  documentType?: number;
+  additionalInfo?: string;
+  productExchangeId?: string;
+  source?: string;
+  metadata?: Record<string, any>;
 }
 
 export interface NFSeData {
@@ -356,6 +375,10 @@ export class FiscalService {
         this.validationService.validateCPFOrCNPJ(nfceData.clientCpfCnpj);
       }
 
+      const payments = nfceData.payments?.length
+        ? nfceData.payments
+        : [{ method: 'cash', amount: nfceData.totalValue }];
+
       // Prepare NFCe request for fiscal API
       const nfceRequest: NFCeRequest = {
         companyId: nfceData.companyId,
@@ -368,13 +391,19 @@ export class FiscalService {
           quantity: item.quantity,
           unitPrice: item.unitPrice,
           totalPrice: item.totalPrice,
-          ncm: '99999999', // Default NCM - should be configured per product
-          cfop: '5102', // Default CFOP for internal sales
+          ncm: item.ncm || '99999999', // Default NCM - should be configured per product
+          cfop: item.cfop || '5102', // Default CFOP for internal sales
+          unitOfMeasure: item.unitOfMeasure || 'UN',
         })),
         totalValue: nfceData.totalValue,
-        paymentMethod: nfceData.paymentMethod,
-        saleId: nfceData.saleId,
+        payments: payments,
+        saleId: nfceData.apiReference ?? nfceData.saleId,
         sellerName: nfceData.sellerName,
+        operationNature: nfceData.operationNature,
+        emissionPurpose: nfceData.emissionPurpose,
+        referenceAccessKey: nfceData.referenceAccessKey,
+        documentType: nfceData.documentType,
+        additionalInfo: nfceData.additionalInfo,
       };
 
       // Call fiscal API
@@ -394,6 +423,11 @@ export class FiscalService {
           xmlContent: fiscalResponse.xmlContent,
           pdfUrl: fiscalResponse.pdfUrl,
           companyId: nfceData.companyId,
+          saleId: nfceData.saleId,
+          productExchangeId: nfceData.productExchangeId,
+          origin: nfceData.source ?? 'SALE',
+          metadata: nfceData.metadata ? nfceData.metadata : undefined,
+          totalValue: nfceData.totalValue,
         },
       });
 
@@ -1063,6 +1097,7 @@ startxref
       supplierName?: string;
       totalValue?: number;
       documentNumber?: string;
+      pdfUrl?: string | null;
     }
   ) {
     try {
@@ -1140,6 +1175,10 @@ startxref
 
       if (data.documentNumber !== undefined) {
         updateData.documentNumber = data.documentNumber;
+      }
+
+      if (data.pdfUrl !== undefined) {
+        updateData.pdfUrl = data.pdfUrl || null;
       }
 
       if (Object.keys(updateData).length === 0) {

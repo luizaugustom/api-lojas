@@ -233,6 +233,9 @@ let FiscalService = FiscalService_1 = class FiscalService {
             if (nfceData.clientCpfCnpj) {
                 this.validationService.validateCPFOrCNPJ(nfceData.clientCpfCnpj);
             }
+            const payments = nfceData.payments?.length
+                ? nfceData.payments
+                : [{ method: 'cash', amount: nfceData.totalValue }];
             const nfceRequest = {
                 companyId: nfceData.companyId,
                 clientCpfCnpj: nfceData.clientCpfCnpj,
@@ -244,13 +247,19 @@ let FiscalService = FiscalService_1 = class FiscalService {
                     quantity: item.quantity,
                     unitPrice: item.unitPrice,
                     totalPrice: item.totalPrice,
-                    ncm: '99999999',
-                    cfop: '5102',
+                    ncm: item.ncm || '99999999',
+                    cfop: item.cfop || '5102',
+                    unitOfMeasure: item.unitOfMeasure || 'UN',
                 })),
                 totalValue: nfceData.totalValue,
-                paymentMethod: nfceData.paymentMethod,
-                saleId: nfceData.saleId,
+                payments: payments,
+                saleId: nfceData.apiReference ?? nfceData.saleId,
                 sellerName: nfceData.sellerName,
+                operationNature: nfceData.operationNature,
+                emissionPurpose: nfceData.emissionPurpose,
+                referenceAccessKey: nfceData.referenceAccessKey,
+                documentType: nfceData.documentType,
+                additionalInfo: nfceData.additionalInfo,
             };
             const fiscalResponse = await this.fiscalApiService.generateNFCe(nfceRequest);
             if (!fiscalResponse.success) {
@@ -265,6 +274,11 @@ let FiscalService = FiscalService_1 = class FiscalService {
                     xmlContent: fiscalResponse.xmlContent,
                     pdfUrl: fiscalResponse.pdfUrl,
                     companyId: nfceData.companyId,
+                    saleId: nfceData.saleId,
+                    productExchangeId: nfceData.productExchangeId,
+                    origin: nfceData.source ?? 'SALE',
+                    metadata: nfceData.metadata ? nfceData.metadata : undefined,
+                    totalValue: nfceData.totalValue,
                 },
             });
             this.logger.log(`NFCe generated successfully: ${fiscalDocument.id}`);
@@ -839,21 +853,33 @@ startxref
             }
             const updateData = {};
             if (data.accessKey !== undefined) {
-                if (data.accessKey) {
-                    const existingDocument = await this.prisma.fiscalDocument.findFirst({
-                        where: {
-                            accessKey: data.accessKey,
-                            companyId: companyId,
-                            id: { not: id }
-                        }
-                    });
-                    if (existingDocument) {
-                        throw new common_1.BadRequestException('Já existe uma nota fiscal com esta chave de acesso');
+                if (data.accessKey === null) {
+                    this.logger.warn(`Inbound invoice ${id} received null accessKey. Ignoring change to preserve existing value.`);
+                }
+                else if (typeof data.accessKey === 'string') {
+                    const trimmedAccessKey = data.accessKey.trim();
+                    if (trimmedAccessKey.length === 0) {
+                        this.logger.log(`Inbound invoice ${id} accessKey provided as empty string. Keeping current value.`);
                     }
-                    updateData.accessKey = data.accessKey;
+                    else {
+                        if (!/^\d{44}$/.test(trimmedAccessKey)) {
+                            throw new common_1.BadRequestException('Chave de acesso deve conter 44 dígitos numéricos');
+                        }
+                        const existingDocument = await this.prisma.fiscalDocument.findFirst({
+                            where: {
+                                accessKey: trimmedAccessKey,
+                                companyId: companyId,
+                                id: { not: id }
+                            }
+                        });
+                        if (existingDocument) {
+                            throw new common_1.BadRequestException('Já existe uma nota fiscal com esta chave de acesso');
+                        }
+                        updateData.accessKey = trimmedAccessKey;
+                    }
                 }
                 else {
-                    updateData.accessKey = null;
+                    this.logger.warn(`Inbound invoice ${id} received accessKey with unsupported type (${typeof data.accessKey}). Ignoring.`);
                 }
             }
             if (data.supplierName !== undefined) {
@@ -864,6 +890,9 @@ startxref
             }
             if (data.documentNumber !== undefined) {
                 updateData.documentNumber = data.documentNumber;
+            }
+            if (data.pdfUrl !== undefined) {
+                updateData.pdfUrl = data.pdfUrl || null;
             }
             if (Object.keys(updateData).length === 0) {
                 throw new common_1.BadRequestException('Nenhum dado informado para atualização');

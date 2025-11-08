@@ -35,6 +35,22 @@ enum DataPeriodFilter {
   THIS_WEEK
 }
 
+enum ExchangeStatus {
+  PENDING
+  COMPLETED
+  CANCELLED
+}
+
+enum ExchangeItemType {
+  RETURNED
+  DELIVERED
+}
+
+enum ExchangePaymentType {
+  PAYMENT
+  REFUND
+}
+
 model Admin {
   id        String   @id @default(uuid())
   login     String   @unique
@@ -95,6 +111,7 @@ model Company {
   sellers         Seller[]
   products        Product[]
   sales           Sale[]
+  productExchanges ProductExchange[]
   customers       Customer[]
   billsToPay      BillToPay[]
   cashClosures    CashClosure[]
@@ -147,6 +164,7 @@ model Product {
   company         Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
   saleItems       SaleItem[]
   productExchanges ProductExchange[]
+  exchangeItems   ProductExchangeItem[]
   budgetItems     BudgetItem[]
   @@map("products")
 }
@@ -171,6 +189,7 @@ model Sale {
   cashClosureId   String?
   cashClosure     CashClosure? @relation(fields: [cashClosureId], references: [id])
   installments    Installment[]
+  fiscalDocuments FiscalDocument[]
   @@map("sales")
 }
 
@@ -195,6 +214,7 @@ model SaleItem {
   sale        Sale @relation(fields: [saleId], references: [id], onDelete: Cascade)
   productId   String
   product     Product @relation(fields: [productId], references: [id])
+  exchangeItems ProductExchangeItem[]
   @@map("sale_items")
 }
 
@@ -255,17 +275,60 @@ model CashClosure {
 }
 
 model ProductExchange {
-  id              String   @id @default(uuid())
-  reason          String
-  exchangeDate    DateTime @default(now())
-  originalQuantity Int
-  exchangedQuantity Int
-  createdAt       DateTime @default(now())
-  originalSaleId  String
-  originalSale    Sale @relation(fields: [originalSaleId], references: [id], onDelete: Cascade)
-  productId       String
-  product         Product @relation(fields: [productId], references: [id])
+  id             String   @id @default(uuid())
+  reason         String
+  note           String?
+  exchangeDate   DateTime @default(now())
+  returnedTotal  Decimal  @default(0) @db.Decimal(10, 2)
+  deliveredTotal Decimal  @default(0) @db.Decimal(10, 2)
+  difference     Decimal  @default(0) @db.Decimal(10, 2)
+  storeCreditAmount Decimal @default(0) @db.Decimal(10, 2)
+  status         ExchangeStatus @default(COMPLETED)
+  createdAt      DateTime @default(now())
+
+  companyId      String
+  company        Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  originalSaleId String
+  originalSale   Sale @relation(fields: [originalSaleId], references: [id], onDelete: Cascade)
+  processedById  String?
+  processedBy    Seller? @relation(fields: [processedById], references: [id])
+  items          ProductExchangeItem[]
+  payments       ProductExchangePayment[]
+  fiscalDocuments FiscalDocument[]
+
   @@map("product_exchanges")
+}
+
+model ProductExchangeItem {
+  id         String            @id @default(uuid())
+  type       ExchangeItemType
+  quantity   Int
+  unitPrice  Decimal           @db.Decimal(10, 2)
+  totalPrice Decimal           @db.Decimal(10, 2)
+  createdAt  DateTime          @default(now())
+
+  exchangeId String
+  exchange   ProductExchange   @relation(fields: [exchangeId], references: [id], onDelete: Cascade)
+  productId  String
+  product    Product           @relation(fields: [productId], references: [id])
+  saleItemId String?
+  saleItem   SaleItem?         @relation(fields: [saleItemId], references: [id], onDelete: SetNull)
+
+  @@map("product_exchange_items")
+}
+
+model ProductExchangePayment {
+  id             String              @id @default(uuid())
+  type           ExchangePaymentType
+  method         String
+  amount         Decimal             @db.Decimal(10, 2)
+  additionalInfo String?
+  createdAt      DateTime            @default(now())
+
+  exchangeId     String
+  exchange       ProductExchange     @relation(fields: [exchangeId], references: [id], onDelete: Cascade)
+
+  @@map("product_exchange_payments")
 }
 
 model FiscalDocument {
@@ -286,6 +349,12 @@ model FiscalDocument {
   updatedAt       DateTime @updatedAt
   companyId       String
   company         Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  origin          String   @default("GENERIC")
+  metadata        Json?
+  saleId          String?
+  sale            Sale?   @relation(fields: [saleId], references: [id], onDelete: SetNull)
+  productExchangeId String?
+  productExchange   ProductExchange? @relation(fields: [productExchangeId], references: [id], onDelete: SetNull)
   @@map("fiscal_documents")
 }
 

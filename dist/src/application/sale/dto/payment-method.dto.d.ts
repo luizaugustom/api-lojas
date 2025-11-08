@@ -3,7 +3,8 @@ export declare enum PaymentMethod {
     DEBIT_CARD = "debit_card",
     CASH = "cash",
     PIX = "pix",
-    INSTALLMENT = "installment"
+    INSTALLMENT = "installment",
+    STORE_CREDIT = "store_credit"
 }
 export declare class PaymentMethodDto {
     method: PaymentMethod;

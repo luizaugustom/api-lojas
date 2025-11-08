@@ -21,11 +21,20 @@ export interface NFCeRequest {
         totalPrice: number;
         ncm?: string;
         cfop?: string;
+        unitOfMeasure?: string;
     }>;
     totalValue: number;
-    paymentMethod: string[];
+    payments: Array<{
+        method: string;
+        amount: number;
+    }>;
     saleId: string;
     sellerName: string;
+    operationNature?: string;
+    emissionPurpose?: number;
+    referenceAccessKey?: string;
+    documentType?: number;
+    additionalInfo?: string;
 }
 export interface NFCeResponse {
     success: boolean;

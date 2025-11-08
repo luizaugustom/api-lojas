@@ -55,15 +55,42 @@ let FiscalController = class FiscalController {
         return this.fiscalService.generateNFSe(nfseData);
     }
     async generateNFCe(user, generateNFCeDto) {
+        const normalizedPayments = (generateNFCeDto.payments ?? [])
+            .map((payment) => ({
+            method: payment.method,
+            amount: Number(payment.amount ?? 0),
+        }))
+            .filter((payment) => payment.amount > 0);
+        const paymentMethodsFromDto = generateNFCeDto.paymentMethod ?? [];
+        const methodsFallback = paymentMethodsFromDto.length > 0 ? paymentMethodsFromDto : [generate_nfce_dto_1.PaymentMethod.CASH];
+        const payments = normalizedPayments.length
+            ? normalizedPayments
+            : methodsFallback.map((method, index) => ({
+                method,
+                amount: index === 0 ? Number(generateNFCeDto.totalValue) : 0,
+            }));
+        const totalPayments = payments.reduce((sum, payment) => sum + payment.amount, 0);
+        const diff = Math.round((generateNFCeDto.totalValue - totalPayments) * 100) / 100;
+        if (Math.abs(diff) > 0.01) {
+            payments[0].amount = Math.max(0, payments[0].amount + diff);
+        }
+        const normalizedPaymentsOutput = payments.map((payment) => ({
+            method: payment.method,
+            amount: Math.max(0, Math.round(payment.amount * 100) / 100),
+        }));
         const nfceData = {
             companyId: user.companyId,
             clientCpfCnpj: generateNFCeDto.clientCpfCnpj,
             clientName: generateNFCeDto.clientName,
             items: generateNFCeDto.items,
             totalValue: generateNFCeDto.totalValue,
-            paymentMethod: generateNFCeDto.paymentMethod,
             saleId: generateNFCeDto.saleId,
             sellerName: generateNFCeDto.sellerName,
+            payments: normalizedPaymentsOutput,
+            additionalInfo: generateNFCeDto.additionalInfo,
+            operationNature: generateNFCeDto.operationNature,
+            emissionPurpose: generateNFCeDto.emissionPurpose,
+            referenceAccessKey: generateNFCeDto.referenceAccessKey,
         };
         return this.fiscalService.generateNFCe(nfceData);
     }

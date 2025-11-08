@@ -17,6 +17,7 @@ export declare class SaleController {
             stateRegistration: string;
             customFooter: string;
             state: string;
+            city: string;
             district: string;
             street: string;
         };
@@ -32,6 +33,7 @@ export declare class SaleController {
                 price: import("@prisma/client/runtime/library").Decimal;
                 ncm: string;
                 cfop: string;
+                unitOfMeasure: string;
             };
         } & {
             id: string;
@@ -173,6 +175,78 @@ export declare class SaleController {
         salesByPaymentMethod: {};
     }>;
     findOne(id: string, user: any): Promise<{
+        exchanges: {
+            id: string;
+            reason: string;
+            note: string;
+            exchangeDate: Date;
+            returnedTotal: number;
+            deliveredTotal: number;
+            difference: number;
+            storeCreditAmount: number;
+            status: import(".prisma/client").$Enums.ExchangeStatus;
+            processedBy: {
+                id: string;
+                name: string;
+            };
+            returnedItems: any[];
+            deliveredItems: any[];
+            payments: {
+                id: string;
+                method: string;
+                amount: number;
+                additionalInfo: string;
+                createdAt: Date;
+            }[];
+            refunds: {
+                id: string;
+                method: string;
+                amount: number;
+                additionalInfo: string;
+                createdAt: Date;
+            }[];
+            createdAt: Date;
+            fiscalDocuments: {
+                id: string;
+                documentType: string;
+                origin: string;
+                documentNumber: string;
+                accessKey: string;
+                status: string;
+                totalValue: number;
+                pdfUrl: string;
+                qrCodeUrl: string;
+                createdAt: Date;
+                metadata: Record<string, any>;
+            }[];
+            returnFiscalDocument: {
+                id: string;
+                documentType: string;
+                origin: string;
+                documentNumber: string;
+                accessKey: string;
+                status: string;
+                totalValue: number;
+                pdfUrl: string;
+                qrCodeUrl: string;
+                createdAt: Date;
+                metadata: Record<string, any>;
+            };
+            deliveryFiscalDocument: {
+                id: string;
+                documentType: string;
+                origin: string;
+                documentNumber: string;
+                accessKey: string;
+                status: string;
+                totalValue: number;
+                pdfUrl: string;
+                qrCodeUrl: string;
+                createdAt: Date;
+                metadata: Record<string, any>;
+            };
+            fiscalWarnings: any[];
+        }[];
         company: {
             id: string;
             name: string;
@@ -206,23 +280,6 @@ export declare class SaleController {
             saleId: string;
             additionalInfo: string | null;
         }[];
-        exchanges: ({
-            product: {
-                id: string;
-                name: string;
-                barcode: string;
-            };
-        } & {
-            id: string;
-            createdAt: Date;
-            productId: string;
-            originalSaleId: string;
-            reason: string;
-            exchangeDate: Date;
-            originalQuantity: number;
-            exchangedQuantity: number;
-        })[];
-    } & {
         id: string;
         createdAt: Date;
         updatedAt: Date;
@@ -238,13 +295,75 @@ export declare class SaleController {
     }>;
     processExchange(user: any, processExchangeDto: ProcessExchangeDto): Promise<{
         id: string;
-        createdAt: Date;
-        productId: string;
-        originalSaleId: string;
         reason: string;
+        note: string;
         exchangeDate: Date;
-        originalQuantity: number;
-        exchangedQuantity: number;
+        returnedTotal: number;
+        deliveredTotal: number;
+        difference: number;
+        storeCreditAmount: number;
+        status: import(".prisma/client").$Enums.ExchangeStatus;
+        processedBy: {
+            id: string;
+            name: string;
+        };
+        returnedItems: any[];
+        deliveredItems: any[];
+        payments: {
+            id: string;
+            method: string;
+            amount: number;
+            additionalInfo: string;
+            createdAt: Date;
+        }[];
+        refunds: {
+            id: string;
+            method: string;
+            amount: number;
+            additionalInfo: string;
+            createdAt: Date;
+        }[];
+        createdAt: Date;
+        fiscalDocuments: {
+            id: string;
+            documentType: string;
+            origin: string;
+            documentNumber: string;
+            accessKey: string;
+            status: string;
+            totalValue: number;
+            pdfUrl: string;
+            qrCodeUrl: string;
+            createdAt: Date;
+            metadata: Record<string, any>;
+        }[];
+        returnFiscalDocument: {
+            id: string;
+            documentType: string;
+            origin: string;
+            documentNumber: string;
+            accessKey: string;
+            status: string;
+            totalValue: number;
+            pdfUrl: string;
+            qrCodeUrl: string;
+            createdAt: Date;
+            metadata: Record<string, any>;
+        };
+        deliveryFiscalDocument: {
+            id: string;
+            documentType: string;
+            origin: string;
+            documentNumber: string;
+            accessKey: string;
+            status: string;
+            totalValue: number;
+            pdfUrl: string;
+            qrCodeUrl: string;
+            createdAt: Date;
+            metadata: Record<string, any>;
+        };
+        fiscalWarnings: any[];
     }>;
     reprintReceipt(id: string, user: any, req: Request): Promise<{
         message: string;

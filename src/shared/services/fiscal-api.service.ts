@@ -28,11 +28,20 @@ export interface NFCeRequest {
     totalPrice: number;
     ncm?: string;
     cfop?: string;
+    unitOfMeasure?: string;
   }>;
   totalValue: number;
-  paymentMethod: string[];
+  payments: Array<{
+    method: string;
+    amount: number;
+  }>;
   saleId: string;
   sellerName: string;
+  operationNature?: string;
+  emissionPurpose?: number;
+  referenceAccessKey?: string;
+  documentType?: number;
+  additionalInfo?: string;
 }
 
 export interface NFCeResponse {
@@ -302,23 +311,23 @@ export class FiscalApiService {
       ? '/nfce' 
       : '/nfce/sandbox';
 
-    const payload = {
-      natureza_operacao: 'Venda',
+    const payload: any = {
+      natureza_operacao: request.operationNature || 'Venda',
       data_emissao: new Date().toISOString(),
       data_saida_entrada: new Date().toISOString(),
       tipo_documento: 65, // NFCe
       local_destino: 1, // Operação interna
-      finalidade_emissao: 1, // Normal
+      finalidade_emissao: request.emissionPurpose ?? 1, // Normal por padrão
       consumidor_final: 1, // Sim
       presenca_comprador: 1, // Presencial
       modalidade_frete: 9, // Sem frete
-      tipo_pagamento: this.mapPaymentMethods(request.paymentMethod),
+      tipo_pagamento: this.mapPaymentMethods(request.payments),
       itens: request.items.map(item => ({
         codigo: item.productId,
         descricao: item.productName,
         ncm: item.ncm || '99999999',
         cfop: item.cfop || '5102',
-        unidade_comercial: 'UN',
+        unidade_comercial: item.unitOfMeasure || 'UN',
         quantidade_comercial: item.quantity,
         valor_unitario_comercial: item.unitPrice,
         valor_total_bruto: item.totalPrice,
@@ -334,6 +343,14 @@ export class FiscalApiService {
       valor_total_servicos: 0,
       valor_total_nota: request.totalValue,
     };
+
+    if (request.referenceAccessKey) {
+      payload.notas_referenciadas = [
+        {
+          chave_acesso: request.referenceAccessKey,
+        },
+      ];
+    }
 
     const response: AxiosResponse = await this.httpClient.post(endpoint, payload);
 
@@ -351,18 +368,18 @@ export class FiscalApiService {
   private async generateNFCeTecnoSpeed(request: NFCeRequest): Promise<NFCeResponse> {
     const endpoint = '/nfce/emitir';
 
-    const payload = {
+    const payload: any = {
       ambiente: this.config.environment === 'production' ? 1 : 2,
-      natureza_operacao: 'Venda',
+      natureza_operacao: request.operationNature || 'Venda',
       tipo_operacao: 'S',
       modelo: 65, // NFCe
       serie: 1,
       numero: 1,
       data_emissao: new Date().toISOString(),
       data_saida_entrada: new Date().toISOString(),
-      tipo_documento: 0, // Entrada
+      tipo_documento: request.documentType ?? 0, // Entrada/saída
       local_destino: 1, // Operação interna
-      finalidade_emissao: 1, // Normal
+      finalidade_emissao: request.emissionPurpose ?? 1, // Normal
       consumidor_final: 1, // Sim
       presenca_comprador: 1, // Presencial
       modalidade_frete: 9, // Sem frete
@@ -371,7 +388,7 @@ export class FiscalApiService {
         descricao: item.productName,
         ncm: item.ncm || '99999999',
         cfop: item.cfop || '5102',
-        unidade: 'UN',
+        unidade: item.unitOfMeasure || 'UN',
         quantidade: item.quantity,
         valor_unitario: item.unitPrice,
         valor_total: item.totalPrice,
@@ -388,6 +405,14 @@ export class FiscalApiService {
         valor_total_tributos: 0,
       },
     };
+
+    if (request.referenceAccessKey) {
+      payload.documento_referenciado = {
+        chave: request.referenceAccessKey,
+      };
+    }
+
+    payload.pagamentos = this.mapPaymentMethods(request.payments);
 
     const response: AxiosResponse = await this.httpClient.post(endpoint, payload);
 
@@ -452,13 +477,13 @@ export class FiscalApiService {
     
     const endpoint = `/v2/nfce?ref=${request.saleId}`;
 
-    const payload = {
-      natureza_operacao: 'Venda',
+    const payload: any = {
+      natureza_operacao: request.operationNature || 'Venda',
       data_emissao: new Date().toISOString(),
       data_saida_entrada: new Date().toISOString(),
       tipo_documento: 65, // NFCe
       local_destino: 1, // Operação interna
-      finalidade_emissao: 1, // Normal
+      finalidade_emissao: request.emissionPurpose ?? 1, // Normal
       consumidor_final: 1, // Sim
       presenca_comprador: 1, // Presencial
       modalidade_frete: 9, // Sem frete
@@ -467,7 +492,7 @@ export class FiscalApiService {
         descricao: item.productName,
         ncm: item.ncm || '99999999',
         cfop: item.cfop || '5102',
-        unidade_comercial: 'UN',
+        unidade_comercial: item.unitOfMeasure || 'UN',
         quantidade_comercial: item.quantity,
         valor_unitario_comercial: item.unitPrice,
         valor_total_bruto: item.totalPrice,
@@ -483,6 +508,20 @@ export class FiscalApiService {
       valor_total_servicos: 0,
       valor_total_nota: request.totalValue,
     };
+
+    payload.pagamentos = this.mapPaymentMethods(request.payments);
+
+    if (request.referenceAccessKey) {
+      payload.notas_referenciadas = [
+        {
+          chave: request.referenceAccessKey,
+        },
+      ];
+    }
+
+    if (request.additionalInfo) {
+      payload.informacoes_complementares = request.additionalInfo;
+    }
 
     const response: AxiosResponse = await httpClient.post(endpoint, payload);
 
@@ -500,13 +539,13 @@ export class FiscalApiService {
   private async generateNFCeEnotas(request: NFCeRequest): Promise<NFCeResponse> {
     const endpoint = '/nfce';
 
-    const payload = {
-      natureza_operacao: 'Venda',
+    const payload: any = {
+      natureza_operacao: request.operationNature || 'Venda',
       data_emissao: new Date().toISOString(),
       data_saida_entrada: new Date().toISOString(),
       tipo_documento: 65, // NFCe
       local_destino: 1, // Operação interna
-      finalidade_emissao: 1, // Normal
+      finalidade_emissao: request.emissionPurpose ?? 1, // Normal
       consumidor_final: 1, // Sim
       presenca_comprador: 1, // Presencial
       modalidade_frete: 9, // Sem frete
@@ -515,7 +554,7 @@ export class FiscalApiService {
         descricao: item.productName,
         ncm: item.ncm || '99999999',
         cfop: item.cfop || '5102',
-        unidade_comercial: 'UN',
+        unidade_comercial: item.unitOfMeasure || 'UN',
         quantidade_comercial: item.quantity,
         valor_unitario_comercial: item.unitPrice,
         valor_total_bruto: item.totalPrice,
@@ -531,6 +570,20 @@ export class FiscalApiService {
       valor_total_servicos: 0,
       valor_total_nota: request.totalValue,
     };
+
+    payload.pagamentos = this.mapPaymentMethods(request.payments);
+
+    if (request.referenceAccessKey) {
+      payload.documentos_referenciados = [
+        {
+          chave_acesso: request.referenceAccessKey,
+        },
+      ];
+    }
+
+    if (request.additionalInfo) {
+      payload.informacoes_adicionais = request.additionalInfo;
+    }
 
     const response: AxiosResponse = await this.httpClient.post(endpoint, payload);
 
@@ -852,39 +905,58 @@ export class FiscalApiService {
    * Mapear forma de pagamento para código SEFAZ
    */
   private mapPaymentMethodCodeSefaz(method: string): string {
-    const mapping = {
-      '01': '01', // Dinheiro
-      '02': '02', // Cheque
-      '03': '03', // Cartão de Crédito
-      '04': '04', // Cartão de Débito
-      '05': '05', // Crédito Loja
-      '10': '10', // Vale Alimentação
-      '11': '11', // Vale Refeição
-      '12': '12', // Vale Presente
-      '13': '13', // Vale Combustível
-      '15': '15', // Boleto Bancário
-      '16': '16', // Depósito Bancário
-      '17': '17', // PIX
-      '18': '18', // Transferência Bancária
-      '19': '19', // Cashback
-      '90': '90', // Sem Pagamento
-      '99': '99', // Outros
+    if (!method) {
+      return '99';
+    }
+
+    const normalized = method.toString().toLowerCase();
+
+    const mapping: Record<string, string> = {
+      'cash': '01', // Dinheiro
+      'dinheiro': '01',
+      '01': '01',
+      'cheque': '02',
+      '02': '02',
+      'credit_card': '03',
+      'cartao_credito': '03',
+      '03': '03',
+      'debit_card': '04',
+      'cartao_debito': '04',
+      '04': '04',
+      'store_credit': '05',
+      'credito_loja': '05',
+      '05': '05',
+      'boleto': '15',
+      '15': '15',
+      'deposito': '16',
+      '16': '16',
+      'pix': '17',
+      '17': '17',
+      'transferencia': '18',
+      '18': '18',
+      'cashback': '19',
+      '19': '19',
+      'sem_pagamento': '90',
+      '90': '90',
     };
-    
-    return mapping[method] || '99'; // Default: Outros
+
+    return mapping[normalized] || '99';
   }
 
-  private mapPaymentMethods(paymentMethods: string[]): any {
-    // Map internal payment methods to fiscal API format
-    const mapping = {
-      'cash': { tipo: '01', valor: 0 }, // Dinheiro
-      'credit_card': { tipo: '03', valor: 0 }, // Cartão de Crédito
-      'debit_card': { tipo: '04', valor: 0 }, // Cartão de Débito
-      'pix': { tipo: '99', valor: 0 }, // PIX
-      'installment': { tipo: '03', valor: 0 }, // Cartão de Crédito (parcelado)
-    };
+  private mapPaymentMethods(payments: Array<{ method: string; amount: number }>): any {
+    if (!payments || !payments.length) {
+      return [
+        {
+          tipo: '99',
+          valor: 0,
+        },
+      ];
+    }
 
-    return paymentMethods.map(method => mapping[method] || { tipo: '99', valor: 0 });
+    return payments.map(payment => ({
+      tipo: this.mapPaymentMethodCodeSefaz(payment.method),
+      valor: Number((payment.amount ?? 0).toFixed(2)),
+    }));
   }
 
   async uploadCertificate(certificatePath: string, password: string): Promise<boolean> {

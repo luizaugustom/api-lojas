@@ -20,6 +20,7 @@ var PaymentMethod;
     PaymentMethod["CASH"] = "cash";
     PaymentMethod["PIX"] = "pix";
     PaymentMethod["INSTALLMENT"] = "installment";
+    PaymentMethod["STORE_CREDIT"] = "store_credit";
 })(PaymentMethod || (exports.PaymentMethod = PaymentMethod = {}));
 class PaymentMethodDto {
 }

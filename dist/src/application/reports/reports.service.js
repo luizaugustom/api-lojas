@@ -17,11 +17,14 @@ const generate_report_dto_1 = require("./dto/generate-report.dto");
 const ExcelJS = require("exceljs");
 const xml2js_1 = require("xml2js");
 const archiver_1 = require("archiver");
+const axios_1 = require("axios");
 const stream_1 = require("stream");
 const client_time_util_1 = require("../../shared/utils/client-time.util");
+const fiscal_service_1 = require("../fiscal/fiscal.service");
 let ReportsService = ReportsService_1 = class ReportsService {
-    constructor(prisma) {
+    constructor(prisma, fiscalService) {
         this.prisma = prisma;
+        this.fiscalService = fiscalService;
         this.logger = new common_1.Logger(ReportsService_1.name);
     }
     async generateReport(companyId, generateReportDto, clientTimeInfo) {
@@ -97,7 +100,7 @@ let ReportsService = ReportsService_1 = class ReportsService {
             invoicesData = await this.generateInvoicesReport(companyId, startDate, endDate);
         }
         const invoices = Array.isArray(invoicesData?.invoices) ? invoicesData.invoices : [];
-        const zipBuffer = await this.buildZipPackage(reportFile, invoices, timestamp);
+        const zipBuffer = await this.buildZipPackage(reportFile, invoices, timestamp, companyId);
         return {
             contentType: 'application/zip',
             data: zipBuffer,
@@ -228,6 +231,7 @@ let ReportsService = ReportsService_1 = class ReportsService {
                 status: invoice.status,
                 emissionDate: invoice.emissionDate,
                 xmlContent: invoice.xmlContent,
+                pdfUrl: invoice.pdfUrl,
             })),
         };
     }
@@ -581,7 +585,7 @@ let ReportsService = ReportsService_1 = class ReportsService {
             }
         }
     }
-    async buildZipPackage(reportFile, invoices, timestamp) {
+    async buildZipPackage(reportFile, invoices, timestamp, companyId) {
         const archive = (0, archiver_1.default)('zip', { zlib: { level: 9 } });
         const stream = new stream_1.PassThrough();
         const chunks = [];
@@ -602,16 +606,23 @@ let ReportsService = ReportsService_1 = class ReportsService {
             nfc: false,
             'notas-fiscais-entrada': false,
         };
-        invoices
-            .filter((invoice) => Boolean(invoice?.xmlContent))
-            .forEach((invoice) => {
+        for (const invoice of invoices) {
             const folder = this.resolveInvoiceFolder(invoice.documentType);
-            folderUsage[folder] = true;
-            const fileName = this.buildInvoiceFilename(invoice, timestamp);
-            archive.append(invoice.xmlContent, {
-                name: `${folder}/${fileName}`,
-            });
-        });
+            if (invoice?.xmlContent) {
+                folderUsage[folder] = true;
+                const xmlFileName = this.buildInvoiceFilename(invoice, timestamp, 'xml');
+                archive.append(invoice.xmlContent, {
+                    name: `${folder}/${xmlFileName}`,
+                });
+            }
+            const pdfFile = await this.tryGetInvoicePdf(invoice, timestamp, companyId);
+            if (pdfFile) {
+                folderUsage[folder] = true;
+                archive.append(pdfFile.buffer, {
+                    name: `${folder}/${pdfFile.filename}`,
+                });
+            }
+        }
         const placeholderContent = 'Nao ha documentos XML deste tipo para o periodo selecionado.';
         Object.entries(folderUsage).forEach(([folder, hasFiles]) => {
             if (!hasFiles) {
@@ -637,7 +648,7 @@ let ReportsService = ReportsService_1 = class ReportsService {
         }
         return 'notas-fiscais';
     }
-    buildInvoiceFilename(invoice, timestamp) {
+    buildInvoiceFilename(invoice, timestamp, extension = 'xml') {
         const parts = [];
         if (invoice.documentType) {
             parts.push(this.sanitizeFileName(String(invoice.documentType)));
@@ -653,7 +664,7 @@ let ReportsService = ReportsService_1 = class ReportsService {
         }
         parts.push(this.sanitizeFileName(timestamp));
         const baseName = parts.filter(Boolean).join('-') || `documento-${timestamp}`;
-        return `${baseName}.xml`;
+        return `${baseName}.${extension}`;
     }
     sanitizeFileName(value) {
         return value
@@ -661,10 +672,36 @@ let ReportsService = ReportsService_1 = class ReportsService {
             .replace(/[\u0300-\u036f]/g, '')
             .replace(/[^a-zA-Z0-9-_]/g, '_');
     }
+    async tryGetInvoicePdf(invoice, timestamp, companyId) {
+        if (!invoice?.id) {
+            return null;
+        }
+        try {
+            const result = await this.fiscalService.downloadFiscalDocument(invoice.id, 'pdf', companyId);
+            if (result.isExternal && result.url) {
+                const response = await axios_1.default.get(result.url, { responseType: 'arraybuffer' });
+                const buffer = Buffer.from(response.data);
+                const filename = result.filename || this.buildInvoiceFilename(invoice, timestamp, 'pdf');
+                return { buffer, filename };
+            }
+            if (result.content) {
+                const buffer = Buffer.isBuffer(result.content)
+                    ? result.content
+                    : Buffer.from(result.content);
+                const filename = result.filename || this.buildInvoiceFilename(invoice, timestamp, 'pdf');
+                return { buffer, filename };
+            }
+        }
+        catch (error) {
+            this.logger.warn(`Unable to include PDF for invoice ${invoice.id}: ${error?.message || error}`);
+        }
+        return null;
+    }
 };
 exports.ReportsService = ReportsService;
 exports.ReportsService = ReportsService = ReportsService_1 = __decorate([
     (0, common_1.Injectable)(),
-    __metadata("design:paramtypes", [prisma_service_1.PrismaService])
+    __metadata("design:paramtypes", [prisma_service_1.PrismaService,
+        fiscal_service_1.FiscalService])
 ], ReportsService);
 //# sourceMappingURL=reports.service.js.map

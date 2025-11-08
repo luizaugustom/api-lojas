@@ -1,10 +1,12 @@
 import { PrismaService } from '../../infrastructure/database/prisma.service';
 import { GenerateReportDto } from './dto/generate-report.dto';
 import { ClientTimeInfo } from '../../shared/utils/client-time.util';
+import { FiscalService } from '../fiscal/fiscal.service';
 export declare class ReportsService {
     private readonly prisma;
+    private readonly fiscalService;
     private readonly logger;
-    constructor(prisma: PrismaService);
+    constructor(prisma: PrismaService, fiscalService: FiscalService);
     generateReport(companyId: string, generateReportDto: GenerateReportDto, clientTimeInfo?: ClientTimeInfo): Promise<{
         contentType: string;
         data: Buffer<ArrayBufferLike>;
@@ -31,4 +33,5 @@ export declare class ReportsService {
     private resolveInvoiceFolder;
     private buildInvoiceFilename;
     private sanitizeFileName;
+    private tryGetInvoicePdf;
 }

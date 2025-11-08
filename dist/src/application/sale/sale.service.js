@@ -12,6 +12,7 @@ var SaleService_1;
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.SaleService = void 0;
 const common_1 = require("@nestjs/common");
+const client_1 = require("@prisma/client");
 const prisma_service_1 = require("../../infrastructure/database/prisma.service");
 const product_service_1 = require("../product/product.service");
 const printer_service_1 = require("../printer/printer.service");
@@ -20,6 +21,44 @@ const email_service_1 = require("../../shared/services/email.service");
 const ibpt_service_1 = require("../../shared/services/ibpt.service");
 const payment_method_dto_1 = require("./dto/payment-method.dto");
 const client_time_util_1 = require("../../shared/utils/client-time.util");
+const PRODUCT_EXCHANGE_INCLUDE = {
+    items: {
+        include: {
+            product: {
+                select: {
+                    id: true,
+                    name: true,
+                    barcode: true,
+                    ncm: true,
+                    cfop: true,
+                    unitOfMeasure: true,
+                },
+            },
+            saleItem: {
+                include: {
+                    product: {
+                        select: {
+                            id: true,
+                            name: true,
+                            barcode: true,
+                            ncm: true,
+                            cfop: true,
+                            unitOfMeasure: true,
+                        },
+                    },
+                },
+            },
+        },
+    },
+    payments: true,
+    processedBy: {
+        select: {
+            id: true,
+            name: true,
+        },
+    },
+    fiscalDocuments: true,
+};
 let SaleService = SaleService_1 = class SaleService {
     constructor(prisma, productService, printerService, fiscalService, emailService, ibptService) {
         this.prisma = prisma;
@@ -187,6 +226,7 @@ let SaleService = SaleService_1 = class SaleService {
                                     price: true,
                                     ncm: true,
                                     cfop: true,
+                                    unitOfMeasure: true,
                                 },
                             },
                         },
@@ -207,6 +247,7 @@ let SaleService = SaleService_1 = class SaleService {
                             street: true,
                             number: true,
                             district: true,
+                            city: true,
                             phone: true,
                             email: true,
                             state: true,
@@ -288,11 +329,22 @@ let SaleService = SaleService_1 = class SaleService {
                                 quantity: item.quantity,
                                 unitPrice: Number(item.unitPrice),
                                 totalPrice: Number(item.totalPrice),
+                                ncm: item.product.ncm || undefined,
+                                cfop: item.product.cfop || undefined,
+                                unitOfMeasure: item.product.unitOfMeasure || undefined,
                             })),
                             totalValue: Number(completeSale.total),
-                            paymentMethod: completeSale.paymentMethods.map(pm => pm.method),
+                            payments: completeSale.paymentMethods.map(pm => ({
+                                method: pm.method,
+                                amount: Number(pm.amount),
+                            })),
                             saleId: completeSale.id,
                             sellerName: completeSale.seller.name,
+                            operationNature: 'Venda de mercadoria',
+                            source: 'SALE',
+                            metadata: {
+                                saleId: completeSale.id,
+                            },
                         };
                         const fiscalDocument = await this.fiscalService.generateNFCe(nfceData);
                         const isMocked = fiscalDocument.status === 'MOCK' || fiscalDocument.isMock === true;
@@ -516,14 +568,9 @@ let SaleService = SaleService_1 = class SaleService {
                     },
                 },
                 exchanges: {
-                    include: {
-                        product: {
-                            select: {
-                                id: true,
-                                name: true,
-                                barcode: true,
-                            },
-                        },
+                    include: PRODUCT_EXCHANGE_INCLUDE,
+                    orderBy: {
+                        exchangeDate: 'desc',
                     },
                 },
             },
@@ -531,7 +578,13 @@ let SaleService = SaleService_1 = class SaleService {
         if (!sale) {
             throw new common_1.NotFoundException('Venda não encontrada');
         }
-        return sale;
+        const mappedExchanges = (sale.exchanges ?? [])
+            .map((exchange) => this.mapExchange(exchange))
+            .filter(Boolean);
+        return {
+            ...sale,
+            exchanges: mappedExchanges,
+        };
     }
     async update(id, updateSaleDto, companyId) {
         try {
@@ -624,66 +677,629 @@ let SaleService = SaleService_1 = class SaleService {
             throw error;
         }
     }
-    async processExchange(companyId, processExchangeDto) {
+    async processExchange(companyId, processExchangeDto, processedById) {
         try {
-            const { originalSaleId, productId, quantity, reason } = processExchangeDto;
-            const originalSale = await this.prisma.sale.findFirst({
+            const { originalSaleId, returnedItems, newItems = [], payments = [], refunds = [], reason, note, issueStoreCredit = false, } = processExchangeDto;
+            if (!returnedItems || returnedItems.length === 0) {
+                throw new common_1.BadRequestException('Informe ao menos um item para devolução.');
+            }
+            const sale = await this.prisma.sale.findFirst({
                 where: {
                     id: originalSaleId,
                     companyId,
                 },
                 include: {
                     items: {
-                        where: { productId },
-                    },
-                },
-            });
-            if (!originalSale) {
-                throw new common_1.NotFoundException('Venda original não encontrada');
-            }
-            const saleItem = originalSale.items[0];
-            if (!saleItem) {
-                throw new common_1.NotFoundException('Produto não encontrado na venda original');
-            }
-            if (quantity > saleItem.quantity) {
-                throw new common_1.BadRequestException('Quantidade de troca não pode ser maior que a quantidade original');
-            }
-            const product = await this.prisma.product.findFirst({
-                where: {
-                    id: productId,
-                    companyId,
-                },
-            });
-            if (!product) {
-                throw new common_1.NotFoundException('Produto não encontrado');
-            }
-            const result = await this.prisma.$transaction(async (tx) => {
-                const exchange = await tx.productExchange.create({
-                    data: {
-                        originalSaleId,
-                        productId,
-                        originalQuantity: saleItem.quantity,
-                        exchangedQuantity: quantity,
-                        reason,
-                    },
-                });
-                await tx.product.update({
-                    where: { id: productId },
-                    data: {
-                        stockQuantity: {
-                            increment: quantity,
+                        include: {
+                            product: {
+                                select: {
+                                    id: true,
+                                    name: true,
+                                    stockQuantity: true,
+                                    price: true,
+                                    barcode: true,
+                                    ncm: true,
+                                    cfop: true,
+                                    unitOfMeasure: true,
+                                },
+                            },
                         },
                     },
-                });
-                return exchange;
+                    paymentMethods: true,
+                    seller: {
+                        select: {
+                            id: true,
+                            name: true,
+                        },
+                    },
+                    company: {
+                        select: {
+                            id: true,
+                            name: true,
+                            cnpj: true,
+                            state: true,
+                            city: true,
+                        },
+                    },
+                },
             });
-            this.logger.log(`Exchange processed: ${result.id} for sale: ${originalSaleId}`);
-            return result;
+            if (!sale) {
+                throw new common_1.NotFoundException('Venda original não encontrada');
+            }
+            const normalizedPayments = (payments ?? []).map((payment) => ({
+                method: payment.method,
+                amount: this.roundCurrency(payment.amount),
+                additionalInfo: payment.additionalInfo,
+            }));
+            const normalizedRefunds = (refunds ?? []).map((refund) => ({
+                method: refund.method,
+                amount: this.roundCurrency(refund.amount),
+                additionalInfo: refund.additionalInfo,
+            }));
+            const saleItemMap = new Map(sale.items.map((item) => [item.id, item]));
+            const uniqueSaleItemIds = Array.from(new Set(returnedItems.map((item) => item.saleItemId)));
+            const previousReturnedItems = uniqueSaleItemIds.length
+                ? await this.prisma.productExchangeItem.findMany({
+                    where: {
+                        saleItemId: { in: uniqueSaleItemIds },
+                        type: client_1.ExchangeItemType.RETURNED,
+                        exchange: {
+                            originalSaleId,
+                        },
+                    },
+                    select: {
+                        saleItemId: true,
+                        quantity: true,
+                    },
+                })
+                : [];
+            const alreadyReturnedMap = new Map();
+            for (const record of previousReturnedItems) {
+                const current = alreadyReturnedMap.get(record.saleItemId) ?? 0;
+                alreadyReturnedMap.set(record.saleItemId, current + record.quantity);
+            }
+            let returnedTotal = 0;
+            const validatedReturnedItems = returnedItems.map((item) => {
+                const saleItem = saleItemMap.get(item.saleItemId);
+                if (!saleItem) {
+                    throw new common_1.BadRequestException('Item da venda não encontrado para devolução.');
+                }
+                if (saleItem.productId !== item.productId) {
+                    throw new common_1.BadRequestException('Produto informado não corresponde ao item da venda original.');
+                }
+                const alreadyReturned = alreadyReturnedMap.get(item.saleItemId) ?? 0;
+                const remaining = saleItem.quantity - alreadyReturned;
+                if (remaining <= 0) {
+                    throw new common_1.BadRequestException(`O item ${saleItem.product?.name ?? ''} já foi totalmente devolvido.`);
+                }
+                if (item.quantity > remaining) {
+                    throw new common_1.BadRequestException(`Quantidade de devolução (${item.quantity}) excede o disponível (${remaining}) para o item ${saleItem.product?.name ?? ''}.`);
+                }
+                const unitPrice = this.toNumber(saleItem.unitPrice);
+                const totalPrice = this.roundCurrency(unitPrice * item.quantity);
+                returnedTotal = this.roundCurrency(returnedTotal + totalPrice);
+                alreadyReturnedMap.set(item.saleItemId, alreadyReturned + item.quantity);
+                return {
+                    saleItem,
+                    quantity: item.quantity,
+                    unitPrice,
+                    totalPrice,
+                };
+            });
+            let deliveredTotal = 0;
+            const validatedDeliveredItems = [];
+            if (newItems.length > 0) {
+                const productIds = Array.from(new Set(newItems.map((item) => item.productId)));
+                const products = await this.prisma.product.findMany({
+                    where: {
+                        id: { in: productIds },
+                        companyId,
+                    },
+                    select: {
+                        id: true,
+                        name: true,
+                        stockQuantity: true,
+                        price: true,
+                        barcode: true,
+                        ncm: true,
+                        cfop: true,
+                        unitOfMeasure: true,
+                    },
+                });
+                const productMap = new Map(products.map((product) => [product.id, product]));
+                for (const item of newItems) {
+                    const product = productMap.get(item.productId);
+                    if (!product) {
+                        throw new common_1.NotFoundException(`Produto ${item.productId} não encontrado para entrega`);
+                    }
+                    const unitPrice = item.unitPrice ?? this.toNumber(product.price);
+                    if (unitPrice < 0) {
+                        throw new common_1.BadRequestException(`Preço inválido para o produto ${product.name}`);
+                    }
+                    if (product.stockQuantity < item.quantity) {
+                        throw new common_1.BadRequestException(`Estoque insuficiente para o produto ${product.name}`);
+                    }
+                    const totalPrice = this.roundCurrency(unitPrice * item.quantity);
+                    deliveredTotal = this.roundCurrency(deliveredTotal + totalPrice);
+                    validatedDeliveredItems.push({
+                        product,
+                        quantity: item.quantity,
+                        unitPrice,
+                        totalPrice,
+                    });
+                }
+            }
+            const tolerance = 0.01;
+            const difference = this.roundCurrency(deliveredTotal - returnedTotal);
+            const amountToReceive = difference > 0 ? difference : 0;
+            const amountToReturn = difference < 0 ? Math.abs(difference) : 0;
+            const paymentsTotal = this.roundCurrency(normalizedPayments.reduce((sum, payment) => sum + payment.amount, 0));
+            const refundsTotal = this.roundCurrency(normalizedRefunds.reduce((sum, refund) => sum + refund.amount, 0));
+            let storeCreditApplied = this.roundCurrency(deliveredTotal - paymentsTotal);
+            if (storeCreditApplied < tolerance) {
+                storeCreditApplied = 0;
+            }
+            const availableCredit = Math.max(0, this.roundCurrency(returnedTotal - refundsTotal));
+            if (storeCreditApplied > availableCredit) {
+                storeCreditApplied = availableCredit;
+            }
+            let storeCreditAmount = 0;
+            if (difference > tolerance) {
+                if (issueStoreCredit) {
+                    throw new common_1.BadRequestException('Crédito em loja só pode ser gerado quando há valor a devolver ao cliente.');
+                }
+                if (refundsTotal > 0) {
+                    throw new common_1.BadRequestException('Não é possível registrar reembolso quando há valor pendente de pagamento.');
+                }
+                if (paymentsTotal <= 0) {
+                    throw new common_1.BadRequestException('Informe as formas de pagamento para cobrir a diferença da troca.');
+                }
+                if (Math.abs(paymentsTotal - amountToReceive) > tolerance) {
+                    throw new common_1.BadRequestException(`Total dos pagamentos (${paymentsTotal.toFixed(2)}) não coincide com o valor devido (${amountToReceive.toFixed(2)}).`);
+                }
+            }
+            else if (difference < -tolerance) {
+                if (paymentsTotal > 0) {
+                    throw new common_1.BadRequestException('Não é possível registrar pagamento quando há valor a devolver.');
+                }
+                if (issueStoreCredit) {
+                    if (refundsTotal - amountToReturn > tolerance) {
+                        throw new common_1.BadRequestException('Os reembolsos informados não podem exceder o valor a devolver.');
+                    }
+                    storeCreditAmount = this.roundCurrency(amountToReturn - refundsTotal);
+                }
+                else {
+                    if (refundsTotal <= 0) {
+                        throw new common_1.BadRequestException('Informe as formas de reembolso para devolver a diferença ao cliente.');
+                    }
+                    if (Math.abs(refundsTotal - amountToReturn) > tolerance) {
+                        throw new common_1.BadRequestException(`Total dos reembolsos (${refundsTotal.toFixed(2)}) não coincide com o valor devido (${amountToReturn.toFixed(2)}).`);
+                    }
+                }
+            }
+            else {
+                if (paymentsTotal > tolerance || refundsTotal > tolerance) {
+                    throw new common_1.BadRequestException('Não é possível registrar pagamento ou reembolso sem diferença de valores.');
+                }
+                if (issueStoreCredit) {
+                    throw new common_1.BadRequestException('Não há valor para gerar crédito em loja.');
+                }
+            }
+            const exchange = await this.prisma.$transaction(async (tx) => {
+                const createdExchange = await tx.productExchange.create({
+                    data: {
+                        reason,
+                        note,
+                        companyId,
+                        originalSaleId,
+                        processedById: processedById ?? null,
+                        returnedTotal,
+                        deliveredTotal,
+                        difference,
+                        storeCreditAmount,
+                    },
+                });
+                for (const returned of validatedReturnedItems) {
+                    await tx.productExchangeItem.create({
+                        data: {
+                            exchangeId: createdExchange.id,
+                            type: client_1.ExchangeItemType.RETURNED,
+                            quantity: returned.quantity,
+                            unitPrice: returned.unitPrice,
+                            totalPrice: returned.totalPrice,
+                            productId: returned.saleItem.productId,
+                            saleItemId: returned.saleItem.id,
+                        },
+                    });
+                    await tx.product.update({
+                        where: { id: returned.saleItem.productId },
+                        data: {
+                            stockQuantity: {
+                                increment: returned.quantity,
+                            },
+                        },
+                    });
+                }
+                for (const delivered of validatedDeliveredItems) {
+                    await tx.productExchangeItem.create({
+                        data: {
+                            exchangeId: createdExchange.id,
+                            type: client_1.ExchangeItemType.DELIVERED,
+                            quantity: delivered.quantity,
+                            unitPrice: delivered.unitPrice,
+                            totalPrice: delivered.totalPrice,
+                            productId: delivered.product.id,
+                        },
+                    });
+                    await tx.product.update({
+                        where: { id: delivered.product.id },
+                        data: {
+                            stockQuantity: {
+                                decrement: delivered.quantity,
+                            },
+                        },
+                    });
+                }
+                for (const payment of normalizedPayments) {
+                    await tx.productExchangePayment.create({
+                        data: {
+                            exchangeId: createdExchange.id,
+                            type: client_1.ExchangePaymentType.PAYMENT,
+                            method: payment.method,
+                            amount: payment.amount,
+                            additionalInfo: payment.additionalInfo,
+                        },
+                    });
+                }
+                for (const refund of normalizedRefunds) {
+                    await tx.productExchangePayment.create({
+                        data: {
+                            exchangeId: createdExchange.id,
+                            type: client_1.ExchangePaymentType.REFUND,
+                            method: refund.method,
+                            amount: refund.amount,
+                            additionalInfo: refund.additionalInfo,
+                        },
+                    });
+                }
+                return createdExchange;
+            });
+            this.logger.log(`Exchange processed: ${exchange.id} for sale: ${originalSaleId}`);
+            const fiscalWarnings = [];
+            const fiscalErrors = [];
+            const hasValidFiscalConfig = await this.fiscalService.hasValidFiscalConfig(companyId);
+            if (!hasValidFiscalConfig) {
+                fiscalWarnings.push('Empresa não possui configuração fiscal válida. NFC-e não foi emitida para esta troca.');
+                await this.prisma.productExchange.update({
+                    where: { id: exchange.id },
+                    data: { status: client_1.ExchangeStatus.PENDING },
+                });
+            }
+            else {
+                const originalFiscalDocument = await this.prisma.fiscalDocument.findFirst({
+                    where: {
+                        companyId,
+                        saleId: originalSaleId,
+                        documentType: 'NFCe',
+                    },
+                    orderBy: {
+                        createdAt: 'desc',
+                    },
+                });
+                if (!originalFiscalDocument) {
+                    fiscalWarnings.push('Documento fiscal original não encontrado. A devolução será emitida sem referência.');
+                }
+                if (returnedTotal > tolerance) {
+                    const returnItemsForFiscal = validatedReturnedItems.map((returned) => ({
+                        productId: returned.saleItem.productId,
+                        productName: returned.saleItem.product?.name || 'Produto',
+                        barcode: returned.saleItem.product?.barcode || '',
+                        quantity: returned.quantity,
+                        unitPrice: returned.unitPrice,
+                        totalPrice: returned.totalPrice,
+                        ncm: returned.saleItem.product?.ncm || undefined,
+                        cfop: '1202',
+                        unitOfMeasure: returned.saleItem.product?.unitOfMeasure || 'UN',
+                    }));
+                    const returnPaymentsBase = [
+                        ...normalizedRefunds.map((refund) => ({
+                            method: refund.method,
+                            amount: refund.amount,
+                        })),
+                    ];
+                    if (storeCreditApplied > tolerance) {
+                        returnPaymentsBase.push({
+                            method: payment_method_dto_1.PaymentMethod.STORE_CREDIT,
+                            amount: storeCreditApplied,
+                        });
+                    }
+                    if (storeCreditAmount > tolerance) {
+                        returnPaymentsBase.push({
+                            method: payment_method_dto_1.PaymentMethod.STORE_CREDIT,
+                            amount: storeCreditAmount,
+                        });
+                    }
+                    const returnPaymentsForFiscal = this.adjustPaymentTotals(returnPaymentsBase, returnedTotal);
+                    try {
+                        await this.fiscalService.generateNFCe({
+                            companyId,
+                            clientCpfCnpj: sale.clientCpfCnpj || undefined,
+                            clientName: sale.clientName || undefined,
+                            items: returnItemsForFiscal,
+                            totalValue: returnedTotal,
+                            payments: returnPaymentsForFiscal,
+                            saleId: originalSaleId,
+                            apiReference: `${originalSaleId}-return-${exchange.id}`,
+                            sellerName: sale.seller?.name || 'Troca',
+                            operationNature: 'Devolução de mercadorias',
+                            emissionPurpose: 4,
+                            referenceAccessKey: originalFiscalDocument?.accessKey || undefined,
+                            documentType: 0,
+                            additionalInfo: note || undefined,
+                            productExchangeId: exchange.id,
+                            source: 'EXCHANGE_RETURN',
+                            metadata: {
+                                exchangeId: exchange.id,
+                                role: 'return',
+                                originalSaleId,
+                                payments: returnPaymentsForFiscal,
+                                storeCreditApplied,
+                                storeCreditAmount,
+                            },
+                        });
+                    }
+                    catch (fiscalError) {
+                        const message = this.extractErrorMessage(fiscalError);
+                        fiscalErrors.push(`Erro ao emitir NFC-e de devolução: ${message}`);
+                        this.logger.error('Erro ao emitir NFC-e de devolução para troca', fiscalError);
+                    }
+                }
+                if (deliveredTotal > tolerance) {
+                    const deliveryItemsForFiscal = validatedDeliveredItems.map((delivered) => ({
+                        productId: delivered.product.id,
+                        productName: delivered.product.name,
+                        barcode: delivered.product.barcode || '',
+                        quantity: delivered.quantity,
+                        unitPrice: delivered.unitPrice,
+                        totalPrice: delivered.totalPrice,
+                        ncm: delivered.product.ncm || undefined,
+                        cfop: delivered.product.cfop || '5102',
+                        unitOfMeasure: delivered.product.unitOfMeasure || 'UN',
+                    }));
+                    const deliveryPaymentsBase = [
+                        ...normalizedPayments.map((payment) => ({
+                            method: payment.method,
+                            amount: payment.amount,
+                        })),
+                    ];
+                    if (storeCreditApplied > tolerance) {
+                        deliveryPaymentsBase.push({
+                            method: payment_method_dto_1.PaymentMethod.STORE_CREDIT,
+                            amount: storeCreditApplied,
+                        });
+                    }
+                    const deliveryPaymentsForFiscal = this.adjustPaymentTotals(deliveryPaymentsBase, deliveredTotal);
+                    try {
+                        await this.fiscalService.generateNFCe({
+                            companyId,
+                            clientCpfCnpj: sale.clientCpfCnpj || undefined,
+                            clientName: sale.clientName || undefined,
+                            items: deliveryItemsForFiscal,
+                            totalValue: deliveredTotal,
+                            payments: deliveryPaymentsForFiscal,
+                            saleId: originalSaleId,
+                            apiReference: `${originalSaleId}-delivery-${exchange.id}`,
+                            sellerName: sale.seller?.name || 'Troca',
+                            operationNature: 'Saída de mercadorias - troca',
+                            emissionPurpose: 1,
+                            documentType: 1,
+                            additionalInfo: note || undefined,
+                            productExchangeId: exchange.id,
+                            source: 'EXCHANGE_DELIVERY',
+                            metadata: {
+                                exchangeId: exchange.id,
+                                role: 'delivery',
+                                originalSaleId,
+                                payments: deliveryPaymentsForFiscal,
+                                storeCreditApplied,
+                                difference,
+                            },
+                        });
+                    }
+                    catch (fiscalError) {
+                        const message = this.extractErrorMessage(fiscalError);
+                        fiscalErrors.push(`Erro ao emitir NFC-e dos itens entregues: ${message}`);
+                        this.logger.error('Erro ao emitir NFC-e dos itens entregues na troca', fiscalError);
+                    }
+                }
+            }
+            if (fiscalErrors.length) {
+                await this.prisma.productExchange.update({
+                    where: { id: exchange.id },
+                    data: { status: client_1.ExchangeStatus.PENDING },
+                });
+                fiscalWarnings.push(...fiscalErrors);
+            }
+            const exchangeWithRelations = await this.prisma.productExchange.findUnique({
+                where: { id: exchange.id },
+                include: PRODUCT_EXCHANGE_INCLUDE,
+            });
+            const mappedExchange = this.mapExchange(exchangeWithRelations);
+            if (mappedExchange) {
+                mappedExchange.fiscalWarnings = fiscalWarnings;
+            }
+            return mappedExchange;
         }
         catch (error) {
             this.logger.error('Error processing exchange:', error);
             throw error;
         }
+    }
+    toNumber(value) {
+        if (value === null || value === undefined) {
+            return 0;
+        }
+        const numericValue = typeof value === 'number' ? value : Number(value);
+        if (!Number.isFinite(numericValue)) {
+            return 0;
+        }
+        return numericValue;
+    }
+    roundCurrency(value) {
+        return Math.round((value + Number.EPSILON) * 100) / 100;
+    }
+    adjustPaymentTotals(payments, expectedTotal) {
+        const roundedExpected = this.roundCurrency(expectedTotal);
+        const normalized = payments
+            .map((payment) => ({
+            method: payment.method,
+            amount: this.roundCurrency(payment.amount),
+        }))
+            .filter((payment) => payment.amount > 0);
+        if (normalized.length === 0 && roundedExpected > 0) {
+            normalized.push({
+                method: payment_method_dto_1.PaymentMethod.CASH,
+                amount: roundedExpected,
+            });
+            return normalized;
+        }
+        if (normalized.length === 0) {
+            return normalized;
+        }
+        const total = this.roundCurrency(normalized.reduce((sum, payment) => sum + payment.amount, 0));
+        const diff = this.roundCurrency(roundedExpected - total);
+        if (Math.abs(diff) > 0.01) {
+            const lastIndex = normalized.length - 1;
+            normalized[lastIndex].amount = this.roundCurrency(Math.max(0, normalized[lastIndex].amount + diff));
+        }
+        return normalized;
+    }
+    extractErrorMessage(error) {
+        if (error instanceof common_1.BadRequestException) {
+            const response = error.response ?? error.getResponse?.();
+            if (response) {
+                if (Array.isArray(response.message)) {
+                    return response.message.join('; ');
+                }
+                if (response.message) {
+                    return response.message;
+                }
+                if (response.error) {
+                    return response.error;
+                }
+            }
+        }
+        if (error instanceof Error) {
+            return error.message;
+        }
+        if (typeof error === 'string') {
+            return error;
+        }
+        return 'Erro desconhecido';
+    }
+    mapExchange(exchange) {
+        if (!exchange) {
+            return null;
+        }
+        const returnedItems = [];
+        const deliveredItems = [];
+        for (const item of exchange.items ?? []) {
+            const baseItem = {
+                id: item.id,
+                quantity: item.quantity,
+                unitPrice: this.toNumber(item.unitPrice),
+                totalPrice: this.toNumber(item.totalPrice),
+                product: item.product
+                    ? {
+                        id: item.product.id,
+                        name: item.product.name,
+                        barcode: item.product.barcode,
+                    }
+                    : null,
+                saleItemId: item.saleItemId,
+            };
+            if (item.type === client_1.ExchangeItemType.RETURNED) {
+                returnedItems.push({
+                    ...baseItem,
+                    saleItem: item.saleItem
+                        ? {
+                            id: item.saleItem.id,
+                            quantity: item.saleItem.quantity,
+                            unitPrice: this.toNumber(item.saleItem.unitPrice),
+                            product: item.saleItem.product
+                                ? {
+                                    id: item.saleItem.product.id,
+                                    name: item.saleItem.product.name,
+                                    barcode: item.saleItem.product.barcode,
+                                }
+                                : null,
+                        }
+                        : null,
+                });
+            }
+            else {
+                deliveredItems.push(baseItem);
+            }
+        }
+        const payments = (exchange.payments ?? [])
+            .filter((payment) => payment.type === client_1.ExchangePaymentType.PAYMENT)
+            .map((payment) => ({
+            id: payment.id,
+            method: payment.method,
+            amount: this.toNumber(payment.amount),
+            additionalInfo: payment.additionalInfo,
+            createdAt: payment.createdAt,
+        }));
+        const refunds = (exchange.payments ?? [])
+            .filter((payment) => payment.type === client_1.ExchangePaymentType.REFUND)
+            .map((payment) => ({
+            id: payment.id,
+            method: payment.method,
+            amount: this.toNumber(payment.amount),
+            additionalInfo: payment.additionalInfo,
+            createdAt: payment.createdAt,
+        }));
+        const fiscalDocuments = (exchange.fiscalDocuments ?? []).map((document) => ({
+            id: document.id,
+            documentType: document.documentType,
+            origin: document.origin,
+            documentNumber: document.documentNumber,
+            accessKey: document.accessKey,
+            status: document.status,
+            totalValue: this.toNumber(document.totalValue),
+            pdfUrl: document.pdfUrl,
+            qrCodeUrl: document.qrCodeUrl,
+            createdAt: document.createdAt,
+            metadata: document.metadata || undefined,
+        }));
+        const returnFiscalDocument = fiscalDocuments.find((document) => document.origin === 'EXCHANGE_RETURN');
+        const deliveryFiscalDocument = fiscalDocuments.find((document) => document.origin === 'EXCHANGE_DELIVERY');
+        return {
+            id: exchange.id,
+            reason: exchange.reason,
+            note: exchange.note,
+            exchangeDate: exchange.exchangeDate,
+            returnedTotal: this.toNumber(exchange.returnedTotal),
+            deliveredTotal: this.toNumber(exchange.deliveredTotal),
+            difference: this.toNumber(exchange.difference),
+            storeCreditAmount: this.toNumber(exchange.storeCreditAmount),
+            status: exchange.status,
+            processedBy: exchange.processedBy
+                ? {
+                    id: exchange.processedBy.id,
+                    name: exchange.processedBy.name,
+                }
+                : null,
+            returnedItems,
+            deliveredItems,
+            payments,
+            refunds,
+            createdAt: exchange.createdAt,
+            fiscalDocuments,
+            returnFiscalDocument: returnFiscalDocument || null,
+            deliveryFiscalDocument: deliveryFiscalDocument || null,
+            fiscalWarnings: [],
+        };
     }
     async getSalesStats(companyId, sellerId, startDate, endDate) {
         const where = {};
@@ -842,9 +1458,15 @@ let SaleService = SaleService_1 = class SaleService {
                         quantity: item.quantity,
                         unitPrice: Number(item.unitPrice),
                         totalPrice: Number(item.totalPrice),
+                        ncm: item.product.ncm || undefined,
+                        cfop: item.product.cfop || undefined,
+                        unitOfMeasure: item.product.unitOfMeasure || undefined,
                     })),
                     totalValue: Number(sale.total),
-                    paymentMethod: sale.paymentMethods.map(pm => pm.method),
+                    payments: sale.paymentMethods.map((pm) => ({
+                        method: pm.method,
+                        amount: this.toNumber(pm.amount),
+                    })),
                     saleId: sale.id,
                     sellerName: sale.seller.name,
                 };

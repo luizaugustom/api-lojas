@@ -8,6 +8,7 @@ export enum PaymentMethod {
   CASH = 'cash',
   PIX = 'pix',
   INSTALLMENT = 'installment',
+  STORE_CREDIT = 'store_credit',
 }
 
 export class PaymentMethodDto {
