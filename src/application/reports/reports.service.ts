@@ -3,7 +3,7 @@ import { PrismaService } from '../../infrastructure/database/prisma.service';
 import { GenerateReportDto, ReportType, ReportFormat } from './dto/generate-report.dto';
 import * as ExcelJS from 'exceljs';
 import { Builder } from 'xml2js';
-import archiver from 'archiver';
+import { create as createArchiver } from 'archiver';
 import axios from 'axios';
 import { PassThrough } from 'stream';
 import {
@@ -726,7 +726,7 @@ export class ReportsService {
     timestamp: string,
     companyId: string,
   ): Promise<Buffer> {
-    const archive = archiver('zip', { zlib: { level: 9 } });
+    const archive = createArchiver('zip', { zlib: { level: 9 } });
     const stream = new PassThrough();
     const chunks: Buffer[] = [];
 
