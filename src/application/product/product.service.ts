@@ -34,8 +34,8 @@ export class ProductService {
     return [];
   }
 
-  private serializePhotos(arr?: string[] | null): string[] | null {
-    if (!arr || arr.length === 0) return null;
+  private serializePhotos(arr?: string[] | null): string[] {
+    if (!arr || arr.length === 0) return [];
     // Prisma espera um array de strings, não uma string JSON
     return arr;
   }
