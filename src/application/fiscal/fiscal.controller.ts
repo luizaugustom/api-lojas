@@ -371,14 +371,14 @@ export class FiscalController {
         res.setHeader('Content-Length', result.size);
       }
 
-      // Se é um arquivo externo (URL), redirecionar
-      if (result.isExternal && result.url) {
-        return res.redirect(HttpStatus.FOUND, result.url);
-      }
-
-      // Se tem conteúdo, enviar o arquivo
-      if (result.content) {
-        return res.status(HttpStatus.OK).send(result.content);
+      // Enviar o conteúdo diretamente quando disponível
+      if (result.content !== undefined) {
+        const buffer = Buffer.isBuffer(result.content)
+          ? result.content
+          : typeof result.content === 'string'
+            ? Buffer.from(result.content)
+            : Buffer.from(result.content as ArrayBuffer);
+        return res.status(HttpStatus.OK).send(buffer);
       }
 
       // Fallback: retornar informações do arquivo

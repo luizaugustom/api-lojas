@@ -4,7 +4,6 @@ import { GenerateReportDto, ReportType, ReportFormat } from './dto/generate-repo
 import * as ExcelJS from 'exceljs';
 import { Builder } from 'xml2js';
 import { create as createArchiver } from 'archiver';
-import axios from 'axios';
 import { PassThrough } from 'stream';
 import {
   ClientTimeInfo,
@@ -871,17 +870,12 @@ export class ReportsService {
         companyId,
       );
 
-      if (result.isExternal && result.url) {
-        const response = await axios.get(result.url, { responseType: 'arraybuffer' });
-        const buffer = Buffer.from(response.data);
-        const filename = result.filename || this.buildInvoiceFilename(invoice, timestamp, 'pdf');
-        return { buffer, filename };
-      }
-
-      if (result.content) {
+      if (result.content !== undefined) {
         const buffer = Buffer.isBuffer(result.content)
           ? result.content
-          : Buffer.from(result.content);
+          : typeof result.content === 'string'
+            ? Buffer.from(result.content)
+            : Buffer.from(result.content as ArrayBuffer);
         const filename = result.filename || this.buildInvoiceFilename(invoice, timestamp, 'pdf');
         return { buffer, filename };
       }
