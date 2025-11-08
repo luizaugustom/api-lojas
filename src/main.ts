@@ -13,6 +13,7 @@ async function bootstrap() {
   const logger = new Logger('Bootstrap');
   
   const app = await NestFactory.create<NestExpressApplication>(AppModule);
+  app.set('trust proxy', 1);
   const configService = app.get(ConfigService);
 
   // Serve static files from uploads directory (override via env)
