@@ -34,4 +34,5 @@ export declare class ReportsService {
     private buildInvoiceFilename;
     private sanitizeFileName;
     private tryGetInvoicePdf;
+    private mapContentToBuffer;
 }

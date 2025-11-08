@@ -179,26 +179,13 @@ export declare class FiscalService {
         contentType: string;
         size: number;
         downloadUrl: string;
-        url?: undefined;
-        isExternal?: undefined;
     } | {
-        content: Buffer<ArrayBufferLike>;
+        content: Buffer<any>;
         filename: string;
-        mimetype: string;
-        contentType: string;
+        mimetype: any;
+        contentType: any;
         size: number;
         downloadUrl: string;
-        url?: undefined;
-        isExternal?: undefined;
-    } | {
-        url: string;
-        filename: string;
-        mimetype: string;
-        contentType: string;
-        downloadUrl: string;
-        isExternal: boolean;
-        content?: undefined;
-        size?: undefined;
     }>;
     private generatePdfFromDocument;
     getFiscalStats(companyId?: string): Promise<{

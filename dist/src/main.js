@@ -12,6 +12,7 @@ const app_module_1 = require("./app.module");
 async function bootstrap() {
     const logger = new common_1.Logger('Bootstrap');
     const app = await core_1.NestFactory.create(app_module_1.AppModule);
+    app.set('trust proxy', 1);
     const configService = app.get(config_1.ConfigService);
     const uploadsDir = process.env.UPLOADS_DIR || (0, path_1.join)(process.cwd(), 'uploads');
     app.useStaticAssets(uploadsDir, {

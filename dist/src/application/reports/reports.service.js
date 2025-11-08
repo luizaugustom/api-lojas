@@ -17,7 +17,6 @@ const generate_report_dto_1 = require("./dto/generate-report.dto");
 const ExcelJS = require("exceljs");
 const xml2js_1 = require("xml2js");
 const archiver_1 = require("archiver");
-const axios_1 = require("axios");
 const stream_1 = require("stream");
 const client_time_util_1 = require("../../shared/utils/client-time.util");
 const fiscal_service_1 = require("../fiscal/fiscal.service");
@@ -586,7 +585,7 @@ let ReportsService = ReportsService_1 = class ReportsService {
         }
     }
     async buildZipPackage(reportFile, invoices, timestamp, companyId) {
-        const archive = (0, archiver_1.default)('zip', { zlib: { level: 9 } });
+        const archive = (0, archiver_1.create)('zip', { zlib: { level: 9 } });
         const stream = new stream_1.PassThrough();
         const chunks = [];
         const zipPromise = new Promise((resolve, reject) => {
@@ -678,16 +677,8 @@ let ReportsService = ReportsService_1 = class ReportsService {
         }
         try {
             const result = await this.fiscalService.downloadFiscalDocument(invoice.id, 'pdf', companyId);
-            if (result.isExternal && result.url) {
-                const response = await axios_1.default.get(result.url, { responseType: 'arraybuffer' });
-                const buffer = Buffer.from(response.data);
-                const filename = result.filename || this.buildInvoiceFilename(invoice, timestamp, 'pdf');
-                return { buffer, filename };
-            }
-            if (result.content) {
-                const buffer = Buffer.isBuffer(result.content)
-                    ? result.content
-                    : Buffer.from(result.content);
+            if (result.content !== undefined) {
+                const buffer = this.mapContentToBuffer(result.content);
                 const filename = result.filename || this.buildInvoiceFilename(invoice, timestamp, 'pdf');
                 return { buffer, filename };
             }
@@ -696,6 +687,21 @@ let ReportsService = ReportsService_1 = class ReportsService {
             this.logger.warn(`Unable to include PDF for invoice ${invoice.id}: ${error?.message || error}`);
         }
         return null;
+    }
+    mapContentToBuffer(content) {
+        if (Buffer.isBuffer(content)) {
+            return content;
+        }
+        if (typeof content === 'string') {
+            return Buffer.from(content);
+        }
+        if (content instanceof ArrayBuffer) {
+            return Buffer.from(content);
+        }
+        if (ArrayBuffer.isView(content)) {
+            return Buffer.from(content.buffer);
+        }
+        throw new Error('Formato de conteúdo não suportado para relatório');
     }
 };
 exports.ReportsService = ReportsService;

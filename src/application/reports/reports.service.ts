@@ -871,11 +871,7 @@ export class ReportsService {
       );
 
       if (result.content !== undefined) {
-        const buffer = Buffer.isBuffer(result.content)
-          ? result.content
-          : typeof result.content === 'string'
-            ? Buffer.from(result.content)
-            : Buffer.from(result.content as ArrayBuffer);
+        const buffer = this.mapContentToBuffer(result.content);
         const filename = result.filename || this.buildInvoiceFilename(invoice, timestamp, 'pdf');
         return { buffer, filename };
       }
@@ -886,5 +882,25 @@ export class ReportsService {
     }
 
     return null;
+  }
+
+  private mapContentToBuffer(content: unknown): Buffer {
+    if (Buffer.isBuffer(content)) {
+      return content;
+    }
+
+    if (typeof content === 'string') {
+      return Buffer.from(content);
+    }
+
+    if (content instanceof ArrayBuffer) {
+      return Buffer.from(content);
+    }
+
+    if (ArrayBuffer.isView(content)) {
+      return Buffer.from(content.buffer);
+    }
+
+    throw new Error('Formato de conteúdo não suportado para relatório');
   }
 }

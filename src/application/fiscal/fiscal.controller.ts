@@ -13,6 +13,7 @@ import {
   HttpStatus,
   UseInterceptors,
   UploadedFile,
+  BadRequestException,
 } from '@nestjs/common';
 import {
   ApiTags,
@@ -373,11 +374,7 @@ export class FiscalController {
 
       // Enviar o conteúdo diretamente quando disponível
       if (result.content !== undefined) {
-        const buffer = Buffer.isBuffer(result.content)
-          ? result.content
-          : typeof result.content === 'string'
-            ? Buffer.from(result.content)
-            : Buffer.from(result.content as ArrayBuffer);
+        const buffer = this.mapContentToBuffer(result.content);
         return res.status(HttpStatus.OK).send(buffer);
       }
 
@@ -397,6 +394,29 @@ export class FiscalController {
         error: 'Bad Request'
       });
     }
+  }
+
+  /**
+   * Converte qualquer payload retornado do serviço fiscal em Buffer
+   */
+  private mapContentToBuffer(content: unknown): Buffer {
+    if (Buffer.isBuffer(content)) {
+      return content;
+    }
+
+    if (typeof content === 'string') {
+      return Buffer.from(content);
+    }
+
+    if (content instanceof ArrayBuffer) {
+      return Buffer.from(content);
+    }
+
+    if (ArrayBuffer.isView(content)) {
+      return Buffer.from(content.buffer);
+    }
+
+    throw new BadRequestException('Formato de conteúdo não suportado para download');
   }
 
   @Get(':id/download-info')

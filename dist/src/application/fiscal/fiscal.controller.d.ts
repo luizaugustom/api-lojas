@@ -146,7 +146,8 @@ export declare class FiscalController {
         emissionDate: Date;
         productExchangeId: string | null;
     }>;
-    downloadFiscalDocument(id: string, format: 'xml' | 'pdf', user: any, res: Response): Promise<void | Response<any, Record<string, any>>>;
+    downloadFiscalDocument(id: string, format: 'xml' | 'pdf', user: any, res: Response): Promise<Response<any, Record<string, any>>>;
+    private mapContentToBuffer;
     getDownloadInfo(id: string, user: any): Promise<{
         documentId: string;
         documentNumber: string;

@@ -162,11 +162,9 @@ let FiscalController = class FiscalController {
             if (result.size) {
                 res.setHeader('Content-Length', result.size);
             }
-            if (result.isExternal && result.url) {
-                return res.redirect(common_1.HttpStatus.FOUND, result.url);
-            }
-            if (result.content) {
-                return res.status(common_1.HttpStatus.OK).send(result.content);
+            if (result.content !== undefined) {
+                const buffer = this.mapContentToBuffer(result.content);
+                return res.status(common_1.HttpStatus.OK).send(buffer);
             }
             return res.status(common_1.HttpStatus.OK).json({
                 message: 'Informações do arquivo',
@@ -183,6 +181,21 @@ let FiscalController = class FiscalController {
                 error: 'Bad Request'
             });
         }
+    }
+    mapContentToBuffer(content) {
+        if (Buffer.isBuffer(content)) {
+            return content;
+        }
+        if (typeof content === 'string') {
+            return Buffer.from(content);
+        }
+        if (content instanceof ArrayBuffer) {
+            return Buffer.from(content);
+        }
+        if (ArrayBuffer.isView(content)) {
+            return Buffer.from(content.buffer);
+        }
+        throw new common_1.BadRequestException('Formato de conteúdo não suportado para download');
     }
     async getDownloadInfo(id, user) {
         const document = user.role === roles_decorator_1.UserRole.ADMIN

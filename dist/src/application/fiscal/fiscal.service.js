@@ -12,6 +12,7 @@ var FiscalService_1;
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.FiscalService = void 0;
 const common_1 = require("@nestjs/common");
+const axios_1 = require("axios");
 const config_1 = require("@nestjs/config");
 const prisma_service_1 = require("../../infrastructure/database/prisma.service");
 const validation_service_1 = require("../../shared/services/validation.service");
@@ -500,14 +501,25 @@ let FiscalService = FiscalService_1 = class FiscalService {
                     downloadUrl: `/api/fiscal/${id}/download?format=pdf`
                 };
             }
-            return {
-                url: document.pdfUrl,
-                filename: `${document.documentType}_${document.documentNumber}.pdf`,
-                mimetype: 'application/pdf',
-                contentType: 'application/pdf',
-                downloadUrl: `/api/fiscal/${id}/download?format=pdf`,
-                isExternal: true
-            };
+            try {
+                const response = await axios_1.default.get(document.pdfUrl, {
+                    responseType: 'arraybuffer',
+                });
+                const buffer = Buffer.from(response.data);
+                const contentType = response.headers['content-type'] || 'application/pdf';
+                return {
+                    content: buffer,
+                    filename: `${document.documentType}_${document.documentNumber}.pdf`,
+                    mimetype: contentType,
+                    contentType,
+                    size: buffer.length,
+                    downloadUrl: `/api/fiscal/${id}/download?format=pdf`,
+                };
+            }
+            catch (error) {
+                this.logger.error(`Error downloading external PDF for fiscal document ${id}: ${error instanceof Error ? error.message : error}`);
+                throw new common_1.BadRequestException('Erro ao baixar arquivo PDF associado a esta nota fiscal.');
+            }
         }
         throw new common_1.BadRequestException('Formato não suportado. Use "xml" ou "pdf"');
     }
