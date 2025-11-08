@@ -1091,10 +1091,27 @@ startxref
       const updateData: any = {};
 
       if (data.accessKey !== undefined) {
-        if (data.accessKey) {
+        if (data.accessKey === null) {
+          // Ignorar valores nulos para evitar violar constraints NOT NULL
+          this.logger.warn(
+            `Inbound invoice ${id} received null accessKey. Ignoring change to preserve existing value.`,
+          );
+        } else if (typeof data.accessKey === 'string') {
+          const trimmedAccessKey = data.accessKey.trim();
+
+          if (trimmedAccessKey.length === 0) {
+            // String vazia significa "não alterar"
+            this.logger.log(
+              `Inbound invoice ${id} accessKey provided as empty string. Keeping current value.`,
+            );
+          } else {
+            if (!/^\d{44}$/.test(trimmedAccessKey)) {
+              throw new BadRequestException('Chave de acesso deve conter 44 dígitos numéricos');
+            }
+
           const existingDocument = await this.prisma.fiscalDocument.findFirst({
             where: {
-              accessKey: data.accessKey,
+                accessKey: trimmedAccessKey,
               companyId: companyId,
               id: { not: id }
             }
@@ -1104,9 +1121,12 @@ startxref
             throw new BadRequestException('Já existe uma nota fiscal com esta chave de acesso');
           }
 
-          updateData.accessKey = data.accessKey;
+            updateData.accessKey = trimmedAccessKey;
+          }
         } else {
-          updateData.accessKey = null;
+          this.logger.warn(
+            `Inbound invoice ${id} received accessKey with unsupported type (${typeof data.accessKey}). Ignoring.`,
+          );
         }
       }
 
