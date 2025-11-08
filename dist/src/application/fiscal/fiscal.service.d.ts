@@ -221,9 +221,26 @@ export declare class FiscalService {
     }>;
     private extractDocumentInfo;
     createInboundInvoice(companyId: string, data: {
-        accessKey: string;
+        accessKey?: string;
         supplierName: string;
         totalValue: number;
+        documentNumber?: string;
+        pdfUrl?: string;
+    }): Promise<{
+        id: string;
+        documentNumber: string;
+        documentType: string;
+        accessKey: string;
+        status: string;
+        totalValue: import("@prisma/client/runtime/library").Decimal;
+        supplierName: string;
+        emissionDate: Date;
+        message: string;
+    }>;
+    updateInboundInvoice(id: string, companyId: string, data: {
+        accessKey?: string | null;
+        supplierName?: string;
+        totalValue?: number;
         documentNumber?: string;
     }): Promise<{
         id: string;

@@ -21,10 +21,11 @@ __decorate([
         example: '35240114200166000187550010000000071123456789',
         minLength: 44,
         maxLength: 44,
+        required: false,
     }),
+    (0, class_validator_1.IsOptional)(),
     (0, class_validator_1.IsString)(),
-    (0, class_validator_1.IsNotEmpty)({ message: 'Chave de acesso é obrigatória' }),
-    (0, class_validator_1.MaxLength)(44, { message: 'Chave de acesso deve ter 44 dígitos' }),
+    (0, class_validator_1.Matches)(/^\d{44}$/, { message: 'Chave de acesso deve ter 44 dígitos numéricos' }),
     __metadata("design:type", String)
 ], CreateInboundInvoiceDto.prototype, "accessKey", void 0);
 __decorate([
@@ -59,4 +60,14 @@ __decorate([
     (0, class_validator_1.IsString)(),
     __metadata("design:type", String)
 ], CreateInboundInvoiceDto.prototype, "documentNumber", void 0);
+__decorate([
+    (0, swagger_1.ApiProperty)({
+        description: 'URL do PDF anexado à nota fiscal',
+        example: 'https://cdn.exemplo.com/notas/nota123.pdf',
+        required: false,
+    }),
+    (0, class_validator_1.IsOptional)(),
+    (0, class_validator_1.IsString)(),
+    __metadata("design:type", String)
+], CreateInboundInvoiceDto.prototype, "pdfUrl", void 0);
 //# sourceMappingURL=create-inbound-invoice.dto.js.map

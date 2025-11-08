@@ -15,4 +15,5 @@ export declare class GenerateReportDto {
     startDate?: string;
     endDate?: string;
     sellerId?: string;
+    includeDocuments?: boolean;
 }

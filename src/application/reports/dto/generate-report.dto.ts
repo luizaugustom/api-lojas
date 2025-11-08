@@ -1,4 +1,4 @@
-import { IsString, IsOptional, IsEnum, IsDateString } from 'class-validator';
+import { IsString, IsOptional, IsEnum, IsDateString, IsBoolean } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 
 export enum ReportType {
@@ -54,4 +54,14 @@ export class GenerateReportDto {
   @IsOptional()
   @IsString()
   sellerId?: string;
+
+  @ApiPropertyOptional({
+    description:
+      'Quando verdadeiro, inclui os arquivos XML das notas fiscais em um pacote ZIP junto com o relatório',
+    example: false,
+    default: false,
+  })
+  @IsOptional()
+  @IsBoolean()
+  includeDocuments?: boolean;
 }

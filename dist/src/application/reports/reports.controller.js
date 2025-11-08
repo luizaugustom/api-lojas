@@ -29,23 +29,13 @@ let ReportsController = class ReportsController {
     async generateReport(user, generateReportDto, req, res) {
         const clientTimeInfo = (0, client_time_util_1.extractClientTimeInfo)(req);
         const result = await this.reportsService.generateReport(user.companyId, generateReportDto, clientTimeInfo);
-        const timestamp = (0, client_time_util_1.getClientNow)(clientTimeInfo).toISOString().replace(/[:.]/g, '-');
-        const reportType = generateReportDto.reportType;
-        if (generateReportDto.format === generate_report_dto_1.ReportFormat.JSON) {
-            res.setHeader('Content-Type', result.contentType);
-            res.setHeader('Content-Disposition', `attachment; filename="relatorio-${reportType}-${timestamp}.json"`);
-            return res.status(common_1.HttpStatus.OK).json(result.data);
-        }
-        else if (generateReportDto.format === generate_report_dto_1.ReportFormat.XML) {
-            res.setHeader('Content-Type', result.contentType);
-            res.setHeader('Content-Disposition', `attachment; filename="relatorio-${reportType}-${timestamp}.xml"`);
+        res.setHeader('Content-Type', result.contentType);
+        res.setHeader('Content-Disposition', `attachment; filename="${result.filename}"`);
+        if (Buffer.isBuffer(result.data) || typeof result.data === 'string') {
+            res.setHeader('Content-Length', Buffer.byteLength(result.data));
             return res.status(common_1.HttpStatus.OK).send(result.data);
         }
-        else if (generateReportDto.format === generate_report_dto_1.ReportFormat.EXCEL) {
-            res.setHeader('Content-Type', result.contentType);
-            res.setHeader('Content-Disposition', `attachment; filename="relatorio-${reportType}-${timestamp}.xlsx"`);
-            return res.status(common_1.HttpStatus.OK).send(result.data);
-        }
+        return res.status(common_1.HttpStatus.OK).json(result.data);
     }
 };
 exports.ReportsController = ReportsController;

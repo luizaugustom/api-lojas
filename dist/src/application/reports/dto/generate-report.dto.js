@@ -73,4 +73,14 @@ __decorate([
     (0, class_validator_1.IsString)(),
     __metadata("design:type", String)
 ], GenerateReportDto.prototype, "sellerId", void 0);
+__decorate([
+    (0, swagger_1.ApiPropertyOptional)({
+        description: 'Quando verdadeiro, inclui os arquivos XML das notas fiscais em um pacote ZIP junto com o relatório',
+        example: false,
+        default: false,
+    }),
+    (0, class_validator_1.IsOptional)(),
+    (0, class_validator_1.IsBoolean)(),
+    __metadata("design:type", Boolean)
+], GenerateReportDto.prototype, "includeDocuments", void 0);
 //# sourceMappingURL=generate-report.dto.js.map

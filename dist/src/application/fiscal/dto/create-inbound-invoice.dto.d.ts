@@ -1,6 +1,7 @@
 export declare class CreateInboundInvoiceDto {
-    accessKey: string;
+    accessKey?: string;
     supplierName: string;
     totalValue: number;
     documentNumber?: string;
+    pdfUrl?: string;
 }

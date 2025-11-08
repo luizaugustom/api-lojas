@@ -5,6 +5,7 @@ import { GenerateNFSeDto } from './dto/generate-nfse.dto';
 import { GenerateNFCeDto } from './dto/generate-nfce.dto';
 import { CancelFiscalDocumentDto } from './dto/cancel-fiscal-document.dto';
 import { CreateInboundInvoiceDto } from './dto/create-inbound-invoice.dto';
+import { UpdateInboundInvoiceDto } from './dto/update-inbound-invoice.dto';
 export declare class FiscalController {
     private readonly fiscalService;
     constructor(fiscalService: FiscalService);
@@ -64,6 +65,17 @@ export declare class FiscalController {
         message: string;
     }>;
     createInboundInvoice(createInboundInvoiceDto: CreateInboundInvoiceDto, user: any): Promise<{
+        id: string;
+        documentNumber: string;
+        documentType: string;
+        accessKey: string;
+        status: string;
+        totalValue: import("@prisma/client/runtime/library").Decimal;
+        supplierName: string;
+        emissionDate: Date;
+        message: string;
+    }>;
+    updateInboundInvoice(id: string, updateInboundInvoiceDto: UpdateInboundInvoiceDto, user: any): Promise<{
         id: string;
         documentNumber: string;
         documentType: string;

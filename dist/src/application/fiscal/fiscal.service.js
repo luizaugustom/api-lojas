@@ -775,25 +775,28 @@ startxref
     async createInboundInvoice(companyId, data) {
         try {
             this.logger.log(`Creating inbound invoice for company: ${companyId}`);
-            const existingDocument = await this.prisma.fiscalDocument.findFirst({
-                where: {
-                    accessKey: data.accessKey,
-                    companyId: companyId
+            if (data.accessKey) {
+                const existingDocument = await this.prisma.fiscalDocument.findFirst({
+                    where: {
+                        accessKey: data.accessKey,
+                        companyId: companyId
+                    }
+                });
+                if (existingDocument) {
+                    throw new common_1.BadRequestException('Já existe uma nota fiscal com esta chave de acesso');
                 }
-            });
-            if (existingDocument) {
-                throw new common_1.BadRequestException('Já existe uma nota fiscal com esta chave de acesso');
             }
             const fiscalDocument = await this.prisma.fiscalDocument.create({
                 data: {
                     companyId: companyId,
                     documentType: 'NFe_INBOUND',
                     documentNumber: data.documentNumber || 'MANUAL',
-                    accessKey: data.accessKey,
+                    accessKey: data.accessKey ?? null,
                     status: 'Registrada',
                     totalValue: data.totalValue,
                     supplierName: data.supplierName,
                     emissionDate: new Date(),
+                    pdfUrl: data.pdfUrl ?? null,
                 }
             });
             this.logger.log(`Inbound invoice created successfully: ${fiscalDocument.id}`);
@@ -815,6 +818,79 @@ startxref
                 throw error;
             }
             throw new common_1.BadRequestException('Erro ao criar nota fiscal de entrada: ' + error.message);
+        }
+    }
+    async updateInboundInvoice(id, companyId, data) {
+        try {
+            this.logger.log(`Updating inbound invoice ${id} for company: ${companyId}`);
+            const fiscalDocument = await this.prisma.fiscalDocument.findUnique({
+                where: { id }
+            });
+            if (!fiscalDocument) {
+                throw new common_1.NotFoundException('Nota fiscal não encontrada');
+            }
+            if (fiscalDocument.companyId !== companyId) {
+                throw new common_1.BadRequestException('Esta nota fiscal não pertence à sua empresa');
+            }
+            const isInboundInvoice = fiscalDocument.documentType === 'NFe_INBOUND' ||
+                (fiscalDocument.documentType === 'NFe' && fiscalDocument.xmlContent !== null);
+            if (!isInboundInvoice) {
+                throw new common_1.BadRequestException('Apenas notas fiscais de entrada podem ser editadas por este método');
+            }
+            const updateData = {};
+            if (data.accessKey !== undefined) {
+                if (data.accessKey) {
+                    const existingDocument = await this.prisma.fiscalDocument.findFirst({
+                        where: {
+                            accessKey: data.accessKey,
+                            companyId: companyId,
+                            id: { not: id }
+                        }
+                    });
+                    if (existingDocument) {
+                        throw new common_1.BadRequestException('Já existe uma nota fiscal com esta chave de acesso');
+                    }
+                    updateData.accessKey = data.accessKey;
+                }
+                else {
+                    updateData.accessKey = null;
+                }
+            }
+            if (data.supplierName !== undefined) {
+                updateData.supplierName = data.supplierName;
+            }
+            if (data.totalValue !== undefined) {
+                updateData.totalValue = data.totalValue;
+            }
+            if (data.documentNumber !== undefined) {
+                updateData.documentNumber = data.documentNumber;
+            }
+            if (Object.keys(updateData).length === 0) {
+                throw new common_1.BadRequestException('Nenhum dado informado para atualização');
+            }
+            const updatedDocument = await this.prisma.fiscalDocument.update({
+                where: { id },
+                data: updateData
+            });
+            this.logger.log(`Inbound invoice updated successfully: ${updatedDocument.id}`);
+            return {
+                id: updatedDocument.id,
+                documentNumber: updatedDocument.documentNumber,
+                documentType: updatedDocument.documentType,
+                accessKey: updatedDocument.accessKey,
+                status: updatedDocument.status,
+                totalValue: updatedDocument.totalValue,
+                supplierName: updatedDocument.supplierName,
+                emissionDate: updatedDocument.emissionDate,
+                message: 'Nota fiscal de entrada atualizada com sucesso'
+            };
+        }
+        catch (error) {
+            this.logger.error('Error updating inbound invoice:', error);
+            if (error instanceof common_1.BadRequestException || error instanceof common_1.NotFoundException) {
+                throw error;
+            }
+            throw new common_1.BadRequestException('Erro ao atualizar nota fiscal de entrada: ' + error.message);
         }
     }
     async deleteInboundInvoice(id, companyId) {

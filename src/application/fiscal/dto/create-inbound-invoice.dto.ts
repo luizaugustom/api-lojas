@@ -1,5 +1,5 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { IsString, IsNotEmpty, IsNumber, IsOptional, Min, MaxLength } from 'class-validator';
+import { IsString, IsNotEmpty, IsNumber, IsOptional, Min, MaxLength, Matches } from 'class-validator';
 
 export class CreateInboundInvoiceDto {
   @ApiProperty({
@@ -7,11 +7,12 @@ export class CreateInboundInvoiceDto {
     example: '35240114200166000187550010000000071123456789',
     minLength: 44,
     maxLength: 44,
+    required: false,
   })
+  @IsOptional()
   @IsString()
-  @IsNotEmpty({ message: 'Chave de acesso é obrigatória' })
-  @MaxLength(44, { message: 'Chave de acesso deve ter 44 dígitos' })
-  accessKey: string;
+  @Matches(/^\d{44}$/, { message: 'Chave de acesso deve ter 44 dígitos numéricos' })
+  accessKey?: string;
 
   @ApiProperty({
     description: 'Nome do fornecedor',
@@ -41,6 +42,15 @@ export class CreateInboundInvoiceDto {
   @IsOptional()
   @IsString()
   documentNumber?: string;
+
+  @ApiProperty({
+    description: 'URL do PDF anexado à nota fiscal',
+    example: 'https://cdn.exemplo.com/notas/nota123.pdf',
+    required: false,
+  })
+  @IsOptional()
+  @IsString()
+  pdfUrl?: string;
 }
 
 

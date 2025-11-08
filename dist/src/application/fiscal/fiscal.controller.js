@@ -22,6 +22,7 @@ const generate_nfse_dto_1 = require("./dto/generate-nfse.dto");
 const generate_nfce_dto_1 = require("./dto/generate-nfce.dto");
 const cancel_fiscal_document_dto_1 = require("./dto/cancel-fiscal-document.dto");
 const create_inbound_invoice_dto_1 = require("./dto/create-inbound-invoice.dto");
+const update_inbound_invoice_dto_1 = require("./dto/update-inbound-invoice.dto");
 const jwt_auth_guard_1 = require("../../shared/guards/jwt-auth.guard");
 const roles_guard_1 = require("../../shared/guards/roles.guard");
 const roles_decorator_1 = require("../../shared/decorators/roles.decorator");
@@ -104,6 +105,13 @@ let FiscalController = class FiscalController {
             throw new Error('Company ID não encontrado');
         }
         return this.fiscalService.createInboundInvoice(companyId, createInboundInvoiceDto);
+    }
+    async updateInboundInvoice(id, updateInboundInvoiceDto, user) {
+        const companyId = user.role === roles_decorator_1.UserRole.ADMIN ? user.companyId : user.companyId;
+        if (!companyId) {
+            throw new Error('Company ID não encontrado');
+        }
+        return this.fiscalService.updateInboundInvoice(id, companyId, updateInboundInvoiceDto);
     }
     async getFiscalDocumentByAccessKey(accessKey, user) {
         if (user.role === roles_decorator_1.UserRole.ADMIN) {
@@ -341,6 +349,25 @@ __decorate([
     __metadata("design:paramtypes", [create_inbound_invoice_dto_1.CreateInboundInvoiceDto, Object]),
     __metadata("design:returntype", Promise)
 ], FiscalController.prototype, "createInboundInvoice", null);
+__decorate([
+    (0, common_1.Patch)('inbound-invoice/:id'),
+    (0, roles_decorator_1.Roles)(roles_decorator_1.UserRole.ADMIN, roles_decorator_1.UserRole.COMPANY),
+    (0, swagger_1.ApiOperation)({
+        summary: 'Editar nota fiscal de entrada manual',
+        description: 'Atualiza campos básicos de uma nota fiscal de entrada (chave de acesso, fornecedor, total)'
+    }),
+    (0, swagger_1.ApiResponse)({
+        status: 200,
+        description: 'Nota fiscal de entrada atualizada com sucesso',
+    }),
+    (0, swagger_1.ApiResponse)({ status: 400, description: 'Dados inválidos ou chave de acesso já existe' }),
+    __param(0, (0, common_1.Param)('id', uuid_validation_pipe_1.UuidValidationPipe)),
+    __param(1, (0, common_1.Body)()),
+    __param(2, (0, current_user_decorator_1.CurrentUser)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String, update_inbound_invoice_dto_1.UpdateInboundInvoiceDto, Object]),
+    __metadata("design:returntype", Promise)
+], FiscalController.prototype, "updateInboundInvoice", null);
 __decorate([
     (0, common_1.Get)('access-key/:accessKey'),
     (0, roles_decorator_1.Roles)(roles_decorator_1.UserRole.ADMIN, roles_decorator_1.UserRole.COMPANY),

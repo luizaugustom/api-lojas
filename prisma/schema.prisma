@@ -318,7 +318,7 @@ model FiscalDocument {
   id             String   @id @default(uuid())
   documentType   String // NFe, NFSe, etc.
   documentNumber String
-  accessKey      String   @unique
+  accessKey      String?  @unique
   status         String // Emitida, Cancelada, etc.
   totalValue     Decimal? @db.Decimal(10, 2) // Valor total do documento
   supplierName   String? // Nome do fornecedor (para notas de entrada)

@@ -15,12 +15,12 @@ import {
 } from '@nestjs/swagger';
 import { Request, Response } from 'express';
 import { ReportsService } from './reports.service';
-import { GenerateReportDto, ReportFormat } from './dto/generate-report.dto';
+import { GenerateReportDto } from './dto/generate-report.dto';
 import { JwtAuthGuard } from '../../shared/guards/jwt-auth.guard';
 import { RolesGuard } from '../../shared/guards/roles.guard';
 import { Roles, UserRole } from '../../shared/decorators/roles.decorator';
 import { CurrentUser } from '../../shared/decorators/current-user.decorator';
-import { extractClientTimeInfo, getClientNow } from '../../shared/utils/client-time.util';
+import { extractClientTimeInfo } from '../../shared/utils/client-time.util';
 
 @ApiTags('reports')
 @Controller('reports')
@@ -61,31 +61,14 @@ export class ReportsController {
       clientTimeInfo,
     );
 
-    const timestamp = getClientNow(clientTimeInfo).toISOString().replace(/[:.]/g, '-');
-    const reportType = generateReportDto.reportType;
+    res.setHeader('Content-Type', result.contentType);
+    res.setHeader('Content-Disposition', `attachment; filename="${result.filename}"`);
 
-    // Set appropriate headers based on format
-    if (generateReportDto.format === ReportFormat.JSON) {
-      res.setHeader('Content-Type', result.contentType);
-      res.setHeader(
-        'Content-Disposition',
-        `attachment; filename="relatorio-${reportType}-${timestamp}.json"`,
-      );
-      return res.status(HttpStatus.OK).json(result.data);
-    } else if (generateReportDto.format === ReportFormat.XML) {
-      res.setHeader('Content-Type', result.contentType);
-      res.setHeader(
-        'Content-Disposition',
-        `attachment; filename="relatorio-${reportType}-${timestamp}.xml"`,
-      );
-      return res.status(HttpStatus.OK).send(result.data);
-    } else if (generateReportDto.format === ReportFormat.EXCEL) {
-      res.setHeader('Content-Type', result.contentType);
-      res.setHeader(
-        'Content-Disposition',
-        `attachment; filename="relatorio-${reportType}-${timestamp}.xlsx"`,
-      );
+    if (Buffer.isBuffer(result.data) || typeof result.data === 'string') {
+      res.setHeader('Content-Length', Buffer.byteLength(result.data));
       return res.status(HttpStatus.OK).send(result.data);
     }
+
+    return res.status(HttpStatus.OK).json(result.data);
   }
 }

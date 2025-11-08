@@ -16,6 +16,8 @@ const prisma_service_1 = require("../../infrastructure/database/prisma.service")
 const generate_report_dto_1 = require("./dto/generate-report.dto");
 const ExcelJS = require("exceljs");
 const xml2js_1 = require("xml2js");
+const archiver_1 = require("archiver");
+const stream_1 = require("stream");
 const client_time_util_1 = require("../../shared/utils/client-time.util");
 let ReportsService = ReportsService_1 = class ReportsService {
     constructor(prisma) {
@@ -30,7 +32,7 @@ let ReportsService = ReportsService_1 = class ReportsService {
         if (!company) {
             throw new common_1.NotFoundException('Empresa não encontrada');
         }
-        const { reportType, format, startDate, endDate, sellerId } = generateReportDto;
+        const { reportType, format, startDate, endDate, sellerId, includeDocuments } = generateReportDto;
         let reportData;
         switch (reportType) {
             case generate_report_dto_1.ReportType.SALES:
@@ -74,23 +76,33 @@ let ReportsService = ReportsService_1 = class ReportsService {
             },
             data: reportData,
         };
-        switch (format) {
-            case generate_report_dto_1.ReportFormat.JSON:
-                return {
-                    contentType: 'application/json',
-                    data: reportWithCompany,
-                };
-            case generate_report_dto_1.ReportFormat.XML:
-                return {
-                    contentType: 'application/xml',
-                    data: await this.convertToXML(reportWithCompany),
-                };
-            case generate_report_dto_1.ReportFormat.EXCEL:
-                return {
-                    contentType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-                    data: await this.convertToExcel(reportWithCompany, reportType, clientTimeInfo),
-                };
+        const timestamp = (0, client_time_util_1.getClientNow)(clientTimeInfo).toISOString().replace(/[:.]/g, '-');
+        const reportBaseName = `relatorio-${reportType}-${timestamp}`;
+        const reportFile = await this.generateReportFile(reportWithCompany, reportType, format, clientTimeInfo, reportBaseName);
+        if (!includeDocuments) {
+            return {
+                contentType: reportFile.contentType,
+                data: reportFile.buffer,
+                filename: reportFile.filename,
+            };
         }
+        let invoicesData;
+        if (reportType === generate_report_dto_1.ReportType.INVOICES) {
+            invoicesData = reportData;
+        }
+        else if (reportType === generate_report_dto_1.ReportType.COMPLETE) {
+            invoicesData = reportData?.invoices;
+        }
+        else {
+            invoicesData = await this.generateInvoicesReport(companyId, startDate, endDate);
+        }
+        const invoices = Array.isArray(invoicesData?.invoices) ? invoicesData.invoices : [];
+        const zipBuffer = await this.buildZipPackage(reportFile, invoices, timestamp);
+        return {
+            contentType: 'application/zip',
+            data: zipBuffer,
+            filename: `${reportBaseName}.zip`,
+        };
     }
     async generateSalesReport(companyId, startDate, endDate, sellerId) {
         const where = { companyId };
@@ -383,7 +395,8 @@ let ReportsService = ReportsService_1 = class ReportsService {
             this.addCashClosuresSheet(workbook, data.data.cashClosures, clientTimeInfo);
             this.addCommissionsSheet(workbook, data.data.commissions);
         }
-        return (await workbook.xlsx.writeBuffer());
+        const arrayBuffer = await workbook.xlsx.writeBuffer();
+        return Buffer.isBuffer(arrayBuffer) ? arrayBuffer : Buffer.from(arrayBuffer);
     }
     addCompanyInfo(sheet, company) {
         sheet.columns = [
@@ -531,6 +544,122 @@ let ReportsService = ReportsService_1 = class ReportsService {
         };
         sheet.getColumn('totalRevenue').numFmt = 'R$ #,##0.00';
         sheet.getColumn('commissionAmount').numFmt = 'R$ #,##0.00';
+    }
+    async generateReportFile(reportWithCompany, reportType, format, clientTimeInfo, reportBaseName) {
+        switch (format) {
+            case generate_report_dto_1.ReportFormat.JSON: {
+                const jsonContent = JSON.stringify(reportWithCompany, null, 2);
+                return {
+                    buffer: Buffer.from(jsonContent, 'utf8'),
+                    filename: `${reportBaseName}.json`,
+                    contentType: 'application/json',
+                };
+            }
+            case generate_report_dto_1.ReportFormat.XML: {
+                const xmlContent = await this.convertToXML(reportWithCompany);
+                return {
+                    buffer: Buffer.from(xmlContent, 'utf8'),
+                    filename: `${reportBaseName}.xml`,
+                    contentType: 'application/xml',
+                };
+            }
+            case generate_report_dto_1.ReportFormat.EXCEL: {
+                const excelBuffer = await this.convertToExcel(reportWithCompany, reportType, clientTimeInfo);
+                return {
+                    buffer: excelBuffer,
+                    filename: `${reportBaseName}.xlsx`,
+                    contentType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+                };
+            }
+            default: {
+                const fallbackContent = JSON.stringify(reportWithCompany, null, 2);
+                return {
+                    buffer: Buffer.from(fallbackContent, 'utf8'),
+                    filename: `${reportBaseName}.json`,
+                    contentType: 'application/json',
+                };
+            }
+        }
+    }
+    async buildZipPackage(reportFile, invoices, timestamp) {
+        const archive = (0, archiver_1.default)('zip', { zlib: { level: 9 } });
+        const stream = new stream_1.PassThrough();
+        const chunks = [];
+        const zipPromise = new Promise((resolve, reject) => {
+            stream.on('data', (chunk) => {
+                chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
+            });
+            stream.on('end', () => resolve(Buffer.concat(chunks)));
+            stream.on('error', reject);
+            archive.on('error', reject);
+        });
+        archive.pipe(stream);
+        archive.append(reportFile.buffer, {
+            name: `relatorio/${reportFile.filename}`,
+        });
+        const folderUsage = {
+            'notas-fiscais': false,
+            nfc: false,
+            'notas-fiscais-entrada': false,
+        };
+        invoices
+            .filter((invoice) => Boolean(invoice?.xmlContent))
+            .forEach((invoice) => {
+            const folder = this.resolveInvoiceFolder(invoice.documentType);
+            folderUsage[folder] = true;
+            const fileName = this.buildInvoiceFilename(invoice, timestamp);
+            archive.append(invoice.xmlContent, {
+                name: `${folder}/${fileName}`,
+            });
+        });
+        const placeholderContent = 'Nao ha documentos XML deste tipo para o periodo selecionado.';
+        Object.entries(folderUsage).forEach(([folder, hasFiles]) => {
+            if (!hasFiles) {
+                archive.append(placeholderContent, {
+                    name: `${folder}/LEIA-ME.txt`,
+                });
+            }
+        });
+        await archive.finalize();
+        return zipPromise;
+    }
+    resolveInvoiceFolder(documentType) {
+        const normalized = (documentType || '').toLowerCase();
+        if (normalized.includes('entrada') ||
+            normalized.includes('inbound') ||
+            normalized.includes('compra')) {
+            return 'notas-fiscais-entrada';
+        }
+        if (normalized.includes('nfce') ||
+            normalized.includes('nfc-e') ||
+            normalized.includes('nfc')) {
+            return 'nfc';
+        }
+        return 'notas-fiscais';
+    }
+    buildInvoiceFilename(invoice, timestamp) {
+        const parts = [];
+        if (invoice.documentType) {
+            parts.push(this.sanitizeFileName(String(invoice.documentType)));
+        }
+        if (invoice.documentNumber) {
+            parts.push(this.sanitizeFileName(String(invoice.documentNumber)));
+        }
+        if (invoice.accessKey) {
+            parts.push(this.sanitizeFileName(String(invoice.accessKey)));
+        }
+        if (parts.length === 0) {
+            parts.push(invoice.id ? this.sanitizeFileName(String(invoice.id)) : 'documento');
+        }
+        parts.push(this.sanitizeFileName(timestamp));
+        const baseName = parts.filter(Boolean).join('-') || `documento-${timestamp}`;
+        return `${baseName}.xml`;
+    }
+    sanitizeFileName(value) {
+        return value
+            .normalize('NFD')
+            .replace(/[\u0300-\u036f]/g, '')
+            .replace(/[^a-zA-Z0-9-_]/g, '_');
     }
 };
 exports.ReportsService = ReportsService;

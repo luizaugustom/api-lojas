@@ -3,6 +3,7 @@ import {
   Get,
   Post,
   Delete,
+  Patch,
   Body,
   Param,
   Query,
@@ -29,6 +30,7 @@ import { GenerateNFSeDto } from './dto/generate-nfse.dto';
 import { GenerateNFCeDto } from './dto/generate-nfce.dto';
 import { CancelFiscalDocumentDto } from './dto/cancel-fiscal-document.dto';
 import { CreateInboundInvoiceDto } from './dto/create-inbound-invoice.dto';
+import { UpdateInboundInvoiceDto } from './dto/update-inbound-invoice.dto';
 import { JwtAuthGuard } from '../../shared/guards/jwt-auth.guard';
 import { RolesGuard } from '../../shared/guards/roles.guard';
 import { Roles, UserRole } from '../../shared/decorators/roles.decorator';
@@ -228,6 +230,31 @@ export class FiscalController {
     }
 
     return this.fiscalService.createInboundInvoice(companyId, createInboundInvoiceDto);
+  }
+
+  @Patch('inbound-invoice/:id')
+  @Roles(UserRole.ADMIN, UserRole.COMPANY)
+  @ApiOperation({ 
+    summary: 'Editar nota fiscal de entrada manual',
+    description: 'Atualiza campos básicos de uma nota fiscal de entrada (chave de acesso, fornecedor, total)'
+  })
+  @ApiResponse({ 
+    status: 200, 
+    description: 'Nota fiscal de entrada atualizada com sucesso',
+  })
+  @ApiResponse({ status: 400, description: 'Dados inválidos ou chave de acesso já existe' })
+  async updateInboundInvoice(
+    @Param('id', UuidValidationPipe) id: string,
+    @Body() updateInboundInvoiceDto: UpdateInboundInvoiceDto,
+    @CurrentUser() user: any,
+  ) {
+    const companyId = user.role === UserRole.ADMIN ? user.companyId : user.companyId;
+
+    if (!companyId) {
+      throw new Error('Company ID não encontrado');
+    }
+
+    return this.fiscalService.updateInboundInvoice(id, companyId, updateInboundInvoiceDto);
   }
 
   @Get('access-key/:accessKey')

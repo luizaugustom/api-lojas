@@ -993,25 +993,28 @@ startxref
   async createInboundInvoice(
     companyId: string,
     data: {
-      accessKey: string;
+      accessKey?: string;
       supplierName: string;
       totalValue: number;
       documentNumber?: string;
+      pdfUrl?: string;
     }
   ) {
     try {
       this.logger.log(`Creating inbound invoice for company: ${companyId}`);
 
       // Verificar se já existe um documento com essa chave de acesso
-      const existingDocument = await this.prisma.fiscalDocument.findFirst({
-        where: {
-          accessKey: data.accessKey,
-          companyId: companyId
-        }
-      });
+      if (data.accessKey) {
+        const existingDocument = await this.prisma.fiscalDocument.findFirst({
+          where: {
+            accessKey: data.accessKey,
+            companyId: companyId
+          }
+        });
 
-      if (existingDocument) {
-        throw new BadRequestException('Já existe uma nota fiscal com esta chave de acesso');
+        if (existingDocument) {
+          throw new BadRequestException('Já existe uma nota fiscal com esta chave de acesso');
+        }
       }
 
       // Criar o documento fiscal de entrada
@@ -1020,11 +1023,12 @@ startxref
           companyId: companyId,
           documentType: 'NFe_INBOUND',
           documentNumber: data.documentNumber || 'MANUAL',
-          accessKey: data.accessKey,
+          accessKey: data.accessKey ?? null,
           status: 'Registrada',
           totalValue: data.totalValue,
           supplierName: data.supplierName,
           emissionDate: new Date(),
+          pdfUrl: data.pdfUrl ?? null,
         }
       });
 
@@ -1048,6 +1052,104 @@ startxref
         throw error;
       }
       throw new BadRequestException('Erro ao criar nota fiscal de entrada: ' + error.message);
+    }
+  }
+
+  async updateInboundInvoice(
+    id: string,
+    companyId: string,
+    data: {
+      accessKey?: string | null;
+      supplierName?: string;
+      totalValue?: number;
+      documentNumber?: string;
+    }
+  ) {
+    try {
+      this.logger.log(`Updating inbound invoice ${id} for company: ${companyId}`);
+
+      const fiscalDocument = await this.prisma.fiscalDocument.findUnique({
+        where: { id }
+      });
+
+      if (!fiscalDocument) {
+        throw new NotFoundException('Nota fiscal não encontrada');
+      }
+
+      if (fiscalDocument.companyId !== companyId) {
+        throw new BadRequestException('Esta nota fiscal não pertence à sua empresa');
+      }
+
+      const isInboundInvoice =
+        fiscalDocument.documentType === 'NFe_INBOUND' ||
+        (fiscalDocument.documentType === 'NFe' && fiscalDocument.xmlContent !== null);
+
+      if (!isInboundInvoice) {
+        throw new BadRequestException('Apenas notas fiscais de entrada podem ser editadas por este método');
+      }
+
+      const updateData: any = {};
+
+      if (data.accessKey !== undefined) {
+        if (data.accessKey) {
+          const existingDocument = await this.prisma.fiscalDocument.findFirst({
+            where: {
+              accessKey: data.accessKey,
+              companyId: companyId,
+              id: { not: id }
+            }
+          });
+
+          if (existingDocument) {
+            throw new BadRequestException('Já existe uma nota fiscal com esta chave de acesso');
+          }
+
+          updateData.accessKey = data.accessKey;
+        } else {
+          updateData.accessKey = null;
+        }
+      }
+
+      if (data.supplierName !== undefined) {
+        updateData.supplierName = data.supplierName;
+      }
+
+      if (data.totalValue !== undefined) {
+        updateData.totalValue = data.totalValue;
+      }
+
+      if (data.documentNumber !== undefined) {
+        updateData.documentNumber = data.documentNumber;
+      }
+
+      if (Object.keys(updateData).length === 0) {
+        throw new BadRequestException('Nenhum dado informado para atualização');
+      }
+
+      const updatedDocument = await this.prisma.fiscalDocument.update({
+        where: { id },
+        data: updateData
+      });
+
+      this.logger.log(`Inbound invoice updated successfully: ${updatedDocument.id}`);
+
+      return {
+        id: updatedDocument.id,
+        documentNumber: updatedDocument.documentNumber,
+        documentType: updatedDocument.documentType,
+        accessKey: updatedDocument.accessKey,
+        status: updatedDocument.status,
+        totalValue: updatedDocument.totalValue,
+        supplierName: updatedDocument.supplierName,
+        emissionDate: updatedDocument.emissionDate,
+        message: 'Nota fiscal de entrada atualizada com sucesso'
+      };
+    } catch (error) {
+      this.logger.error('Error updating inbound invoice:', error);
+      if (error instanceof BadRequestException || error instanceof NotFoundException) {
+        throw error;
+      }
+      throw new BadRequestException('Erro ao atualizar nota fiscal de entrada: ' + error.message);
     }
   }
 
