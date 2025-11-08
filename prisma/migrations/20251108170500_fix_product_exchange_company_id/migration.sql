@@ -52,9 +52,6 @@ BEGIN
     SELECT 1 FROM "product_exchanges" WHERE "companyId" IS NULL
   ) THEN
     RAISE NOTICE 'Existem trocas sem companyId após a migração. Verifique manualmente.';
-  ELSE
-    ALTER TABLE "product_exchanges"
-      ALTER COLUMN "companyId" SET NOT NULL;
   END IF;
 
   -- Configura constraint de chave estrangeira se ainda não existir
