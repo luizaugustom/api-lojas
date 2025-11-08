@@ -23,7 +23,6 @@ const jwt_auth_guard_1 = require("../../shared/guards/jwt-auth.guard");
 const roles_guard_1 = require("../../shared/guards/roles.guard");
 const roles_decorator_1 = require("../../shared/decorators/roles.decorator");
 const current_user_decorator_1 = require("../../shared/decorators/current-user.decorator");
-const uuid_validation_pipe_1 = require("../../shared/pipes/uuid-validation.pipe");
 const client_time_util_1 = require("../../shared/utils/client-time.util");
 const data_period_util_1 = require("../../shared/utils/data-period.util");
 let SaleController = class SaleController {
@@ -200,7 +199,7 @@ __decorate([
     (0, swagger_1.ApiResponse)({ status: 200, description: 'Venda encontrada' }),
     (0, swagger_1.ApiResponse)({ status: 404, description: 'Venda não encontrada' }),
     (0, swagger_1.ApiResponse)({ status: 400, description: 'ID inválido' }),
-    __param(0, (0, common_1.Param)('id', uuid_validation_pipe_1.UuidValidationPipe)),
+    __param(0, (0, common_1.Param)('id')),
     __param(1, (0, current_user_decorator_1.CurrentUser)()),
     __metadata("design:type", Function),
     __metadata("design:paramtypes", [String, Object]),
@@ -224,7 +223,7 @@ __decorate([
     (0, swagger_1.ApiOperation)({ summary: 'Reimprimir cupom da venda' }),
     (0, swagger_1.ApiResponse)({ status: 200, description: 'Cupom reimpresso com sucesso' }),
     (0, swagger_1.ApiResponse)({ status: 400, description: 'ID inválido ou erro ao reimprimir cupom' }),
-    __param(0, (0, common_1.Param)('id', uuid_validation_pipe_1.UuidValidationPipe)),
+    __param(0, (0, common_1.Param)('id')),
     __param(1, (0, current_user_decorator_1.CurrentUser)()),
     __param(2, (0, common_1.Req)()),
     __metadata("design:type", Function),
@@ -237,7 +236,7 @@ __decorate([
     (0, swagger_1.ApiOperation)({ summary: 'Obter conteúdo de impressão para venda (para impressão local)' }),
     (0, swagger_1.ApiResponse)({ status: 200, description: 'Conteúdo de impressão gerado com sucesso' }),
     (0, swagger_1.ApiResponse)({ status: 400, description: 'ID inválido ou erro ao gerar conteúdo' }),
-    __param(0, (0, common_1.Param)('id', uuid_validation_pipe_1.UuidValidationPipe)),
+    __param(0, (0, common_1.Param)('id')),
     __param(1, (0, current_user_decorator_1.CurrentUser)()),
     __param(2, (0, common_1.Req)()),
     __metadata("design:type", Function),
@@ -251,7 +250,7 @@ __decorate([
     (0, swagger_1.ApiResponse)({ status: 200, description: 'Venda atualizada com sucesso' }),
     (0, swagger_1.ApiResponse)({ status: 404, description: 'Venda não encontrada' }),
     (0, swagger_1.ApiResponse)({ status: 400, description: 'ID inválido ou não é possível editar vendas antigas' }),
-    __param(0, (0, common_1.Param)('id', uuid_validation_pipe_1.UuidValidationPipe)),
+    __param(0, (0, common_1.Param)('id')),
     __param(1, (0, common_1.Body)()),
     __param(2, (0, current_user_decorator_1.CurrentUser)()),
     __metadata("design:type", Function),
@@ -265,7 +264,7 @@ __decorate([
     (0, swagger_1.ApiResponse)({ status: 200, description: 'Venda removida com sucesso' }),
     (0, swagger_1.ApiResponse)({ status: 404, description: 'Venda não encontrada' }),
     (0, swagger_1.ApiResponse)({ status: 400, description: 'ID inválido ou não é possível excluir vendas antigas' }),
-    __param(0, (0, common_1.Param)('id', uuid_validation_pipe_1.UuidValidationPipe)),
+    __param(0, (0, common_1.Param)('id')),
     __param(1, (0, current_user_decorator_1.CurrentUser)()),
     __metadata("design:type", Function),
     __metadata("design:paramtypes", [String, Object]),

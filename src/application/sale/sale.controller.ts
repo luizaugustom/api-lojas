@@ -28,7 +28,6 @@ import { JwtAuthGuard } from '../../shared/guards/jwt-auth.guard';
 import { RolesGuard } from '../../shared/guards/roles.guard';
 import { Roles, UserRole } from '../../shared/decorators/roles.decorator';
 import { CurrentUser } from '../../shared/decorators/current-user.decorator';
-import { UuidValidationPipe } from '../../shared/pipes/uuid-validation.pipe';
 import { extractClientTimeInfo } from '../../shared/utils/client-time.util';
 import { resolveDataPeriodRangeAsISOString } from '../../shared/utils/data-period.util';
 
@@ -177,10 +176,7 @@ export class SaleController {
   @ApiResponse({ status: 200, description: 'Venda encontrada' })
   @ApiResponse({ status: 404, description: 'Venda não encontrada' })
   @ApiResponse({ status: 400, description: 'ID inválido' })
-  findOne(
-    @Param('id', UuidValidationPipe) id: string,
-    @CurrentUser() user: any,
-  ) {
+  findOne(@Param('id') id: string, @CurrentUser() user: any) {
     const companyId = user.role === UserRole.ADMIN ? undefined : user.companyId;
     return this.saleService.findOne(id, companyId);
   }
@@ -203,11 +199,7 @@ export class SaleController {
   @ApiOperation({ summary: 'Reimprimir cupom da venda' })
   @ApiResponse({ status: 200, description: 'Cupom reimpresso com sucesso' })
   @ApiResponse({ status: 400, description: 'ID inválido ou erro ao reimprimir cupom' })
-  reprintReceipt(
-    @Param('id', UuidValidationPipe) id: string,
-    @CurrentUser() user: any,
-    @Req() req: Request,
-  ) {
+  reprintReceipt(@Param('id') id: string, @CurrentUser() user: any, @Req() req: Request) {
     const companyId = user.role === UserRole.ADMIN ? undefined : user.companyId;
     // Obter computerId do header (enviado pelo cliente desktop/web)
     const computerId = (req.headers['x-computer-id'] as string) || null;
@@ -220,11 +212,7 @@ export class SaleController {
   @ApiOperation({ summary: 'Obter conteúdo de impressão para venda (para impressão local)' })
   @ApiResponse({ status: 200, description: 'Conteúdo de impressão gerado com sucesso' })
   @ApiResponse({ status: 400, description: 'ID inválido ou erro ao gerar conteúdo' })
-  getPrintContent(
-    @Param('id', UuidValidationPipe) id: string,
-    @CurrentUser() user: any,
-    @Req() req: Request,
-  ) {
+  getPrintContent(@Param('id') id: string, @CurrentUser() user: any, @Req() req: Request) {
     const companyId = user.role === UserRole.ADMIN ? undefined : user.companyId;
     const clientTimeInfo = extractClientTimeInfo(req);
     return this.saleService.getPrintContent(id, companyId, clientTimeInfo);
@@ -236,11 +224,7 @@ export class SaleController {
   @ApiResponse({ status: 200, description: 'Venda atualizada com sucesso' })
   @ApiResponse({ status: 404, description: 'Venda não encontrada' })
   @ApiResponse({ status: 400, description: 'ID inválido ou não é possível editar vendas antigas' })
-  update(
-    @Param('id', UuidValidationPipe) id: string,
-    @Body() updateSaleDto: UpdateSaleDto,
-    @CurrentUser() user: any,
-  ) {
+  update(@Param('id') id: string, @Body() updateSaleDto: UpdateSaleDto, @CurrentUser() user: any) {
     const companyId = user.role === UserRole.ADMIN ? undefined : user.companyId;
     return this.saleService.update(id, updateSaleDto, companyId);
   }
@@ -251,10 +235,7 @@ export class SaleController {
   @ApiResponse({ status: 200, description: 'Venda removida com sucesso' })
   @ApiResponse({ status: 404, description: 'Venda não encontrada' })
   @ApiResponse({ status: 400, description: 'ID inválido ou não é possível excluir vendas antigas' })
-  remove(
-    @Param('id', UuidValidationPipe) id: string,
-    @CurrentUser() user: any,
-  ) {
+  remove(@Param('id') id: string, @CurrentUser() user: any) {
     const companyId = user.role === UserRole.ADMIN ? undefined : user.companyId;
     return this.saleService.remove(id, companyId);
   }
