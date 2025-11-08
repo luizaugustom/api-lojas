@@ -1,4 +1,5 @@
 import { Injectable, Logger, BadRequestException, NotFoundException } from '@nestjs/common';
+import axios from 'axios';
 import { ConfigService } from '@nestjs/config';
 import { PrismaService } from '../../infrastructure/database/prisma.service';
 import { ValidationService } from '../../shared/services/validation.service';
@@ -686,15 +687,28 @@ export class FiscalService {
         };
       }
 
-      // Se existe URL do PDF, retornar informações para download
-      return {
-        url: document.pdfUrl,
-        filename: `${document.documentType}_${document.documentNumber}.pdf`,
-        mimetype: 'application/pdf',
-        contentType: 'application/pdf',
-        downloadUrl: `/api/fiscal/${id}/download?format=pdf`,
-        isExternal: true
-      };
+      try {
+        const response = await axios.get(document.pdfUrl, {
+          responseType: 'arraybuffer',
+        });
+
+        const buffer = Buffer.from(response.data);
+        const contentType = response.headers['content-type'] || 'application/pdf';
+
+        return {
+          content: buffer,
+          filename: `${document.documentType}_${document.documentNumber}.pdf`,
+          mimetype: contentType,
+          contentType,
+          size: buffer.length,
+          downloadUrl: `/api/fiscal/${id}/download?format=pdf`,
+        };
+      } catch (error) {
+        this.logger.error(
+          `Error downloading external PDF for fiscal document ${id}: ${error instanceof Error ? error.message : error}`,
+        );
+        throw new BadRequestException('Erro ao baixar arquivo PDF associado a esta nota fiscal.');
+      }
     }
 
     throw new BadRequestException('Formato não suportado. Use "xml" ou "pdf"');
