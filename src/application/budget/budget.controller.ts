@@ -199,6 +199,23 @@ export class BudgetController {
     return res.status(HttpStatus.OK).send(pdfBuffer);
   }
 
+  @Get(':id/print-content')
+  @Roles(UserRole.COMPANY, UserRole.SELLER)
+  @ApiOperation({ summary: 'Obter conteúdo de impressão do orçamento' })
+  @ApiResponse({
+    status: 200,
+    description: 'Conteúdo retornado com sucesso',
+  })
+  async getPrintContent(
+    @CurrentUser() user: any,
+    @Param('id') id: string,
+    @Req() req: Request,
+  ) {
+    const companyId = user.role === UserRole.COMPANY ? user.id : user.companyId;
+    const clientTimeInfo = extractClientTimeInfo(req);
+    return this.budgetService.getPrintContent(id, companyId, clientTimeInfo);
+  }
+
   @Post(':id/convert-to-sale')
   @Roles(UserRole.COMPANY, UserRole.SELLER)
   @ApiOperation({ summary: 'Converter orçamento em venda' })

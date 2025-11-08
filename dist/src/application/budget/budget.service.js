@@ -319,48 +319,21 @@ let BudgetService = BudgetService_1 = class BudgetService {
     }
     async printBudget(id, companyId, computerId, clientTimeInfo) {
         const budget = await this.findOne(id, companyId);
-        const printData = {
-            company: {
-                id: budget.companyId,
-                name: budget.company.name,
-                cnpj: budget.company.cnpj,
-                address: `${budget.company.street || ''}, ${budget.company.number || ''} - ${budget.company.district || ''}`,
-                phone: budget.company.phone,
-                email: budget.company.email,
-                logoUrl: budget.company.logoUrl,
-            },
-            budget: {
-                id: budget.id,
-                budgetNumber: budget.budgetNumber,
-                budgetDate: budget.budgetDate,
-                validUntil: budget.validUntil,
-                total: Number(budget.total),
-                status: budget.status,
-                notes: budget.notes,
-            },
-            client: budget.clientName ? {
-                name: budget.clientName,
-                phone: budget.clientPhone,
-                email: budget.clientEmail,
-                cpfCnpj: budget.clientCpfCnpj,
-            } : undefined,
-            items: budget.items.map(item => ({
-                productName: item.product.name,
-                barcode: item.product.barcode,
-                quantity: item.quantity,
-                unitPrice: Number(item.unitPrice),
-                totalPrice: Number(item.totalPrice),
-            })),
-            seller: budget.seller ? {
-                name: budget.seller.name,
-            } : undefined,
-            metadata: {
-                clientTimeInfo,
-            },
+        const printData = this.buildBudgetPrintData(budget, clientTimeInfo);
+        const printResult = await this.printerService.printBudget(printData, computerId, clientTimeInfo);
+        if (printResult.success) {
+            this.logger.log(`Budget ${id} printed successfully`);
+        }
+        else {
+            this.logger.warn(`Failed to print budget ${id}: ${printResult.error || 'motivo desconhecido'}`);
+        }
+        return {
+            message: printResult.success ? 'Orçamento enviado para impressão' : (printResult.error || 'Não foi possível imprimir o orçamento'),
+            success: printResult.success,
+            error: printResult.success ? undefined : printResult.error,
+            details: printResult.details,
+            printContent: printResult.content,
         };
-        await this.printerService.printBudget(printData, computerId, clientTimeInfo);
-        this.logger.log(`Budget ${id} printed successfully`);
-        return { message: 'Orçamento enviado para impressão' };
     }
     async generatePdf(id, companyId, clientTimeInfo) {
         const budget = await this.findOne(id, companyId);
@@ -692,6 +665,60 @@ let BudgetService = BudgetService_1 = class BudgetService {
             expired: 'Expirado',
         };
         return statusMap[status] || status;
+    }
+    async getPrintContent(id, companyId, clientTimeInfo) {
+        const budget = await this.findOne(id, companyId);
+        const printData = this.buildBudgetPrintData(budget, clientTimeInfo);
+        const content = await this.printerService.getBudgetPrintContent(printData, clientTimeInfo);
+        return {
+            content,
+            budgetNumber: budget.budgetNumber,
+        };
+    }
+    buildBudgetPrintData(budget, clientTimeInfo) {
+        return {
+            company: {
+                id: budget.companyId,
+                name: budget.company.name,
+                cnpj: budget.company.cnpj,
+                address: `${budget.company.street || ''}, ${budget.company.number || ''} - ${budget.company.district || ''}`,
+                phone: budget.company.phone,
+                email: budget.company.email,
+                logoUrl: budget.company.logoUrl,
+            },
+            budget: {
+                id: budget.id,
+                budgetNumber: budget.budgetNumber,
+                budgetDate: budget.budgetDate,
+                validUntil: budget.validUntil,
+                total: Number(budget.total),
+                status: budget.status,
+                notes: budget.notes,
+            },
+            client: budget.clientName
+                ? {
+                    name: budget.clientName,
+                    phone: budget.clientPhone,
+                    email: budget.clientEmail,
+                    cpfCnpj: budget.clientCpfCnpj,
+                }
+                : undefined,
+            items: budget.items.map((item) => ({
+                productName: item.product.name,
+                barcode: item.product.barcode,
+                quantity: item.quantity,
+                unitPrice: Number(item.unitPrice),
+                totalPrice: Number(item.totalPrice),
+            })),
+            seller: budget.seller
+                ? {
+                    name: budget.seller.name,
+                }
+                : undefined,
+            metadata: {
+                clientTimeInfo,
+            },
+        };
     }
     async convertToSale(id, companyId, sellerId) {
         const budget = await this.findOne(id, companyId);

@@ -464,9 +464,25 @@ let PrinterService = PrinterService_1 = class PrinterService {
         receipt += this.centerText('--------------------------------') + '\n\n\n';
         return receipt;
     }
-    generateNonFiscalReceiptContent(data, isMocked = false, clientTimeInfo) {
-        const { company, sale, items, seller, client } = data;
+    generateNonFiscalReceiptContent(data, _isMocked = false, clientTimeInfo) {
+        const { sale } = data;
         const timeInfo = clientTimeInfo ?? data.metadata?.clientTimeInfo;
+        const isInstallmentSale = sale.paymentMethods?.includes('installment');
+        if (isInstallmentSale) {
+            const storeCopy = this.buildNonFiscalReceiptCopy(data, timeInfo, {
+                copyLabel: 'VIA DA LOJA',
+                includeSignature: true,
+            });
+            const customerCopy = this.buildNonFiscalReceiptCopy(data, timeInfo, {
+                copyLabel: 'VIA DO CLIENTE',
+                includeSignature: false,
+            });
+            return storeCopy + customerCopy;
+        }
+        return this.buildNonFiscalReceiptCopy(data, timeInfo);
+    }
+    buildNonFiscalReceiptCopy(data, timeInfo, options = {}) {
+        const { company, sale, items, seller, client } = data;
         let receipt = '';
         receipt += this.centerText(company.name) + '\n';
         receipt += this.centerText(`CNPJ: ${company.cnpj}`) + '\n';
@@ -475,6 +491,9 @@ let PrinterService = PrinterService_1 = class PrinterService {
         }
         receipt += this.centerText('================================') + '\n';
         receipt += this.centerText('CUPOM NÃO FISCAL') + '\n';
+        if (options.copyLabel) {
+            receipt += this.centerText(options.copyLabel) + '\n';
+        }
         receipt += this.centerText('================================') + '\n';
         receipt += `Venda: ${sale.id}\n`;
         receipt += `Data: ${this.formatDate(sale.date, timeInfo)}\n`;
@@ -504,6 +523,12 @@ let PrinterService = PrinterService_1 = class PrinterService {
         });
         if (sale.change > 0) {
             receipt += `TROCO: ${this.formatCurrency(sale.change)}\n`;
+        }
+        if (options.includeSignature) {
+            receipt += '\n';
+            receipt += 'Assinatura do Cliente:\n';
+            receipt += '______________________________\n';
+            receipt += '\n';
         }
         receipt += this.centerText('================================') + '\n';
         receipt += this.centerText(`OBRIGADO POR ESCOLHER ${company.name.toUpperCase()}!`) + '\n';
@@ -599,8 +624,23 @@ let PrinterService = PrinterService_1 = class PrinterService {
         return report;
     }
     async generateNFCeContent(data, clientTimeInfo) {
-        const { company, fiscal, sale, items, customFooter } = data;
         const timeInfo = clientTimeInfo ?? data.metadata?.clientTimeInfo;
+        const isInstallmentSale = data.sale.paymentMethod?.includes('installment');
+        if (isInstallmentSale) {
+            const storeCopy = await this.buildNFCeContentCopy(data, timeInfo, {
+                copyLabel: 'VIA DA LOJA',
+                includeSignature: true,
+            });
+            const customerCopy = await this.buildNFCeContentCopy(data, timeInfo, {
+                copyLabel: 'VIA DO CLIENTE',
+                includeSignature: false,
+            });
+            return storeCopy + customerCopy;
+        }
+        return this.buildNFCeContentCopy(data, timeInfo);
+    }
+    async buildNFCeContentCopy(data, timeInfo, options = {}) {
+        const { company, fiscal, sale, items, customFooter } = data;
         let nfce = '';
         nfce += this.centerText(company.name.toUpperCase()) + '\n';
         nfce += this.centerText(`CNPJ: ${this.formatCnpj(company.cnpj)}`) + '\n';
@@ -620,6 +660,9 @@ let PrinterService = PrinterService_1 = class PrinterService {
         nfce += this.centerText('DOCUMENTO AUXILIAR DA NOTA') + '\n';
         nfce += this.centerText('FISCAL DE CONSUMIDOR ELETRONICA') + '\n';
         nfce += this.centerText('NFC-e') + '\n';
+        if (options.copyLabel) {
+            nfce += this.centerText(options.copyLabel) + '\n';
+        }
         nfce += this.centerText('================================') + '\n';
         nfce += this.centerText('NÃO PERMITE APROVEITAMENTO') + '\n';
         nfce += this.centerText('DE CRÉDITO FISCAL DE ICMS') + '\n';
@@ -700,6 +743,12 @@ let PrinterService = PrinterService_1 = class PrinterService {
             nfce += '\n';
             nfce += `Valor Recebido: ${this.formatCurrency(sale.total + sale.change).padStart(22)}\n`;
             nfce += `Troco: ${this.formatCurrency(sale.change).padStart(33)}\n`;
+        }
+        if (options.includeSignature) {
+            nfce += '\n';
+            nfce += 'Assinatura do Cliente:\n';
+            nfce += '______________________________\n';
+            nfce += '\n';
         }
         nfce += '\n';
         nfce += this.centerText('================================') + '\n';
@@ -1135,9 +1184,10 @@ let PrinterService = PrinterService_1 = class PrinterService {
         }
     }
     async printBudget(data, computerId, clientTimeInfo) {
+        let content;
         try {
             this.logger.log(`Printing budget: ${data.budget.id}${computerId ? ` (computador: ${computerId})` : ''}`);
-            const content = this.generateBudgetContent(data, clientTimeInfo);
+            content = this.generateBudgetContent(data, clientTimeInfo);
             const result = await this.sendToPrinter(content, data.company?.id, computerId);
             if (result.success) {
                 this.logger.log(`Budget ${data.budget.id} printed successfully`);
@@ -1145,12 +1195,22 @@ let PrinterService = PrinterService_1 = class PrinterService {
             else {
                 this.logger.warn(`Failed to print budget ${data.budget.id}`);
             }
-            return result.success;
+            return {
+                ...result,
+                content,
+            };
         }
         catch (error) {
             this.logger.error('Error printing budget:', error);
-            return false;
+            return {
+                success: false,
+                error: error instanceof Error ? error.message : String(error),
+                content,
+            };
         }
+    }
+    async getBudgetPrintContent(data, clientTimeInfo) {
+        return this.generateBudgetContent(data, clientTimeInfo);
     }
     generateBudgetContent(data, clientTimeInfo) {
         const { company, budget, client, items, seller } = data;

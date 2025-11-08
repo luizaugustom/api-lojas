@@ -41,6 +41,16 @@ export interface ReceiptData {
   };
 }
 
+interface NonFiscalReceiptCopyOptions {
+  copyLabel?: string;
+  includeSignature?: boolean;
+}
+
+interface NFCeReceiptCopyOptions {
+  copyLabel?: string;
+  includeSignature?: boolean;
+}
+
 export interface NFCePrintData {
   company: {
     name: string;
@@ -750,11 +760,37 @@ export class PrinterService {
 
   private generateNonFiscalReceiptContent(
     data: ReceiptData,
-    isMocked: boolean = false,
+    _isMocked: boolean = false,
     clientTimeInfo?: ClientTimeInfo,
   ): string {
-    const { company, sale, items, seller, client } = data;
+    const { sale } = data;
     const timeInfo = clientTimeInfo ?? data.metadata?.clientTimeInfo;
+
+    const isInstallmentSale = sale.paymentMethods?.includes('installment');
+
+    if (isInstallmentSale) {
+      const storeCopy = this.buildNonFiscalReceiptCopy(data, timeInfo, {
+        copyLabel: 'VIA DA LOJA',
+        includeSignature: true,
+      });
+
+      const customerCopy = this.buildNonFiscalReceiptCopy(data, timeInfo, {
+        copyLabel: 'VIA DO CLIENTE',
+        includeSignature: false,
+      });
+
+      return storeCopy + customerCopy;
+    }
+
+    return this.buildNonFiscalReceiptCopy(data, timeInfo);
+  }
+
+  private buildNonFiscalReceiptCopy(
+    data: ReceiptData,
+    timeInfo?: ClientTimeInfo,
+    options: NonFiscalReceiptCopyOptions = {},
+  ): string {
+    const { company, sale, items, seller, client } = data;
     
     let receipt = '';
     
@@ -767,6 +803,9 @@ export class PrinterService {
     receipt += this.centerText('================================') + '\n';
     
     receipt += this.centerText('CUPOM NÃO FISCAL') + '\n';
+    if (options.copyLabel) {
+      receipt += this.centerText(options.copyLabel) + '\n';
+    }
     receipt += this.centerText('================================') + '\n';
     
     // Sale info
@@ -812,6 +851,13 @@ export class PrinterService {
       receipt += `TROCO: ${this.formatCurrency(sale.change)}\n`;
     }
     
+    if (options.includeSignature) {
+      receipt += '\n';
+      receipt += 'Assinatura do Cliente:\n';
+      receipt += '______________________________\n';
+      receipt += '\n';
+    }
+
     receipt += this.centerText('================================') + '\n';
     
     receipt += this.centerText(`OBRIGADO POR ESCOLHER ${company.name.toUpperCase()}!`) + '\n';
@@ -923,11 +969,35 @@ export class PrinterService {
   }
 
   private async generateNFCeContent(data: NFCePrintData, clientTimeInfo?: ClientTimeInfo): Promise<string> {
-    const { company, fiscal, sale, items, customFooter } = data;
     const timeInfo = clientTimeInfo ?? data.metadata?.clientTimeInfo;
-    
+    const isInstallmentSale = data.sale.paymentMethod?.includes('installment');
+
+    if (isInstallmentSale) {
+      const storeCopy = await this.buildNFCeContentCopy(data, timeInfo, {
+        copyLabel: 'VIA DA LOJA',
+        includeSignature: true,
+      });
+
+      const customerCopy = await this.buildNFCeContentCopy(data, timeInfo, {
+        copyLabel: 'VIA DO CLIENTE',
+        includeSignature: false,
+      });
+
+      return storeCopy + customerCopy;
+    }
+
+    return this.buildNFCeContentCopy(data, timeInfo);
+  }
+
+  private async buildNFCeContentCopy(
+    data: NFCePrintData,
+    timeInfo?: ClientTimeInfo,
+    options: NFCeReceiptCopyOptions = {},
+  ): Promise<string> {
+    const { company, fiscal, sale, items, customFooter } = data;
+
     let nfce = '';
-    
+
     // ===== CABEÇALHO (Dados do Emitente) =====
     nfce += this.centerText(company.name.toUpperCase()) + '\n';
     nfce += this.centerText(`CNPJ: ${this.formatCnpj(company.cnpj)}`) + '\n';
@@ -944,16 +1014,19 @@ export class PrinterService {
       nfce += this.centerText(`Email: ${company.email}`) + '\n';
     }
     nfce += this.centerText('================================') + '\n';
-    
+
     // ===== IDENTIFICAÇÃO DO DOCUMENTO =====
     nfce += this.centerText('DOCUMENTO AUXILIAR DA NOTA') + '\n';
     nfce += this.centerText('FISCAL DE CONSUMIDOR ELETRONICA') + '\n';
     nfce += this.centerText('NFC-e') + '\n';
+    if (options.copyLabel) {
+      nfce += this.centerText(options.copyLabel) + '\n';
+    }
     nfce += this.centerText('================================') + '\n';
     nfce += this.centerText('NÃO PERMITE APROVEITAMENTO') + '\n';
     nfce += this.centerText('DE CRÉDITO FISCAL DE ICMS') + '\n';
     nfce += this.centerText('================================') + '\n\n';
-    
+
     // ===== DADOS DA NFC-e =====
     nfce += `Nº: ${fiscal.documentNumber}`;
     if (fiscal.serieNumber) {
@@ -961,20 +1034,20 @@ export class PrinterService {
     }
     nfce += '\n';
     nfce += `Emissão: ${this.formatDate(fiscal.emissionDate, timeInfo)}\n`;
-    
+
     // ===== CHAVE DE ACESSO =====
     nfce += '\n';
     nfce += this.centerText('CHAVE DE ACESSO') + '\n';
     nfce += this.formatAccessKey(fiscal.accessKey) + '\n';
     nfce += '\n';
-    
+
     // ===== CONSULTA VIA LEITOR DE QR CODE =====
     if (fiscal.qrCodeUrl) {
       nfce += this.centerText('CONSULTE PELA CHAVE DE ACESSO EM') + '\n';
       nfce += this.centerText('www.nfce.fazenda.gov.br/consultanfce') + '\n';
       nfce += this.centerText('OU UTILIZE O QR CODE ABAIXO:') + '\n';
       nfce += '\n';
-      
+
       // Gerar QR Code ASCII
       try {
         const qrCodeAscii = await this.generateQRCodeAscii(fiscal.qrCodeUrl);
@@ -986,7 +1059,7 @@ export class PrinterService {
       }
       nfce += '\n';
     }
-    
+
     // ===== DADOS DO CONSUMIDOR =====
     if (sale.clientName || sale.clientCpfCnpj) {
       nfce += this.centerText('================================') + '\n';
@@ -999,7 +1072,7 @@ export class PrinterService {
         nfce += `CPF/CNPJ: ${this.formatCpfCnpj(sale.clientCpfCnpj)}\n`;
       }
     }
-    
+
     // ===== PRODUTOS E SERVIÇOS =====
     nfce += '\n';
     nfce += this.centerText('================================') + '\n';
@@ -1007,16 +1080,16 @@ export class PrinterService {
     nfce += this.centerText('================================') + '\n';
     nfce += 'COD  DESCRICAO         QTD  VL.UNIT  VL.TOTAL\n';
     nfce += '----------------------------------------\n';
-    
+
     items.forEach((item, index) => {
       const itemNumber = (index + 1).toString().padStart(3);
       const description = item.productName.substring(0, 17).padEnd(17);
       const quantity = item.quantity.toString().padStart(3);
       const unitPrice = this.formatCurrency(item.unitPrice).padStart(8);
       const totalPrice = this.formatCurrency(item.totalPrice).padStart(9);
-      
+
       nfce += `${itemNumber}  ${description}${quantity} ${unitPrice} ${totalPrice}\n`;
-      
+
       // Código de barras (EAN/GTIN)
       if (item.barcode) {
         nfce += `     EAN: ${item.barcode}`;
@@ -1025,19 +1098,19 @@ export class PrinterService {
         }
         nfce += '\n';
       }
-      
+
       // CFOP se disponível
       if (item.cfop) {
         nfce += `     CFOP: ${item.cfop}\n`;
       }
     });
-    
+
     // ===== TOTAIS =====
     nfce += '----------------------------------------\n';
     nfce += `Qtd. Total de Itens: ${items.length}\n`;
     nfce += '\n';
     nfce += `VALOR TOTAL: ${this.formatCurrency(sale.total).padStart(30)}\n`;
-    
+
     // ===== FORMA DE PAGAMENTO =====
     nfce += '\n';
     nfce += this.centerText('================================') + '\n';
@@ -1046,19 +1119,26 @@ export class PrinterService {
     sale.paymentMethod.forEach(method => {
       nfce += `${this.getPaymentMethodName(method)}\n`;
     });
-    
+
     if (sale.change > 0) {
       nfce += '\n';
       nfce += `Valor Recebido: ${this.formatCurrency(sale.total + sale.change).padStart(22)}\n`;
       nfce += `Troco: ${this.formatCurrency(sale.change).padStart(33)}\n`;
     }
-    
+
+    if (options.includeSignature) {
+      nfce += '\n';
+      nfce += 'Assinatura do Cliente:\n';
+      nfce += '______________________________\n';
+      nfce += '\n';
+    }
+
     // ===== INFORMAÇÕES DE TRIBUTOS (Lei da Transparência 12.741/2012) =====
     nfce += '\n';
     nfce += this.centerText('================================') + '\n';
     nfce += this.centerText('INFORMAÇÃO DOS TRIBUTOS') + '\n';
     nfce += this.centerText('================================') + '\n';
-    
+
     const estimatedTaxes = sale.totalTaxes || (sale.total * 0.1665); // Estimativa de ~16.65%
     nfce += `Valor Aproximado dos Tributos:\n`;
     nfce += `${this.formatCurrency(estimatedTaxes).padStart(40)}\n`;
@@ -1067,7 +1147,7 @@ export class PrinterService {
     nfce += 'Fonte: IBPT - Instituto Brasileiro de\n';
     nfce += 'Planejamento e Tributação\n';
     nfce += 'Lei 12.741/2012 - Lei da Transparência\n';
-    
+
     // ===== PROTOCOLO DE AUTORIZAÇÃO =====
     nfce += '\n';
     nfce += this.centerText('================================') + '\n';
@@ -1079,7 +1159,7 @@ export class PrinterService {
       nfce += this.centerText(`STATUS: ${fiscal.status}`) + '\n';
     }
     nfce += this.centerText('================================') + '\n';
-    
+
     // ===== INFORMAÇÕES COMPLEMENTARES =====
     nfce += '\n';
     if (customFooter) {
@@ -1087,12 +1167,12 @@ export class PrinterService {
       nfce += this.wrapText(customFooter, 32);
       nfce += this.centerText('--------------------------------') + '\n';
     }
-    
+
     // ===== DADOS DO VENDEDOR =====
     nfce += '\n';
     nfce += `Vendedor: ${sale.sellerName}\n`;
     nfce += `ID Venda: ${sale.id}\n`;
-    
+
     // ===== RODAPÉ =====
     nfce += '\n';
     nfce += this.centerText('================================') + '\n';
@@ -1103,7 +1183,7 @@ export class PrinterService {
     nfce += this.centerText('==========') + '\n';
     nfce += this.centerText(this.formatDate(new Date(), timeInfo)) + '\n';
     nfce += '\n\n\n';
-    
+
     return nfce;
   }
 
@@ -1598,11 +1678,12 @@ export class PrinterService {
     data: any,
     computerId?: string | null,
     clientTimeInfo?: ClientTimeInfo,
-  ): Promise<boolean> {
+  ): Promise<PrintResult> {
+    let content: string | undefined;
     try {
       this.logger.log(`Printing budget: ${data.budget.id}${computerId ? ` (computador: ${computerId})` : ''}`);
       
-      const content = this.generateBudgetContent(data, clientTimeInfo);
+      content = this.generateBudgetContent(data, clientTimeInfo);
       const result = await this.sendToPrinter(content, data.company?.id, computerId);
       
       if (result.success) {
@@ -1611,11 +1692,25 @@ export class PrinterService {
         this.logger.warn(`Failed to print budget ${data.budget.id}`);
       }
       
-      return result.success;
+      return {
+        ...result,
+        content,
+      };
     } catch (error) {
       this.logger.error('Error printing budget:', error);
-      return false;
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : String(error),
+        content,
+      };
     }
+  }
+
+  async getBudgetPrintContent(
+    data: any,
+    clientTimeInfo?: ClientTimeInfo,
+  ): Promise<string> {
+    return this.generateBudgetContent(data, clientTimeInfo);
   }
 
   /**

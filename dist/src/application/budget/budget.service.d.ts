@@ -253,10 +253,24 @@ export declare class BudgetService {
     }>;
     printBudget(id: string, companyId?: string, computerId?: string | null, clientTimeInfo?: ClientTimeInfo): Promise<{
         message: string;
+        success: boolean;
+        error: string;
+        details: {
+            printerName?: string;
+            printerSource?: string;
+            status?: string;
+            reason?: string;
+        };
+        printContent: string;
     }>;
     generatePdf(id: string, companyId?: string, clientTimeInfo?: ClientTimeInfo): Promise<Buffer>;
     private generatePdfContent;
     private translateStatus;
+    getPrintContent(id: string, companyId?: string, clientTimeInfo?: ClientTimeInfo): Promise<{
+        content: string;
+        budgetNumber: number;
+    }>;
+    private buildBudgetPrintData;
     convertToSale(id: string, companyId: string, sellerId: string): Promise<{
         message: string;
         budgetData: {

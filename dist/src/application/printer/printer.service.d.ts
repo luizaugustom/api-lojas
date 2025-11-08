@@ -231,8 +231,10 @@ export declare class PrinterService {
     printNFCe(nfceData: NFCePrintData, companyId?: string, computerId?: string | null, clientTimeInfo?: ClientTimeInfo): Promise<PrintResult>;
     private generateReceiptContent;
     private generateNonFiscalReceiptContent;
+    private buildNonFiscalReceiptCopy;
     private generateCashClosureReport;
     private generateNFCeContent;
+    private buildNFCeContentCopy;
     private sendToPrinter;
     private centerText;
     private formatDate;
@@ -258,7 +260,8 @@ export declare class PrinterService {
     openCashDrawer(printerId: string): Promise<boolean>;
     getPrintQueue(printerId: string): Promise<any[]>;
     getPrinterLogs(printerId: string): Promise<string[]>;
-    printBudget(data: any, computerId?: string | null, clientTimeInfo?: ClientTimeInfo): Promise<boolean>;
+    printBudget(data: any, computerId?: string | null, clientTimeInfo?: ClientTimeInfo): Promise<PrintResult>;
+    getBudgetPrintContent(data: any, clientTimeInfo?: ClientTimeInfo): Promise<string>;
     private generateBudgetContent;
     private getBudgetStatus;
     generatePrintContent(nfceData: NFCePrintData, companyId?: string, clientTimeInfo?: ClientTimeInfo): Promise<string>;

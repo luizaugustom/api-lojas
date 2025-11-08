@@ -78,6 +78,11 @@ let BudgetController = class BudgetController {
         res.setHeader('Content-Disposition', `attachment; filename="orcamento-${budget.budgetNumber}.pdf"`);
         return res.status(common_1.HttpStatus.OK).send(pdfBuffer);
     }
+    async getPrintContent(user, id, req) {
+        const companyId = user.role === roles_decorator_1.UserRole.COMPANY ? user.id : user.companyId;
+        const clientTimeInfo = (0, client_time_util_1.extractClientTimeInfo)(req);
+        return this.budgetService.getPrintContent(id, companyId, clientTimeInfo);
+    }
     async convertToSale(user, id) {
         const companyId = user.role === roles_decorator_1.UserRole.COMPANY ? user.id : user.companyId;
         const sellerId = user.role === roles_decorator_1.UserRole.SELLER ? user.id : undefined;
@@ -214,6 +219,21 @@ __decorate([
     __metadata("design:paramtypes", [Object, String, Object, Object]),
     __metadata("design:returntype", Promise)
 ], BudgetController.prototype, "generatePdf", null);
+__decorate([
+    (0, common_1.Get)(':id/print-content'),
+    (0, roles_decorator_1.Roles)(roles_decorator_1.UserRole.COMPANY, roles_decorator_1.UserRole.SELLER),
+    (0, swagger_1.ApiOperation)({ summary: 'Obter conteúdo de impressão do orçamento' }),
+    (0, swagger_1.ApiResponse)({
+        status: 200,
+        description: 'Conteúdo retornado com sucesso',
+    }),
+    __param(0, (0, current_user_decorator_1.CurrentUser)()),
+    __param(1, (0, common_1.Param)('id')),
+    __param(2, (0, common_1.Req)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [Object, String, Object]),
+    __metadata("design:returntype", Promise)
+], BudgetController.prototype, "getPrintContent", null);
 __decorate([
     (0, common_1.Post)(':id/convert-to-sale'),
     (0, roles_decorator_1.Roles)(roles_decorator_1.UserRole.COMPANY, roles_decorator_1.UserRole.SELLER),

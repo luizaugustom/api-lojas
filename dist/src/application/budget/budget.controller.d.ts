@@ -209,8 +209,21 @@ export declare class BudgetController {
     }>;
     print(user: any, id: string, req: Request): Promise<{
         message: string;
+        success: boolean;
+        error: string;
+        details: {
+            printerName?: string;
+            printerSource?: string;
+            status?: string;
+            reason?: string;
+        };
+        printContent: string;
     }>;
     generatePdf(user: any, id: string, req: Request, res: Response): Promise<Response<any, Record<string, any>>>;
+    getPrintContent(user: any, id: string, req: Request): Promise<{
+        content: string;
+        budgetNumber: number;
+    }>;
     convertToSale(user: any, id: string): Promise<{
         message: string;
         budgetData: {
