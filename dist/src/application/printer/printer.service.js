@@ -15,6 +15,7 @@ const common_1 = require("@nestjs/common");
 const prisma_service_1 = require("../../infrastructure/database/prisma.service");
 const thermal_printer_service_1 = require("../../shared/services/thermal-printer.service");
 const QRCode = require("qrcode");
+const RECEIPT_CUT_MARKER = '<<CUT_RECEIPT>>';
 let PrinterService = PrinterService_1 = class PrinterService {
     constructor(prisma, thermalPrinter) {
         this.prisma = prisma;
@@ -477,7 +478,7 @@ let PrinterService = PrinterService_1 = class PrinterService {
                 copyLabel: 'VIA DO CLIENTE',
                 includeSignature: false,
             });
-            return storeCopy + customerCopy;
+            return `${storeCopy}\n${RECEIPT_CUT_MARKER}\n${customerCopy}`;
         }
         return this.buildNonFiscalReceiptCopy(data, timeInfo);
     }
@@ -635,7 +636,7 @@ let PrinterService = PrinterService_1 = class PrinterService {
                 copyLabel: 'VIA DO CLIENTE',
                 includeSignature: false,
             });
-            return storeCopy + customerCopy;
+            return `${storeCopy}\n${RECEIPT_CUT_MARKER}\n${customerCopy}`;
         }
         return this.buildNFCeContentCopy(data, timeInfo);
     }

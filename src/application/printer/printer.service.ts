@@ -41,6 +41,8 @@ export interface ReceiptData {
   };
 }
 
+const RECEIPT_CUT_MARKER = '<<CUT_RECEIPT>>';
+
 interface NonFiscalReceiptCopyOptions {
   copyLabel?: string;
   includeSignature?: boolean;
@@ -779,7 +781,7 @@ export class PrinterService {
         includeSignature: false,
       });
 
-      return storeCopy + customerCopy;
+      return `${storeCopy}\n${RECEIPT_CUT_MARKER}\n${customerCopy}`;
     }
 
     return this.buildNonFiscalReceiptCopy(data, timeInfo);
@@ -983,7 +985,7 @@ export class PrinterService {
         includeSignature: false,
       });
 
-      return storeCopy + customerCopy;
+      return `${storeCopy}\n${RECEIPT_CUT_MARKER}\n${customerCopy}`;
     }
 
     return this.buildNFCeContentCopy(data, timeInfo);

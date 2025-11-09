@@ -15,6 +15,9 @@ const os = require("os");
 const fs = require("fs/promises");
 const path = require("path");
 const execAsync = (0, util_1.promisify)(child_process_1.exec);
+const RECEIPT_CUT_MARKER = '<<CUT_RECEIPT>>';
+const ESC = 0x1b;
+const GS = 0x1d;
 let ThermalPrinterService = ThermalPrinterService_1 = class ThermalPrinterService {
     constructor() {
         this.logger = new common_1.Logger(ThermalPrinterService_1.name);
@@ -58,9 +61,23 @@ let ThermalPrinterService = ThermalPrinterService_1 = class ThermalPrinterServic
         try {
             const tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), 'montshop-print-'));
             const filePath = path.join(tmpDir, 'print.txt');
-            const cutCommand = cutPaper ? '\u001D\u0056\u0001' : '';
-            const contentWithCut = content + (cutPaper ? `\n${cutCommand}\n` : '');
-            await fs.writeFile(filePath, contentWithCut, { encoding: 'utf8' });
+            const segments = content.includes(RECEIPT_CUT_MARKER)
+                ? content.split(RECEIPT_CUT_MARKER)
+                : [content];
+            const lineBreakBuffer = Buffer.from('\n\n\n', 'utf8');
+            const cutBuffer = Buffer.from([GS, 0x56, 0x00]);
+            const buffers = [];
+            segments.forEach((segment, index) => {
+                const normalizedSegment = segment.endsWith('\n') ? segment : `${segment}\n`;
+                buffers.push(Buffer.from(normalizedSegment, 'utf8'));
+                const isLastSegment = index === segments.length - 1;
+                const shouldCutAfterSegment = !isLastSegment || cutPaper;
+                if (shouldCutAfterSegment) {
+                    buffers.push(lineBreakBuffer, cutBuffer, Buffer.from('\n', 'utf8'));
+                }
+            });
+            const finalBuffer = Buffer.concat(buffers);
+            await fs.writeFile(filePath, finalBuffer);
             switch (this.platform) {
                 case 'win32': {
                     const ps = `

@@ -6,6 +6,9 @@ import * as fs from 'fs/promises';
 import * as path from 'path';
 
 const execAsync = promisify(exec);
+const RECEIPT_CUT_MARKER = '<<CUT_RECEIPT>>';
+const ESC = 0x1b;
+const GS = 0x1d;
 
 export interface PrinterStatus {
   online: boolean;
@@ -65,11 +68,29 @@ export class ThermalPrinterService {
       const tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), 'montshop-print-'));
       const filePath = path.join(tmpDir, 'print.txt');
 
-      // Acrescenta comando ESC/POS de corte (parcial) se solicitado
-      const cutCommand = cutPaper ? '\u001D\u0056\u0001' : '';
-      // Usa UTF-8 com BOM para garantir compatibilidade no Windows
-      const contentWithCut = content + (cutPaper ? `\n${cutCommand}\n` : '');
-      await fs.writeFile(filePath, contentWithCut, { encoding: 'utf8' });
+      const segments = content.includes(RECEIPT_CUT_MARKER)
+        ? content.split(RECEIPT_CUT_MARKER)
+        : [content];
+
+      const lineBreakBuffer = Buffer.from('\n\n\n', 'utf8');
+      const cutBuffer = Buffer.from([GS, 0x56, 0x00]); // GS V 0 -> corte total
+
+      const buffers: Buffer[] = [];
+
+      segments.forEach((segment, index) => {
+        const normalizedSegment = segment.endsWith('\n') ? segment : `${segment}\n`;
+        buffers.push(Buffer.from(normalizedSegment, 'utf8'));
+
+        const isLastSegment = index === segments.length - 1;
+        const shouldCutAfterSegment = !isLastSegment || cutPaper;
+
+        if (shouldCutAfterSegment) {
+          buffers.push(lineBreakBuffer, cutBuffer, Buffer.from('\n', 'utf8'));
+        }
+      });
+
+      const finalBuffer = Buffer.concat(buffers);
+      await fs.writeFile(filePath, finalBuffer);
 
       switch (this.platform) {
         case 'win32': {
