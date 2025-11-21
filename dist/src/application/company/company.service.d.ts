@@ -224,6 +224,7 @@ export declare class CompanyService {
             size: string;
             stockQuantity: number;
             category: string;
+            unitOfMeasure: string;
         }[];
     }>;
 }

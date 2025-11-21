@@ -1,6 +1,7 @@
 import { ConfigService } from '@nestjs/config';
 import { PrismaService } from '../../infrastructure/database/prisma.service';
 import { ValidationService } from '../../shared/services/validation.service';
+import { IBPTService } from '../../shared/services/ibpt.service';
 import { FiscalApiService } from '../../shared/services/fiscal-api.service';
 export interface NFeData {
     companyId: string;
@@ -80,8 +81,9 @@ export declare class FiscalService {
     private readonly prisma;
     private readonly fiscalApiService;
     private readonly validationService;
+    private readonly ibptService;
     private readonly logger;
-    constructor(configService: ConfigService, prisma: PrismaService, fiscalApiService: FiscalApiService, validationService: ValidationService);
+    constructor(configService: ConfigService, prisma: PrismaService, fiscalApiService: FiscalApiService, validationService: ValidationService, ibptService: IBPTService);
     generateNFe(nfeData: NFeData): Promise<any>;
     hasValidFiscalConfig(companyId: string): Promise<boolean>;
     generateMockNFCe(nfceData: NFCeData): Promise<any>;

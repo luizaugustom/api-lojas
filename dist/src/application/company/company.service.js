@@ -723,10 +723,13 @@ let CompanyService = CompanyService_1 = class CompanyService {
         try {
             const company = await this.prisma.company.findUnique({
                 where: { id: companyId },
-                select: { id: true, name: true, catalogPageUrl: true, catalogPageEnabled: true },
+                select: { id: true, name: true, catalogPageUrl: true, catalogPageEnabled: true, plan: true },
             });
             if (!company) {
                 throw new common_1.NotFoundException('Empresa não encontrada');
+            }
+            if (updateCatalogPageDto.catalogPageEnabled === true && company.plan !== client_1.PlanType.PRO) {
+                throw new common_1.BadRequestException('O catálogo público está disponível apenas para empresas com plano PRO');
             }
             const updateData = {};
             if (updateCatalogPageDto.catalogPageUrl !== undefined) {
@@ -786,7 +789,7 @@ let CompanyService = CompanyService_1 = class CompanyService {
                 catalogPageUrl: company.catalogPageUrl,
                 catalogPageEnabled: company.catalogPageEnabled,
                 pageUrl: company.catalogPageUrl
-                    ? `/catalogo/${company.catalogPageUrl}`
+                    ? `/catalog/${company.catalogPageUrl}`
                     : null,
             };
         }
@@ -831,6 +834,7 @@ let CompanyService = CompanyService_1 = class CompanyService {
                             stockQuantity: true,
                             size: true,
                             category: true,
+                            unitOfMeasure: true,
                         },
                         orderBy: {
                             name: 'asc',

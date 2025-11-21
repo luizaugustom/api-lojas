@@ -891,11 +891,18 @@ export class CompanyService {
     try {
       const company = await this.prisma.company.findUnique({
         where: { id: companyId },
-        select: { id: true, name: true, catalogPageUrl: true, catalogPageEnabled: true },
+        select: { id: true, name: true, catalogPageUrl: true, catalogPageEnabled: true, plan: true },
       });
 
       if (!company) {
         throw new NotFoundException('Empresa não encontrada');
+      }
+
+      // Validar plano PRO se estiver habilitando o catálogo
+      if (updateCatalogPageDto.catalogPageEnabled === true && company.plan !== PlanType.PRO) {
+        throw new BadRequestException(
+          'O catálogo público está disponível apenas para empresas com plano PRO'
+        );
       }
 
       const updateData: any = {};
@@ -971,7 +978,7 @@ export class CompanyService {
         catalogPageUrl: company.catalogPageUrl,
         catalogPageEnabled: company.catalogPageEnabled,
         pageUrl: company.catalogPageUrl
-          ? `/catalogo/${company.catalogPageUrl}`
+          ? `/catalog/${company.catalogPageUrl}`
           : null,
       };
     } catch (error) {
@@ -1019,6 +1026,7 @@ export class CompanyService {
               stockQuantity: true,
               size: true,
               category: true,
+              unitOfMeasure: true,
             },
             orderBy: {
               name: 'asc',

@@ -11,12 +11,13 @@ const common_1 = require("@nestjs/common");
 const whatsapp_service_1 = require("./whatsapp.service");
 const whatsapp_controller_1 = require("./whatsapp.controller");
 const config_1 = require("@nestjs/config");
+const prisma_module_1 = require("../../infrastructure/database/prisma.module");
 let WhatsappModule = class WhatsappModule {
 };
 exports.WhatsappModule = WhatsappModule;
 exports.WhatsappModule = WhatsappModule = __decorate([
     (0, common_1.Module)({
-        imports: [config_1.ConfigModule],
+        imports: [config_1.ConfigModule, prisma_module_1.PrismaModule],
         providers: [whatsapp_service_1.WhatsappService],
         controllers: [whatsapp_controller_1.WhatsappController],
         exports: [whatsapp_service_1.WhatsappService],

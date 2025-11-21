@@ -22,8 +22,13 @@ export interface NFCeRequest {
         ncm?: string;
         cfop?: string;
         unitOfMeasure?: string;
+        taxValue?: number;
+        federalTax?: number;
+        stateTax?: number;
+        municipalTax?: number;
     }>;
     totalValue: number;
+    totalTaxValue?: number;
     payments: Array<{
         method: string;
         amount: number;
@@ -70,12 +75,17 @@ export interface NFeItem {
     ncm?: string;
     cfop: string;
     unitOfMeasure: string;
+    taxValue?: number;
+    federalTax?: number;
+    stateTax?: number;
+    municipalTax?: number;
 }
 export interface NFeRequest {
     companyId: string;
     recipient: NFeRecipient;
     items: NFeItem[];
     paymentMethod: string;
+    totalTaxValue?: number;
     additionalInfo?: string;
     referenceId?: string;
 }

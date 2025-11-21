@@ -21,9 +21,18 @@ let InstallmentMessagingService = InstallmentMessagingService_1 = class Installm
         this.prisma = prisma;
         this.whatsappService = whatsappService;
         this.logger = new common_1.Logger(InstallmentMessagingService_1.name);
+        this.maxMessagesPerCompanyPerHour = 50;
+        this.companyMessageCounts = new Map();
     }
     async checkInstallmentsAndSendMessages() {
-        this.logger.log('Iniciando verificação de parcelas para envio de mensagens automáticas...');
+        const startTime = Date.now();
+        this.logger.log('🚀 Iniciando verificação de parcelas para envio de mensagens automáticas...');
+        const instanceStatus = await this.whatsappService.checkInstanceStatus();
+        if (!instanceStatus.connected) {
+            this.logger.error(`❌ Instância WhatsApp não está conectada. Status: ${instanceStatus.status}. Abortando envio automático.`);
+            return;
+        }
+        this.logger.log(`✅ Instância WhatsApp conectada. Status: ${instanceStatus.status}`);
         try {
             const companies = await this.prisma.company.findMany({
                 where: {
@@ -38,18 +47,33 @@ let InstallmentMessagingService = InstallmentMessagingService_1 = class Installm
                     name: true,
                 },
             });
-            this.logger.log(`Encontradas ${companies.length} empresas com envio automático ativado e planos PLUS, PRO ou TRIAL_7_DAYS`);
+            this.logger.log(`📊 Encontradas ${companies.length} empresas com envio automático ativado e planos PLUS, PRO ou TRIAL_7_DAYS`);
+            let totalMessagesSent = 0;
+            let totalMessagesFailed = 0;
+            let totalCompaniesProcessed = 0;
             for (const company of companies) {
-                await this.processCompanyInstallments(company.id, company.name);
+                const result = await this.processCompanyInstallments(company.id, company.name);
+                totalMessagesSent += result.sent;
+                totalMessagesFailed += result.failed;
+                totalCompaniesProcessed++;
             }
-            this.logger.log('Verificação de parcelas concluída com sucesso');
+            const duration = Date.now() - startTime;
+            this.logger.log(`✅ Verificação de parcelas concluída com sucesso`);
+            this.logger.log(`📈 Estatísticas: ${totalMessagesSent} mensagens enviadas, ${totalMessagesFailed} falhas, ${totalCompaniesProcessed} empresas processadas em ${duration}ms`);
         }
         catch (error) {
-            this.logger.error('Erro ao verificar parcelas:', error);
+            this.logger.error('❌ Erro ao verificar parcelas:', error);
+            this.logger.error(`Stack trace: ${error.stack}`);
         }
     }
     async processCompanyInstallments(companyId, companyName) {
+        let sent = 0;
+        let failed = 0;
         try {
+            if (!this.canSendMessageForCompany(companyId)) {
+                this.logger.warn(`⏸️ Rate limit atingido para empresa ${companyName} (${companyId}). Pulando processamento.`);
+                return { sent: 0, failed: 0 };
+            }
             const today = new Date();
             today.setHours(0, 0, 0, 0);
             const installments = await this.prisma.installment.findMany({
@@ -67,15 +91,52 @@ let InstallmentMessagingService = InstallmentMessagingService_1 = class Installm
                     },
                 },
             });
-            this.logger.log(`Empresa ${companyName}: ${installments.length} parcelas não pagas encontradas`);
+            this.logger.log(`🏢 Empresa ${companyName}: ${installments.length} parcelas não pagas encontradas`);
             for (const installment of installments) {
                 if (await this.shouldSendMessage(installment, today)) {
-                    await this.sendPaymentMessage(installment, companyName);
+                    if (!this.canSendMessageForCompany(companyId)) {
+                        this.logger.warn(`⏸️ Rate limit atingido para empresa ${companyName}. Parando envio de mensagens.`);
+                        break;
+                    }
+                    const success = await this.sendPaymentMessage(installment, companyName);
+                    if (success) {
+                        sent++;
+                        this.incrementCompanyMessageCount(companyId);
+                    }
+                    else {
+                        failed++;
+                    }
                 }
             }
+            return { sent, failed };
         }
         catch (error) {
-            this.logger.error(`Erro ao processar parcelas da empresa ${companyId}:`, error);
+            this.logger.error(`❌ Erro ao processar parcelas da empresa ${companyId}:`, error);
+            this.logger.error(`Stack trace: ${error.stack}`);
+            return { sent, failed };
+        }
+    }
+    canSendMessageForCompany(companyId) {
+        const now = new Date();
+        const companyData = this.companyMessageCounts.get(companyId);
+        if (!companyData) {
+            return true;
+        }
+        if (now >= companyData.resetAt) {
+            this.companyMessageCounts.delete(companyId);
+            return true;
+        }
+        return companyData.count < this.maxMessagesPerCompanyPerHour;
+    }
+    incrementCompanyMessageCount(companyId) {
+        const now = new Date();
+        const resetAt = new Date(now.getTime() + 60 * 60 * 1000);
+        const companyData = this.companyMessageCounts.get(companyId);
+        if (companyData) {
+            companyData.count++;
+        }
+        else {
+            this.companyMessageCounts.set(companyId, { count: 1, resetAt });
         }
     }
     async shouldSendMessage(installment, today) {
@@ -102,15 +163,16 @@ let InstallmentMessagingService = InstallmentMessagingService_1 = class Installm
         return false;
     }
     async sendPaymentMessage(installment, companyName) {
+        const startTime = Date.now();
         try {
             if (!installment.customer.phone) {
-                this.logger.warn(`Cliente ${installment.customer.name} não possui telefone cadastrado. Parcela ID: ${installment.id}`);
-                return;
+                this.logger.warn(`⚠️ Cliente ${installment.customer.name} não possui telefone cadastrado. Parcela ID: ${installment.id}`);
+                return false;
             }
             const isValid = await this.whatsappService.validatePhoneNumber(installment.customer.phone);
             if (!isValid) {
-                this.logger.warn(`Telefone inválido para cliente ${installment.customer.name}: ${installment.customer.phone}`);
-                return;
+                this.logger.warn(`⚠️ Telefone inválido para cliente ${installment.customer.name}: ${installment.customer.phone}. Parcela ID: ${installment.id}`);
+                return false;
             }
             const formattedPhone = await this.whatsappService.formatPhoneNumber(installment.customer.phone);
             const dueDate = new Date(installment.dueDate);
@@ -118,18 +180,22 @@ let InstallmentMessagingService = InstallmentMessagingService_1 = class Installm
             const today = new Date();
             today.setHours(0, 0, 0, 0);
             let message;
+            let messageType;
             if (dueDate.getTime() === today.getTime()) {
                 message = this.buildDueTodayMessage(companyName, installment);
+                messageType = 'due_today';
             }
             else {
                 const daysOverdue = Math.floor((today.getTime() - dueDate.getTime()) / (1000 * 60 * 60 * 24));
                 message = this.buildOverdueMessage(companyName, installment, daysOverdue);
+                messageType = 'overdue';
             }
             const success = await this.whatsappService.sendMessage({
                 to: formattedPhone,
                 message,
                 type: 'text',
             });
+            const duration = Date.now() - startTime;
             if (success) {
                 await this.prisma.installment.update({
                     where: { id: installment.id },
@@ -138,14 +204,19 @@ let InstallmentMessagingService = InstallmentMessagingService_1 = class Installm
                         messageCount: installment.messageCount + 1,
                     },
                 });
-                this.logger.log(`Mensagem enviada com sucesso para ${installment.customer.name} (${formattedPhone}). Parcela ID: ${installment.id}`);
+                this.logger.log(`✅ Mensagem enviada com sucesso | Cliente: ${installment.customer.name} | Telefone: ${formattedPhone} | Tipo: ${messageType} | Parcela: ${installment.installmentNumber}/${installment.totalInstallments} | Tempo: ${duration}ms | ID: ${installment.id}`);
+                return true;
             }
             else {
-                this.logger.error(`Falha ao enviar mensagem para ${installment.customer.name} (${formattedPhone}). Parcela ID: ${installment.id}`);
+                this.logger.error(`❌ Falha ao enviar mensagem | Cliente: ${installment.customer.name} | Telefone: ${formattedPhone} | Tipo: ${messageType} | Parcela ID: ${installment.id} | Tempo: ${duration}ms`);
+                return false;
             }
         }
         catch (error) {
-            this.logger.error(`Erro ao enviar mensagem de cobrança. Parcela ID: ${installment.id}`, error);
+            const duration = Date.now() - startTime;
+            this.logger.error(`❌ Erro ao enviar mensagem de cobrança | Parcela ID: ${installment.id} | Tempo: ${duration}ms`, error);
+            this.logger.error(`Stack trace: ${error.stack}`);
+            return false;
         }
     }
     buildDueTodayMessage(companyName, installment) {
@@ -231,7 +302,9 @@ Contamos com você! 🙏
 };
 exports.InstallmentMessagingService = InstallmentMessagingService;
 __decorate([
-    (0, schedule_1.Cron)(schedule_1.CronExpression.EVERY_DAY_AT_9AM),
+    (0, schedule_1.Cron)('0 7 * * *', {
+        timeZone: 'America/Sao_Paulo',
+    }),
     __metadata("design:type", Function),
     __metadata("design:paramtypes", []),
     __metadata("design:returntype", Promise)

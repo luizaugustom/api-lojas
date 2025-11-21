@@ -3,6 +3,7 @@ import axios from 'axios';
 import { ConfigService } from '@nestjs/config';
 import { PrismaService } from '../../infrastructure/database/prisma.service';
 import { ValidationService } from '../../shared/services/validation.service';
+import { IBPTService } from '../../shared/services/ibpt.service';
 import { 
   FiscalApiService, 
   NFCeRequest, 
@@ -100,6 +101,7 @@ export class FiscalService {
     private readonly prisma: PrismaService,
     private readonly fiscalApiService: FiscalApiService,
     private readonly validationService: ValidationService,
+    private readonly ibptService: IBPTService,
   ) {}
 
   async generateNFe(nfeData: NFeData): Promise<any> {
@@ -152,6 +154,63 @@ export class FiscalService {
           }
         }
 
+        // Buscar dados da empresa para obter estado
+        const saleCompany = await this.prisma.company.findUnique({
+          where: { id: nfeData.companyId },
+          select: { state: true },
+        });
+
+        // Calcular tributos para cada item usando IBPT
+        let totalTaxValue = 0;
+        const itemsWithTaxes = await Promise.all(
+          sale.items.map(async (item) => {
+            try {
+              const taxResult = await this.ibptService.calculateProductTax(
+                item.product.ncm || '99999999',
+                Number(item.unitPrice) * item.quantity,
+                saleCompany?.state || 'SC'
+              );
+              
+              totalTaxValue += taxResult.taxValue;
+              
+              return {
+                description: item.product.name,
+                quantity: item.quantity,
+                unitPrice: Number(item.unitPrice),
+                ncm: item.product.ncm || undefined,
+                cfop: item.product.cfop || '5102',
+                unitOfMeasure: item.product.unitOfMeasure || 'UN',
+                taxValue: taxResult.taxValue,
+                federalTax: taxResult.federalTaxPercentage,
+                stateTax: taxResult.stateTaxPercentage,
+                municipalTax: taxResult.municipalTaxPercentage,
+              };
+            } catch (error) {
+              this.logger.warn(
+                `Erro ao calcular tributos para item ${item.product.name}: ${error.message}. ` +
+                `Usando valor zero para tributos deste item.`
+              );
+              
+              return {
+                description: item.product.name,
+                quantity: item.quantity,
+                unitPrice: Number(item.unitPrice),
+                ncm: item.product.ncm || undefined,
+                cfop: item.product.cfop || '5102',
+                unitOfMeasure: item.product.unitOfMeasure || 'UN',
+                taxValue: 0,
+                federalTax: 0,
+                stateTax: 0,
+                municipalTax: 0,
+              };
+            }
+          })
+        );
+
+        this.logger.log(
+          `Tributos totais calculados para NFe: R$ ${totalTaxValue.toFixed(2)}`
+        );
+
         // Montar request a partir da venda
         nfeRequest = {
           companyId: nfeData.companyId,
@@ -163,15 +222,9 @@ export class FiscalService {
             phone: undefined,
             address: undefined,
           },
-          items: sale.items.map(item => ({
-            description: item.product.name,
-            quantity: item.quantity,
-            unitPrice: Number(item.unitPrice),
-            ncm: item.product.ncm || undefined,
-            cfop: item.product.cfop || '5102',
-            unitOfMeasure: 'UN',
-          })),
+          items: itemsWithTaxes,
           paymentMethod: sale.paymentMethods[0]?.method || '99', // Usa primeiro método de pagamento
+          totalTaxValue: totalTaxValue,
           referenceId: sale.id,
         };
 
@@ -190,6 +243,63 @@ export class FiscalService {
           this.validationService.validateCFOP(item.cfop);
         }
 
+        // Buscar dados da empresa para obter estado
+        const company = await this.prisma.company.findUnique({
+          where: { id: nfeData.companyId },
+          select: { state: true },
+        });
+
+        // Calcular tributos para cada item usando IBPT
+        let totalTaxValue = 0;
+        const itemsWithTaxes = await Promise.all(
+          nfeData.items.map(async (item) => {
+            try {
+              const taxResult = await this.ibptService.calculateProductTax(
+                item.ncm || '99999999',
+                item.quantity * item.unitPrice,
+                company?.state || 'SC'
+              );
+              
+              totalTaxValue += taxResult.taxValue;
+              
+              return {
+                description: item.description,
+                quantity: item.quantity,
+                unitPrice: item.unitPrice,
+                ncm: item.ncm,
+                cfop: item.cfop,
+                unitOfMeasure: item.unitOfMeasure,
+                taxValue: taxResult.taxValue,
+                federalTax: taxResult.federalTaxPercentage,
+                stateTax: taxResult.stateTaxPercentage,
+                municipalTax: taxResult.municipalTaxPercentage,
+              };
+            } catch (error) {
+              this.logger.warn(
+                `Erro ao calcular tributos para item ${item.description}: ${error.message}. ` +
+                `Usando valor zero para tributos deste item.`
+              );
+              
+              return {
+                description: item.description,
+                quantity: item.quantity,
+                unitPrice: item.unitPrice,
+                ncm: item.ncm,
+                cfop: item.cfop,
+                unitOfMeasure: item.unitOfMeasure,
+                taxValue: 0,
+                federalTax: 0,
+                stateTax: 0,
+                municipalTax: 0,
+              };
+            }
+          })
+        );
+
+        this.logger.log(
+          `Tributos totais calculados para NFe (manual): R$ ${totalTaxValue.toFixed(2)}`
+        );
+
         nfeRequest = {
           companyId: nfeData.companyId,
           recipient: {
@@ -199,15 +309,9 @@ export class FiscalService {
             phone: nfeData.recipient.phone,
             address: nfeData.recipient.address,
           },
-          items: nfeData.items.map(item => ({
-            description: item.description,
-            quantity: item.quantity,
-            unitPrice: item.unitPrice,
-            ncm: item.ncm,
-            cfop: item.cfop,
-            unitOfMeasure: item.unitOfMeasure,
-          })),
+          items: itemsWithTaxes,
           paymentMethod: nfeData.payment?.method || '99',
+          totalTaxValue: totalTaxValue,
           additionalInfo: nfeData.additionalInfo,
           referenceId: `manual_${Date.now()}`,
         };
@@ -380,23 +484,77 @@ export class FiscalService {
         ? nfceData.payments
         : [{ method: 'cash', amount: nfceData.totalValue }];
 
+      // Calcular tributos para cada item usando IBPT
+      let totalTaxValue = 0;
+      const itemsWithTaxes = await Promise.all(
+        nfceData.items.map(async (item) => {
+          try {
+            const taxResult = await this.ibptService.calculateProductTax(
+              item.ncm || '99999999',
+              Number(item.totalPrice),
+              company.state || 'SC'
+            );
+            
+            this.logger.debug(
+              `Tributos calculados para item ${item.productName} (NCM ${item.ncm || '99999999'}): ` +
+              `R$ ${taxResult.taxValue.toFixed(2)} (${taxResult.totalTaxPercentage.toFixed(2)}%)`
+            );
+            
+            totalTaxValue += taxResult.taxValue;
+            
+            return {
+              productId: item.productId,
+              productName: item.productName,
+              barcode: item.barcode,
+              quantity: item.quantity,
+              unitPrice: item.unitPrice,
+              totalPrice: item.totalPrice,
+              ncm: item.ncm || '99999999',
+              cfop: item.cfop || '5102',
+              unitOfMeasure: item.unitOfMeasure || 'UN',
+              taxValue: taxResult.taxValue,
+              federalTax: taxResult.federalTaxPercentage,
+              stateTax: taxResult.stateTaxPercentage,
+              municipalTax: taxResult.municipalTaxPercentage,
+            };
+          } catch (error) {
+            this.logger.warn(
+              `Erro ao calcular tributos para item ${item.productName}: ${error.message}. ` +
+              `Usando valor zero para tributos deste item.`
+            );
+            
+            return {
+              productId: item.productId,
+              productName: item.productName,
+              barcode: item.barcode,
+              quantity: item.quantity,
+              unitPrice: item.unitPrice,
+              totalPrice: item.totalPrice,
+              ncm: item.ncm || '99999999',
+              cfop: item.cfop || '5102',
+              unitOfMeasure: item.unitOfMeasure || 'UN',
+              taxValue: 0,
+              federalTax: 0,
+              stateTax: 0,
+              municipalTax: 0,
+            };
+          }
+        })
+      );
+
+      this.logger.log(
+        `Tributos totais calculados para NFC-e: R$ ${totalTaxValue.toFixed(2)} ` +
+        `(${((totalTaxValue / nfceData.totalValue) * 100).toFixed(2)}% do total)`
+      );
+
       // Prepare NFCe request for fiscal API
       const nfceRequest: NFCeRequest = {
         companyId: nfceData.companyId,
         clientCpfCnpj: nfceData.clientCpfCnpj,
         clientName: nfceData.clientName,
-        items: nfceData.items.map(item => ({
-          productId: item.productId,
-          productName: item.productName,
-          barcode: item.barcode,
-          quantity: item.quantity,
-          unitPrice: item.unitPrice,
-          totalPrice: item.totalPrice,
-          ncm: item.ncm || '99999999', // Default NCM - should be configured per product
-          cfop: item.cfop || '5102', // Default CFOP for internal sales
-          unitOfMeasure: item.unitOfMeasure || 'UN',
-        })),
+        items: itemsWithTaxes,
         totalValue: nfceData.totalValue,
+        totalTaxValue: totalTaxValue,
         payments: payments,
         saleId: nfceData.apiReference ?? nfceData.saleId,
         sellerName: nfceData.sellerName,

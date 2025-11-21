@@ -29,8 +29,14 @@ export interface NFCeRequest {
     ncm?: string;
     cfop?: string;
     unitOfMeasure?: string;
+    // Tributos calculados por item
+    taxValue?: number;
+    federalTax?: number;
+    stateTax?: number;
+    municipalTax?: number;
   }>;
   totalValue: number;
+  totalTaxValue?: number; // Total de tributos da nota
   payments: Array<{
     method: string;
     amount: number;
@@ -42,6 +48,13 @@ export interface NFCeRequest {
   referenceAccessKey?: string;
   documentType?: number;
   additionalInfo?: string;
+  
+  // NOTA: Campos da Reforma Tributária (PEC 45/2023)
+  // Serão obrigatórios a partir de 01/01/2026:
+  // - valor_ibs?: number; // Imposto sobre Bens e Serviços (substitui ICMS, ISS)
+  // - valor_cbs?: number; // Contribuição sobre Bens e Serviços (substitui PIS, COFINS)
+  // - valor_is?: number; // Imposto Seletivo (substitui IPI)
+  // Implementação será necessária quando a SEFAZ disponibilizar o novo layout
 }
 
 export interface NFCeResponse {
@@ -82,6 +95,11 @@ export interface NFeItem {
   ncm?: string;
   cfop: string;
   unitOfMeasure: string;
+  // Tributos calculados por item
+  taxValue?: number;
+  federalTax?: number;
+  stateTax?: number;
+  municipalTax?: number;
 }
 
 export interface NFeRequest {
@@ -89,6 +107,7 @@ export interface NFeRequest {
   recipient: NFeRecipient;
   items: NFeItem[];
   paymentMethod: string;
+  totalTaxValue?: number; // Total de tributos da nota
   additionalInfo?: string;
   referenceId?: string; // Para referenciar venda ou outro documento
 }
@@ -311,6 +330,10 @@ export class FiscalApiService {
       ? '/nfce' 
       : '/nfce/sandbox';
 
+    // Calcular total de tributos se não fornecido
+    const totalTaxValue = request.totalTaxValue ?? 
+      request.items.reduce((sum, item) => sum + (item.taxValue || 0), 0);
+
     const payload: any = {
       natureza_operacao: request.operationNature || 'Venda',
       data_emissao: new Date().toISOString(),
@@ -332,13 +355,15 @@ export class FiscalApiService {
         valor_unitario_comercial: item.unitPrice,
         valor_total_bruto: item.totalPrice,
         codigo_barras_comercial: item.barcode,
+        // Adicionar informações de tributos se disponíveis
+        ...(item.taxValue && { valor_total_tributos_item: item.taxValue }),
       })),
       valor_total: request.totalValue,
       valor_frete: 0,
       valor_seguro: 0,
       valor_desconto: 0,
       valor_outras_despesas: 0,
-      valor_total_tributos: 0,
+      valor_total_tributos: Number(totalTaxValue.toFixed(2)), // Usar tributos calculados
       valor_total_produtos: request.totalValue,
       valor_total_servicos: 0,
       valor_total_nota: request.totalValue,
@@ -393,6 +418,8 @@ export class FiscalApiService {
         valor_unitario: item.unitPrice,
         valor_total: item.totalPrice,
         codigo_barras: item.barcode,
+        // Adicionar informações de tributos se disponíveis
+        ...(item.taxValue && { valor_total_tributos_item: item.taxValue }),
       })),
       totalizadores: {
         valor_total_produtos: request.totalValue,
@@ -402,7 +429,7 @@ export class FiscalApiService {
         valor_seguro: 0,
         valor_desconto: 0,
         valor_outras_despesas: 0,
-        valor_total_tributos: 0,
+        valor_total_tributos: Number((request.totalTaxValue ?? request.items.reduce((sum, item) => sum + (item.taxValue || 0), 0)).toFixed(2)),
       },
     };
 
@@ -497,13 +524,15 @@ export class FiscalApiService {
         valor_unitario_comercial: item.unitPrice,
         valor_total_bruto: item.totalPrice,
         codigo_barras_comercial: item.barcode,
+        // Adicionar informações de tributos se disponíveis
+        ...(item.taxValue && { valor_total_tributos_item: item.taxValue }),
       })),
       valor_total: request.totalValue,
       valor_frete: 0,
       valor_seguro: 0,
       valor_desconto: 0,
       valor_outras_despesas: 0,
-      valor_total_tributos: 0,
+      valor_total_tributos: Number((request.totalTaxValue ?? request.items.reduce((sum, item) => sum + (item.taxValue || 0), 0)).toFixed(2)),
       valor_total_produtos: request.totalValue,
       valor_total_servicos: 0,
       valor_total_nota: request.totalValue,
@@ -559,13 +588,15 @@ export class FiscalApiService {
         valor_unitario_comercial: item.unitPrice,
         valor_total_bruto: item.totalPrice,
         codigo_barras_comercial: item.barcode,
+        // Adicionar informações de tributos se disponíveis
+        ...(item.taxValue && { valor_total_tributos_item: item.taxValue }),
       })),
       valor_total: request.totalValue,
       valor_frete: 0,
       valor_seguro: 0,
       valor_desconto: 0,
       valor_outras_despesas: 0,
-      valor_total_tributos: 0,
+      valor_total_tributos: Number((request.totalTaxValue ?? request.items.reduce((sum, item) => sum + (item.taxValue || 0), 0)).toFixed(2)),
       valor_total_produtos: request.totalValue,
       valor_total_servicos: 0,
       valor_total_nota: request.totalValue,
@@ -838,12 +869,16 @@ export class FiscalApiService {
             
             // COFINS
             cofins_situacao_tributaria: '07', // 07=Operação isenta
+            
+            // Tributos calculados (se disponíveis)
+            ...(item.taxValue && { valor_total_tributos_item: item.taxValue }),
           };
         }),
 
         // Totais
         valor_produtos: request.items.reduce((sum, item) => sum + (item.quantity * item.unitPrice), 0),
         valor_total: request.items.reduce((sum, item) => sum + (item.quantity * item.unitPrice), 0),
+        valor_total_tributos: Number((request.totalTaxValue ?? request.items.reduce((sum, item) => sum + (item.taxValue || 0), 0)).toFixed(2)),
         
         // Pagamento
         forma_pagamento: '0', // 0=À vista

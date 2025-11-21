@@ -11,13 +11,16 @@ import {
   ApiResponse,
 } from '@nestjs/swagger';
 import { CompanyService } from './company.service';
+import { Public } from '../../shared/decorators/public.decorator';
 
 @ApiTags('public')
 @Controller('public')
+@Public()
 export class CompanyPublicController {
   constructor(private readonly companyService: CompanyService) {}
 
   @Get('catalog/:url/products')
+  @Public()
   @ApiOperation({ summary: 'Obter produtos da página pública de catálogo' })
   @ApiResponse({ status: 200, description: 'Produtos e informações da empresa' })
   @ApiResponse({ status: 404, description: 'Página não encontrada ou desabilitada' })

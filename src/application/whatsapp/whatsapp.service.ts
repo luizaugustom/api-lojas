@@ -1,6 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import axios from 'axios';
+import axios, { AxiosInstance } from 'axios';
 
 export interface WhatsAppMessage {
   to: string;
@@ -16,34 +16,163 @@ export interface WhatsAppTemplate {
   parameters: string[];
 }
 
+export interface InstallmentBillingData {
+  customerName: string;
+  installmentNumber: number;
+  totalInstallments: number;
+  amount: number;
+  remainingAmount: number;
+  dueDate: Date;
+  description?: string;
+  saleId?: string;
+  companyName?: string;
+}
+
 @Injectable()
 export class WhatsappService {
   private readonly logger = new Logger(WhatsappService.name);
-  private readonly whatsappApiUrl: string;
-  private readonly whatsappToken: string;
+  private readonly evolutionApiUrl: string;
+  private readonly evolutionApiKey: string;
+  private readonly evolutionInstance: string;
+  private readonly httpClient: AxiosInstance;
 
   constructor(private readonly configService: ConfigService) {
-    this.whatsappApiUrl = this.configService.get('WHATSAPP_API_URL', 'https://api.whatsapp.com');
-    this.whatsappToken = this.configService.get('WHATSAPP_TOKEN', '');
+    this.evolutionApiUrl = this.configService.get('EVOLUTION_API_URL', '').replace(/\/$/, ''); // Remove trailing slash
+    this.evolutionApiKey = this.configService.get('EVOLUTION_API_KEY', '');
+    this.evolutionInstance = this.configService.get('EVOLUTION_INSTANCE', 'default');
+
+    // Configurar cliente HTTP para Evolution API
+    this.httpClient = axios.create({
+      timeout: 30000,
+      headers: {
+        'Content-Type': 'application/json',
+        'apikey': this.evolutionApiKey,
+      },
+    });
+
+    if (!this.evolutionApiUrl || !this.evolutionApiKey) {
+      this.logger.warn('Evolution API não configurada. Configure EVOLUTION_API_URL e EVOLUTION_API_KEY no .env');
+    } else {
+      this.logger.log(`Evolution API configurada: ${this.evolutionApiUrl} (Instance: ${this.evolutionInstance})`);
+    }
   }
 
-  async sendMessage(message: WhatsAppMessage): Promise<boolean> {
+  /**
+   * Verifica se a instância está conectada e pronta para enviar mensagens
+   */
+  async checkInstanceStatus(): Promise<{ connected: boolean; status?: string }> {
     try {
-      this.logger.log(`Sending WhatsApp message to: ${message.to}`);
+      if (!this.evolutionApiUrl || !this.evolutionApiKey) {
+        return { connected: false, status: 'not_configured' };
+      }
 
-      // This would integrate with WhatsApp Business API
-      // For now, just log the message
-      this.logger.log(`Message: ${message.message}`);
-      
-      // Simulate API call
-      await new Promise(resolve => setTimeout(resolve, 1000));
+      const url = `${this.evolutionApiUrl}/instance/connectionState/${this.evolutionInstance}`;
+      const response = await this.httpClient.get(url);
 
-      this.logger.log('WhatsApp message sent successfully');
-      return true;
+      if (response.status === 200 && response.data) {
+        const state = response.data.state || response.data.status;
+        const connected = state === 'open' || state === 'connected';
+        return { connected, status: state };
+      }
+
+      return { connected: false, status: 'unknown' };
     } catch (error) {
-      this.logger.error('Error sending WhatsApp message:', error);
+      this.logger.warn(`Erro ao verificar status da instância: ${error.message}`);
+      return { connected: false, status: 'error' };
+    }
+  }
+
+  async sendMessage(message: WhatsAppMessage, retries: number = 2): Promise<boolean> {
+    const startTime = Date.now();
+    
+    try {
+      // Validar configuração
+      if (!this.evolutionApiUrl || !this.evolutionApiKey) {
+        this.logger.warn('Evolution API não configurada. Verifique EVOLUTION_API_URL e EVOLUTION_API_KEY no .env');
+        return false;
+      }
+
+      // Verificar se a instância está conectada (apenas no primeiro envio)
+      if (retries === 2) {
+        const instanceStatus = await this.checkInstanceStatus();
+        if (!instanceStatus.connected) {
+          this.logger.warn(`Instância ${this.evolutionInstance} não está conectada. Status: ${instanceStatus.status}`);
+          // Não falhar imediatamente, tentar enviar mesmo assim (pode ser cache)
+        }
+      }
+
+      // Validar número de telefone
+      const formattedPhone = await this.formatPhoneNumber(message.to);
+      const messageLength = message.message.length;
+      
+      this.logger.log(`📤 Enviando mensagem WhatsApp | Destino: ${formattedPhone} | Tamanho: ${messageLength} chars | Tentativa: ${3 - retries}/3 | Instância: ${this.evolutionInstance}`);
+
+      // Enviar via Evolution API
+      const url = `${this.evolutionApiUrl}/message/sendText/${this.evolutionInstance}`;
+      
+      const payload = {
+        number: formattedPhone,
+        text: message.message,
+      };
+
+      const response = await this.httpClient.post(url, payload);
+      const duration = Date.now() - startTime;
+
+      if (response.status === 200 || response.status === 201) {
+        this.logger.log(`✅ Mensagem WhatsApp enviada com sucesso | Destino: ${formattedPhone} | Tempo: ${duration}ms | Status: ${response.status}`);
+        return true;
+      }
+
+      this.logger.warn(`⚠️ Resposta inesperada da Evolution API | Status: ${response.status} | Tempo: ${duration}ms | Destino: ${formattedPhone}`);
+      return false;
+    } catch (error) {
+      // Retry logic para erros temporários
+      if (retries > 0 && this.isRetryableError(error)) {
+        const delay = Math.pow(2, 3 - retries) * 1000; // Backoff exponencial: 1s, 2s, 4s
+        this.logger.warn(`Erro temporário, tentando novamente em ${delay}ms... (tentativas restantes: ${retries})`);
+        await new Promise(resolve => setTimeout(resolve, delay));
+        return this.sendMessage(message, retries - 1);
+      }
+
+      const duration = Date.now() - startTime;
+      this.logger.error(`❌ Erro ao enviar mensagem WhatsApp | Destino: ${message.to} | Tentativa: ${3 - retries}/3 | Tempo: ${duration}ms`);
+      
+      if (error.response) {
+        this.logger.error(`📊 Detalhes do erro | Status: ${error.response.status} | Resposta: ${JSON.stringify(error.response.data)}`);
+      } else if (error.request) {
+        this.logger.error(`🔌 Erro de conexão | Não foi possível conectar à Evolution API | URL: ${this.evolutionApiUrl}`);
+      } else {
+        this.logger.error(`⚠️ Erro desconhecido | Mensagem: ${error.message}`);
+      }
+      
+      if (error.stack) {
+        this.logger.debug(`Stack trace: ${error.stack}`);
+      }
+      
       return false;
     }
+  }
+
+  /**
+   * Verifica se o erro é recuperável (deve tentar novamente)
+   */
+  private isRetryableError(error: any): boolean {
+    // Erros de rede/timeout são recuperáveis
+    if (error.code === 'ECONNREFUSED' || error.code === 'ETIMEDOUT' || error.code === 'ENOTFOUND') {
+      return true;
+    }
+
+    // Erros 5xx são recuperáveis (erro do servidor)
+    if (error.response && error.response.status >= 500 && error.response.status < 600) {
+      return true;
+    }
+
+    // Erro 429 (Too Many Requests) é recuperável
+    if (error.response && error.response.status === 429) {
+      return true;
+    }
+
+    return false;
   }
 
   async sendSaleNotification(phone: string, saleData: any): Promise<boolean> {
@@ -107,6 +236,139 @@ Por favor, efetue o pagamento até a data de vencimento.
       message,
       type: 'text',
     });
+  }
+
+  /**
+   * Envia mensagem de cobrança para uma parcela específica
+   */
+  async sendInstallmentBilling(billingData: InstallmentBillingData, phone: string): Promise<boolean> {
+    try {
+      const dueDateFormatted = new Date(billingData.dueDate).toLocaleDateString('pt-BR', {
+        day: '2-digit',
+        month: '2-digit',
+        year: 'numeric',
+      });
+
+      const daysUntilDue = Math.ceil(
+        (new Date(billingData.dueDate).getTime() - new Date().getTime()) / (1000 * 60 * 60 * 24)
+      );
+
+      let statusEmoji = '📅';
+      let statusText = '';
+      
+      if (daysUntilDue < 0) {
+        statusEmoji = '⚠️';
+        statusText = `*VENCIDA há ${Math.abs(daysUntilDue)} dia(s)*`;
+      } else if (daysUntilDue === 0) {
+        statusEmoji = '🔴';
+        statusText = '*VENCE HOJE*';
+      } else if (daysUntilDue <= 3) {
+        statusEmoji = '🟡';
+        statusText = `*Vence em ${daysUntilDue} dia(s)*`;
+      } else {
+        statusText = `*Vence em ${daysUntilDue} dia(s)*`;
+      }
+
+      const message = `
+${statusEmoji} *COBRANÇA - PARCELA ${billingData.installmentNumber}/${billingData.totalInstallments}*
+
+Olá, ${billingData.customerName}!
+
+${statusText}
+
+📋 *Detalhes da Parcela:*
+• Parcela: ${billingData.installmentNumber} de ${billingData.totalInstallments}
+• Valor Total: R$ ${billingData.amount.toFixed(2).replace('.', ',')}
+• Valor Restante: R$ ${billingData.remainingAmount.toFixed(2).replace('.', ',')}
+• Vencimento: ${dueDateFormatted}
+${billingData.description ? `• Descrição: ${billingData.description}\n` : ''}
+${billingData.companyName ? `\n🏢 *${billingData.companyName}*\n` : ''}
+Por favor, efetue o pagamento até a data de vencimento.
+
+Obrigado pela atenção! 🙏
+      `.trim();
+
+      const success = await this.sendMessage({
+        to: phone,
+        message,
+        type: 'text',
+      });
+
+      if (success) {
+        this.logger.log(`Mensagem de cobrança enviada para ${billingData.customerName} (${phone})`);
+      }
+
+      return success;
+    } catch (error) {
+      this.logger.error(`Erro ao enviar mensagem de cobrança para ${phone}:`, error);
+      return false;
+    }
+  }
+
+  /**
+   * Envia mensagem de cobrança para múltiplas parcelas de um cliente
+   */
+  async sendMultipleInstallmentsBilling(
+    customerName: string,
+    phone: string,
+    installments: Array<{
+      installmentNumber: number;
+      totalInstallments: number;
+      amount: number;
+      remainingAmount: number;
+      dueDate: Date;
+      description?: string;
+    }>,
+    companyName?: string,
+  ): Promise<boolean> {
+    try {
+      const totalDebt = installments.reduce((sum, inst) => sum + inst.remainingAmount, 0);
+      const overdueCount = installments.filter(inst => new Date(inst.dueDate) < new Date()).length;
+
+      const installmentsList = installments
+        .map(inst => {
+          const dueDateFormatted = new Date(inst.dueDate).toLocaleDateString('pt-BR', {
+            day: '2-digit',
+            month: '2-digit',
+            year: 'numeric',
+          });
+          const isOverdue = new Date(inst.dueDate) < new Date();
+          const emoji = isOverdue ? '🔴' : '📅';
+          return `${emoji} Parcela ${inst.installmentNumber}/${inst.totalInstallments}: R$ ${inst.remainingAmount.toFixed(2).replace('.', ',')} - Venc: ${dueDateFormatted}`;
+        })
+        .join('\n');
+
+      const message = `
+💰 *RESUMO DE COBRANÇAS*
+
+Olá, ${customerName}!
+
+Você possui *${installments.length} parcela(s) pendente(s)*:
+${installmentsList}
+
+📊 *Total em Aberto:* R$ ${totalDebt.toFixed(2).replace('.', ',')}
+${overdueCount > 0 ? `⚠️ *${overdueCount} parcela(s) vencida(s)*\n` : ''}
+${companyName ? `\n🏢 *${companyName}*\n` : ''}
+Por favor, entre em contato para regularizar sua situação.
+
+Obrigado pela atenção! 🙏
+      `.trim();
+
+      const success = await this.sendMessage({
+        to: phone,
+        message,
+        type: 'text',
+      });
+
+      if (success) {
+        this.logger.log(`Mensagem de cobrança múltipla enviada para ${customerName} (${phone})`);
+      }
+
+      return success;
+    } catch (error) {
+      this.logger.error(`Erro ao enviar mensagem de cobrança múltipla para ${phone}:`, error);
+      return false;
+    }
   }
 
   async sendCashClosureReport(phone: string, closureData: any): Promise<boolean> {

@@ -14,6 +14,7 @@ const prisma_module_1 = require("../../infrastructure/database/prisma.module");
 const config_1 = require("@nestjs/config");
 const fiscal_api_service_1 = require("../../shared/services/fiscal-api.service");
 const validation_module_1 = require("../../shared/services/validation.module");
+const ibpt_service_1 = require("../../shared/services/ibpt.service");
 const platform_express_1 = require("@nestjs/platform-express");
 let FiscalModule = class FiscalModule {
 };
@@ -30,7 +31,7 @@ exports.FiscalModule = FiscalModule = __decorate([
                 },
             })
         ],
-        providers: [fiscal_service_1.FiscalService, fiscal_api_service_1.FiscalApiService],
+        providers: [fiscal_service_1.FiscalService, fiscal_api_service_1.FiscalApiService, ibpt_service_1.IBPTService],
         controllers: [fiscal_controller_1.FiscalController],
         exports: [fiscal_service_1.FiscalService, fiscal_api_service_1.FiscalApiService],
     })

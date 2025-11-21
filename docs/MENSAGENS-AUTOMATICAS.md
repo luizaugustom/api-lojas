@@ -10,7 +10,7 @@ Sistema implementado para enviar mensagens automáticas via WhatsApp para client
 
 - **No dia do vencimento**: Sistema envia mensagem lembrando o cliente sobre o pagamento
 - **Parcelas atrasadas**: Mensagens são enviadas a cada 3 dias após o vencimento
-- **Horário**: Mensagens são enviadas automaticamente às 9h da manhã (configurável)
+- **Horário**: Mensagens são enviadas automaticamente às 7h da manhã (horário de Brasília)
 - **Requisito**: Cliente deve ter telefone válido cadastrado
 
 ### 2. Controle por Empresa
@@ -46,7 +46,7 @@ messageCount      Int       @default(0) // Contador de mensagens
 #### 3. Serviço de Mensagens
 - Arquivo: `src/application/installment/installment-messaging.service.ts`
 - **Principais funcionalidades**:
-  - Cron job que executa diariamente às 9h
+  - Cron job que executa diariamente às 7h (horário de Brasília)
   - Verifica parcelas não pagas de empresas ativas
   - Envia mensagens conforme regras definidas
   - Registra histórico de envios

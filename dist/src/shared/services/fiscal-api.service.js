@@ -182,6 +182,8 @@ let FiscalApiService = FiscalApiService_1 = class FiscalApiService {
         const endpoint = this.config.environment === 'production'
             ? '/nfce'
             : '/nfce/sandbox';
+        const totalTaxValue = request.totalTaxValue ??
+            request.items.reduce((sum, item) => sum + (item.taxValue || 0), 0);
         const payload = {
             natureza_operacao: request.operationNature || 'Venda',
             data_emissao: new Date().toISOString(),
@@ -203,13 +205,14 @@ let FiscalApiService = FiscalApiService_1 = class FiscalApiService {
                 valor_unitario_comercial: item.unitPrice,
                 valor_total_bruto: item.totalPrice,
                 codigo_barras_comercial: item.barcode,
+                ...(item.taxValue && { valor_total_tributos_item: item.taxValue }),
             })),
             valor_total: request.totalValue,
             valor_frete: 0,
             valor_seguro: 0,
             valor_desconto: 0,
             valor_outras_despesas: 0,
-            valor_total_tributos: 0,
+            valor_total_tributos: Number(totalTaxValue.toFixed(2)),
             valor_total_produtos: request.totalValue,
             valor_total_servicos: 0,
             valor_total_nota: request.totalValue,
@@ -259,6 +262,7 @@ let FiscalApiService = FiscalApiService_1 = class FiscalApiService {
                 valor_unitario: item.unitPrice,
                 valor_total: item.totalPrice,
                 codigo_barras: item.barcode,
+                ...(item.taxValue && { valor_total_tributos_item: item.taxValue }),
             })),
             totalizadores: {
                 valor_total_produtos: request.totalValue,
@@ -268,7 +272,7 @@ let FiscalApiService = FiscalApiService_1 = class FiscalApiService {
                 valor_seguro: 0,
                 valor_desconto: 0,
                 valor_outras_despesas: 0,
-                valor_total_tributos: 0,
+                valor_total_tributos: Number((request.totalTaxValue ?? request.items.reduce((sum, item) => sum + (item.taxValue || 0), 0)).toFixed(2)),
             },
         };
         if (request.referenceAccessKey) {
@@ -343,13 +347,14 @@ let FiscalApiService = FiscalApiService_1 = class FiscalApiService {
                 valor_unitario_comercial: item.unitPrice,
                 valor_total_bruto: item.totalPrice,
                 codigo_barras_comercial: item.barcode,
+                ...(item.taxValue && { valor_total_tributos_item: item.taxValue }),
             })),
             valor_total: request.totalValue,
             valor_frete: 0,
             valor_seguro: 0,
             valor_desconto: 0,
             valor_outras_despesas: 0,
-            valor_total_tributos: 0,
+            valor_total_tributos: Number((request.totalTaxValue ?? request.items.reduce((sum, item) => sum + (item.taxValue || 0), 0)).toFixed(2)),
             valor_total_produtos: request.totalValue,
             valor_total_servicos: 0,
             valor_total_nota: request.totalValue,
@@ -398,13 +403,14 @@ let FiscalApiService = FiscalApiService_1 = class FiscalApiService {
                 valor_unitario_comercial: item.unitPrice,
                 valor_total_bruto: item.totalPrice,
                 codigo_barras_comercial: item.barcode,
+                ...(item.taxValue && { valor_total_tributos_item: item.taxValue }),
             })),
             valor_total: request.totalValue,
             valor_frete: 0,
             valor_seguro: 0,
             valor_desconto: 0,
             valor_outras_despesas: 0,
-            valor_total_tributos: 0,
+            valor_total_tributos: Number((request.totalTaxValue ?? request.items.reduce((sum, item) => sum + (item.taxValue || 0), 0)).toFixed(2)),
             valor_total_produtos: request.totalValue,
             valor_total_servicos: 0,
             valor_total_nota: request.totalValue,
@@ -603,10 +609,12 @@ let FiscalApiService = FiscalApiService_1 = class FiscalApiService {
                         icms_origem: '0',
                         pis_situacao_tributaria: '07',
                         cofins_situacao_tributaria: '07',
+                        ...(item.taxValue && { valor_total_tributos_item: item.taxValue }),
                     };
                 }),
                 valor_produtos: request.items.reduce((sum, item) => sum + (item.quantity * item.unitPrice), 0),
                 valor_total: request.items.reduce((sum, item) => sum + (item.quantity * item.unitPrice), 0),
+                valor_total_tributos: Number((request.totalTaxValue ?? request.items.reduce((sum, item) => sum + (item.taxValue || 0), 0)).toFixed(2)),
                 forma_pagamento: '0',
                 meio_pagamento: this.mapPaymentMethodCodeSefaz(request.paymentMethod),
                 ...(request.additionalInfo && { informacoes_complementares: request.additionalInfo }),
