@@ -648,7 +648,7 @@ export class CompanyService {
 
       this.logger.log(`Enviando certificado para Focus NFe - CNPJ: ${company.cnpj}, Ambiente: ${company.admin.focusNfeEnvironment}`);
 
-      // Primeiro, buscar o ID da empresa no Focus NFe usando o CNPJ
+      // Buscar ID da empresa no Focus NFe usando o CNPJ
       this.logger.log(`Buscando ID da empresa no Focus NFe - CNPJ: ${cnpjNumeros}`);
       
       let empresaId: string;
@@ -666,7 +666,6 @@ export class CompanyService {
           }
         );
 
-        // A API retorna um array de empresas
         const empresas = consultaResponse.data;
         
         if (empresas && empresas.length > 0) {
@@ -689,10 +688,12 @@ export class CompanyService {
           response = await axios.post(
             `${baseUrl}/v2/empresas`,
             {
-              nome: company.name,
-              cnpj: cnpjNumeros,
-              arquivo_certificado_base64: certificadoBase64,
-              senha_certificado: certificatePassword,
+              empresa: {
+                nome: company.name,
+                cnpj: cnpjNumeros,
+                arquivo_certificado_base64: certificadoBase64,
+                senha_certificado: certificatePassword,
+              }
             },
             {
               auth: {
@@ -725,8 +726,10 @@ export class CompanyService {
           response = await axios.put(
             `${baseUrl}/v2/empresas/${empresaId}`,
             {
-              arquivo_certificado_base64: certificadoBase64,
-              senha_certificado: certificatePassword,
+              empresa: {
+                arquivo_certificado_base64: certificadoBase64,
+                senha_certificado: certificatePassword,
+              }
             },
             {
               auth: {
