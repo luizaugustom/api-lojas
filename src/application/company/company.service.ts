@@ -580,6 +580,82 @@ export class CompanyService {
   }
 
   /**
+   * Testa a conexão com o Focus NFe
+   */
+  async testFocusNfeConnection(companyId: string) {
+    try {
+      const company = await this.prisma.company.findUnique({
+        where: { id: companyId },
+        select: {
+          cnpj: true,
+          name: true,
+          admin: {
+            select: {
+              focusNfeApiKey: true,
+              focusNfeEnvironment: true,
+            },
+          },
+        },
+      });
+
+      if (!company) {
+        throw new NotFoundException('Empresa não encontrada');
+      }
+
+      if (!company.admin.focusNfeApiKey) {
+        return {
+          success: false,
+          message: 'API Key do Focus NFe não configurada',
+        };
+      }
+
+      const cnpjNumeros = company.cnpj.replace(/\D/g, '');
+      const baseUrl = company.admin.focusNfeEnvironment === 'production'
+        ? 'https://api.focusnfe.com.br'
+        : 'https://homologacao.focusnfe.com.br';
+
+      this.logger.log(`Testando conexão com Focus NFe - CNPJ: ${cnpjNumeros}, Ambiente: ${company.admin.focusNfeEnvironment}`);
+
+      try {
+        const response = await axios.get(
+          `${baseUrl}/v2/empresas?cnpj=${cnpjNumeros}`,
+          {
+            auth: {
+              username: company.admin.focusNfeApiKey,
+              password: '',
+            },
+            timeout: 10000,
+          }
+        );
+
+        return {
+          success: true,
+          message: 'Conexão com Focus NFe estabelecida com sucesso',
+          empresaCadastrada: response.data && response.data.length > 0,
+          ambiente: company.admin.focusNfeEnvironment,
+          dados: response.data,
+        };
+      } catch (error: any) {
+        this.logger.error('Erro ao testar conexão com Focus NFe:', {
+          message: error.message,
+          response: error.response?.data,
+          status: error.response?.status,
+        });
+
+        return {
+          success: false,
+          message: `Erro na comunicação com Focus NFe: ${error.message}`,
+          detalhe: error.response?.data,
+          status: error.response?.status,
+        };
+      }
+    } catch (error) {
+      this.logger.error('Erro ao testar conexão:', error);
+      throw error;
+    }
+  }
+
+  /**
    * Upload do certificado digital para o Focus NFe
    */
   async uploadCertificateToFocusNfe(companyId: string, file: Express.Multer.File) {
@@ -690,108 +766,49 @@ export class CompanyService {
         this.logger.warn('Empresa não encontrada no Focus NFe, será criada automaticamente');
       }
 
-      let response;
-
+      // Verificar se empresa existe
       if (!empresaExiste) {
-        // Criar empresa no Focus NFe com o certificado
-        this.logger.log(`Criando empresa no Focus NFe - CNPJ: ${cnpjNumeros}, Nome: ${company.name}`);
-        
-        // Mapear regime tributário
-        const regimeTributarioMap = {
-          'SIMPLES_NACIONAL': 1,
-          'SIMPLES_NACIONAL_EXCESSO': 2,
-          'REGIME_NORMAL': 3,
-          'MEI': 4,
-        };
-        
-        const empresaData: any = {
-          nome: company.name,
-          cnpj: cnpjNumeros,
-          arquivo_certificado_base64: certificadoBase64,
-          senha_certificado: certificatePassword,
-          habilita_nfce: true,
-          habilita_nfe: true,
-        };
+        throw new BadRequestException(
+          'Empresa não cadastrada no Focus NFe. ' +
+          'Por favor, cadastre a empresa manualmente no Painel API do Focus NFe (https://focusnfe.com.br) ' +
+          'antes de enviar o certificado.'
+        );
+      }
 
-        // Adicionar campos opcionais se disponíveis
-        if (company.email) empresaData.email = company.email;
-        if (company.phone) empresaData.telefone = company.phone.replace(/\D/g, '');
-        if (company.stateRegistration) empresaData.inscricao_estadual = company.stateRegistration;
-        if (company.municipalRegistration) empresaData.inscricao_municipal = company.municipalRegistration;
-        if (company.taxRegime) empresaData.regime_tributario = regimeTributarioMap[company.taxRegime] || 1;
-        if (company.street) empresaData.logradouro = company.street;
-        if (company.number) empresaData.numero = company.number;
-        if (company.complement) empresaData.complemento = company.complement;
-        if (company.district) empresaData.bairro = company.district;
-        if (company.city) empresaData.municipio = company.city;
-        if (company.state) empresaData.uf = company.state;
-        if (company.zipCode) empresaData.cep = company.zipCode.replace(/\D/g, '');
+      // Atualizar empresa existente com o certificado
+      this.logger.log(`Atualizando certificado da empresa existente - ID: ${empresaId}`);
         
-        try {
-          response = await axios.post(
-            `${baseUrl}/v2/empresas`,
-            {
-              empresa: empresaData
+      let response;
+      try {
+        response = await axios.put(
+          `${baseUrl}/v2/empresas/${empresaId}`,
+          {
+            arquivo_certificado_base64: certificadoBase64,
+            senha_certificado: certificatePassword,
+          },
+          {
+            auth: {
+              username: company.admin.focusNfeApiKey,
+              password: '',
             },
-            {
-              auth: {
-                username: company.admin.focusNfeApiKey,
-                password: '',
-              },
-              headers: {
-                'Content-Type': 'application/json',
-              },
-              timeout: 30000,
-            }
-          );
-
-          this.logger.log(`Empresa criada com sucesso no Focus NFe - ID: ${response.data.id || 'N/A'}`);
-        } catch (createError: any) {
-          this.logger.error('Erro ao criar empresa no Focus NFe:', {
-            message: createError.message,
-            response: createError.response?.data,
-            status: createError.response?.status,
-            url: `${baseUrl}/v2/empresas`,
-            empresaData: { ...empresaData, arquivo_certificado_base64: '[REDACTED]', senha_certificado: '[REDACTED]' },
-          });
-          throw createError;
-        }
-        
-      } else {
-        // Atualizar empresa existente com o certificado
-        this.logger.log(`Atualizando certificado da empresa existente - ID: ${empresaId}`);
-        
-        try {
-          response = await axios.put(
-            `${baseUrl}/v2/empresas/${empresaId}`,
-            {
-              empresa: {
-                arquivo_certificado_base64: certificadoBase64,
-                senha_certificado: certificatePassword,
-              }
+            headers: {
+              'Content-Type': 'application/json',
             },
-            {
-              auth: {
-                username: company.admin.focusNfeApiKey,
-                password: '',
-              },
-              headers: {
-                'Content-Type': 'application/json',
-              },
-              timeout: 30000,
-            }
-          );
+            timeout: 30000,
+          }
+        );
 
-          this.logger.log(`Certificado atualizado com sucesso no Focus NFe`);
-        } catch (updateError: any) {
-          this.logger.error('Erro ao atualizar certificado no Focus NFe:', {
-            message: updateError.message,
-            response: updateError.response?.data,
-            status: updateError.response?.status,
-            empresaId,
-          });
-          throw updateError;
-        }
+        this.logger.log(`Certificado atualizado com sucesso no Focus NFe`);
+      } catch (updateError: any) {
+        this.logger.error('Erro ao atualizar certificado no Focus NFe:', {
+          message: updateError.message,
+          response: updateError.response?.data,
+          status: updateError.response?.status,
+          url: `${baseUrl}/v2/empresas/${empresaId}`,
+        });
+        throw new BadRequestException(
+          `Erro ao enviar certificado: ${updateError.response?.data?.mensagem || updateError.message}`
+        );
       }
 
       this.logger.log(`Certificado enviado ao Focus NFe para empresa: ${companyId}`);

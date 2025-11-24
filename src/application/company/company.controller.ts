@@ -212,11 +212,24 @@ export class CompanyController {
   @ApiOperation({ summary: 'Upload do certificado digital para Focus NFe' })
   @ApiResponse({ status: 200, description: 'Certificado enviado com sucesso ao Focus NFe' })
   @ApiResponse({ status: 400, description: 'Erro no upload ou certificado inválido' })
-  uploadCertificate(
+  async uploadCertificate(
     @CurrentUser() user: any,
     @UploadedFile() file: Express.Multer.File,
   ) {
-    return this.companyService.uploadCertificateToFocusNfe(user.companyId, file);
+    try {
+      return await this.companyService.uploadCertificateToFocusNfe(user.companyId, file);
+    } catch (error) {
+      console.error('[CONTROLLER] Erro no upload do certificado:', error);
+      throw error;
+    }
+  }
+
+  @Get('my-company/test-focus-nfe')
+  @Roles(UserRole.COMPANY)
+  @ApiOperation({ summary: 'Testa conexão com Focus NFe' })
+  @ApiResponse({ status: 200, description: 'Teste realizado com sucesso' })
+  async testFocusNfe(@CurrentUser() user: any) {
+    return this.companyService.testFocusNfeConnection(user.companyId);
   }
 
   @Post('my-company/upload-logo')
