@@ -34,6 +34,7 @@ export declare class ProductService {
             size: string | null;
             stockQuantity: number;
             price: import("@prisma/client/runtime/library").Decimal;
+            costPrice: import("@prisma/client/runtime/library").Decimal | null;
             category: string | null;
             expirationDate: Date | null;
             ncm: string | null;
@@ -69,6 +70,7 @@ export declare class ProductService {
         size: string | null;
         stockQuantity: number;
         price: import("@prisma/client/runtime/library").Decimal;
+        costPrice: import("@prisma/client/runtime/library").Decimal | null;
         category: string | null;
         expirationDate: Date | null;
         ncm: string | null;
@@ -91,6 +93,7 @@ export declare class ProductService {
         size: string | null;
         stockQuantity: number;
         price: import("@prisma/client/runtime/library").Decimal;
+        costPrice: import("@prisma/client/runtime/library").Decimal | null;
         category: string | null;
         expirationDate: Date | null;
         ncm: string | null;

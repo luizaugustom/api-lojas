@@ -22,6 +22,7 @@ const update_company_dto_1 = require("./dto/update-company.dto");
 const update_fiscal_config_dto_1 = require("./dto/update-fiscal-config.dto");
 const update_catalog_page_dto_1 = require("./dto/update-catalog-page.dto");
 const update_data_period_dto_1 = require("./dto/update-data-period.dto");
+const update_focus_nfe_config_dto_1 = require("./dto/update-focus-nfe-config.dto");
 const jwt_auth_guard_1 = require("../../shared/guards/jwt-auth.guard");
 const roles_guard_1 = require("../../shared/guards/roles.guard");
 const roles_decorator_1 = require("../../shared/decorators/roles.decorator");
@@ -85,8 +86,17 @@ let CompanyController = class CompanyController {
         const isValid = await this.companyService.hasValidFiscalConfig(user.companyId);
         return { hasValidConfig: isValid };
     }
-    uploadCertificate(user, file) {
-        return this.companyService.uploadCertificateToFocusNfe(user.companyId, file);
+    async uploadCertificate(user, file) {
+        try {
+            return await this.companyService.uploadCertificateToFocusNfe(user.companyId, file);
+        }
+        catch (error) {
+            console.error('[CONTROLLER] Erro no upload do certificado:', error);
+            throw error;
+        }
+    }
+    async testFocusNfe(user) {
+        return this.companyService.testFocusNfeConnection(user.companyId);
     }
     uploadLogo(user, file) {
         return this.companyService.uploadLogo(user.companyId, file);
@@ -108,6 +118,12 @@ let CompanyController = class CompanyController {
     }
     getCatalogPageConfig(user) {
         return this.companyService.getCatalogPageConfig(user.companyId);
+    }
+    updateFocusNfeConfig(id, updateFocusNfeConfigDto) {
+        return this.companyService.updateFocusNfeConfig(id, updateFocusNfeConfigDto);
+    }
+    getFocusNfeConfig(id) {
+        return this.companyService.getFocusNfeConfig(id);
     }
 };
 exports.CompanyController = CompanyController;
@@ -303,8 +319,18 @@ __decorate([
     __param(1, (0, common_1.UploadedFile)()),
     __metadata("design:type", Function),
     __metadata("design:paramtypes", [Object, Object]),
-    __metadata("design:returntype", void 0)
+    __metadata("design:returntype", Promise)
 ], CompanyController.prototype, "uploadCertificate", null);
+__decorate([
+    (0, common_1.Get)('my-company/test-focus-nfe'),
+    (0, roles_decorator_1.Roles)(roles_decorator_1.UserRole.COMPANY),
+    (0, swagger_1.ApiOperation)({ summary: 'Testa conexão com Focus NFe' }),
+    (0, swagger_1.ApiResponse)({ status: 200, description: 'Teste realizado com sucesso' }),
+    __param(0, (0, current_user_decorator_1.CurrentUser)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [Object]),
+    __metadata("design:returntype", Promise)
+], CompanyController.prototype, "testFocusNfe", null);
 __decorate([
     (0, common_1.Post)('my-company/upload-logo'),
     (0, roles_decorator_1.Roles)(roles_decorator_1.UserRole.COMPANY),
@@ -397,6 +423,31 @@ __decorate([
     __metadata("design:paramtypes", [Object]),
     __metadata("design:returntype", void 0)
 ], CompanyController.prototype, "getCatalogPageConfig", null);
+__decorate([
+    (0, common_1.Patch)(':id/focus-nfe-config'),
+    (0, roles_decorator_1.Roles)(roles_decorator_1.UserRole.ADMIN),
+    (0, swagger_1.ApiOperation)({ summary: 'Atualizar configuração do Focus NFe da empresa (apenas admin)' }),
+    (0, swagger_1.ApiResponse)({ status: 200, description: 'Configuração do Focus NFe atualizada com sucesso' }),
+    (0, swagger_1.ApiResponse)({ status: 404, description: 'Empresa não encontrada' }),
+    (0, swagger_1.ApiResponse)({ status: 400, description: 'ID inválido' }),
+    __param(0, (0, common_1.Param)('id', uuid_validation_pipe_1.UuidValidationPipe)),
+    __param(1, (0, common_1.Body)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String, update_focus_nfe_config_dto_1.UpdateFocusNfeConfigDto]),
+    __metadata("design:returntype", void 0)
+], CompanyController.prototype, "updateFocusNfeConfig", null);
+__decorate([
+    (0, common_1.Get)(':id/focus-nfe-config'),
+    (0, roles_decorator_1.Roles)(roles_decorator_1.UserRole.ADMIN),
+    (0, swagger_1.ApiOperation)({ summary: 'Obter configuração do Focus NFe da empresa (apenas admin)' }),
+    (0, swagger_1.ApiResponse)({ status: 200, description: 'Configuração do Focus NFe' }),
+    (0, swagger_1.ApiResponse)({ status: 404, description: 'Empresa não encontrada' }),
+    (0, swagger_1.ApiResponse)({ status: 400, description: 'ID inválido' }),
+    __param(0, (0, common_1.Param)('id', uuid_validation_pipe_1.UuidValidationPipe)),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String]),
+    __metadata("design:returntype", void 0)
+], CompanyController.prototype, "getFocusNfeConfig", null);
 exports.CompanyController = CompanyController = __decorate([
     (0, swagger_1.ApiTags)('company'),
     (0, common_1.Controller)('company'),

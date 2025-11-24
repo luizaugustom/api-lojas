@@ -26,6 +26,8 @@ import { DashboardModule } from './application/dashboard/dashboard.module';
 import { InstallmentModule } from './application/installment/installment.module';
 import { NotificationModule } from './application/notification/notification.module';
 import { BudgetModule } from './application/budget/budget.module';
+import { StoreCreditModule } from './application/store-credit/store-credit.module';
+import { ProductLossModule } from './application/product-loss/product-loss.module';
 
 @Module({
   imports: [
@@ -66,6 +68,8 @@ import { BudgetModule } from './application/budget/budget.module';
     InstallmentModule,
     NotificationModule,
     BudgetModule,
+    StoreCreditModule,
+    ProductLossModule,
     HealthModule,
     ScaleModule,
   ],

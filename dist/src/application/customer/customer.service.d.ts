@@ -1,13 +1,15 @@
 import { PrismaService } from '../../infrastructure/database/prisma.service';
 import { EmailService } from '../../shared/services/email.service';
+import { PlanLimitsService } from '../../shared/services/plan-limits.service';
 import { CreateCustomerDto } from './dto/create-customer.dto';
 import { UpdateCustomerDto } from './dto/update-customer.dto';
 import { ClientTimeInfo } from '../../shared/utils/client-time.util';
 export declare class CustomerService {
     private readonly prisma;
     private readonly emailService;
+    private readonly planLimitsService;
     private readonly logger;
-    constructor(prisma: PrismaService, emailService: EmailService);
+    constructor(prisma: PrismaService, emailService: EmailService, planLimitsService: PlanLimitsService);
     create(companyId: string, createCustomerDto: CreateCustomerDto): Promise<{
         company: {
             id: string;
@@ -29,6 +31,7 @@ export declare class CustomerService {
         complement: string | null;
         companyId: string;
         cpfCnpj: string | null;
+        storeCreditBalance: import("@prisma/client/runtime/library").Decimal;
     }>;
     findAll(companyId?: string, page?: number, limit?: number, search?: string): Promise<{
         customers: ({
@@ -52,6 +55,7 @@ export declare class CustomerService {
             complement: string | null;
             companyId: string;
             cpfCnpj: string | null;
+            storeCreditBalance: import("@prisma/client/runtime/library").Decimal;
         })[];
         total: number;
         page: number;
@@ -79,6 +83,7 @@ export declare class CustomerService {
         complement: string | null;
         companyId: string;
         cpfCnpj: string | null;
+        storeCreditBalance: import("@prisma/client/runtime/library").Decimal;
     }>;
     findByCpfCnpj(cpfCnpj: string, companyId?: string): Promise<{
         company: {
@@ -101,6 +106,7 @@ export declare class CustomerService {
         complement: string | null;
         companyId: string;
         cpfCnpj: string | null;
+        storeCreditBalance: import("@prisma/client/runtime/library").Decimal;
     }>;
     update(id: string, updateCustomerDto: UpdateCustomerDto, companyId?: string): Promise<{
         company: {
@@ -123,6 +129,7 @@ export declare class CustomerService {
         complement: string | null;
         companyId: string;
         cpfCnpj: string | null;
+        storeCreditBalance: import("@prisma/client/runtime/library").Decimal;
     }>;
     remove(id: string, companyId?: string): Promise<{
         message: string;

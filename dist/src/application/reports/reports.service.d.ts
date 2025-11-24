@@ -28,6 +28,8 @@ export declare class ReportsService {
     private addBillsSheet;
     private addCashClosuresSheet;
     private addCommissionsSheet;
+    private getProductLosses;
+    private addProductLossesSheet;
     private generateReportFile;
     private buildZipPackage;
     private resolveInvoiceFolder;

@@ -62,7 +62,17 @@ export class DashboardService {
         topSellers,
         
         // Métricas de produtos mais vendidos
-        topProducts
+        topProducts,
+        
+        // Custo dos produtos vendidos
+        totalCostOfSales,
+        
+        // Perdas de produtos
+        totalLosses,
+        totalLossesValue,
+        
+        // Contas a pagar do período (este mês)
+        billsToPayThisMonth
       ] = await Promise.all([
         // Contadores básicos
         this.prisma.product.count({ where: { companyId } }),
@@ -131,7 +141,17 @@ export class DashboardService {
         this.getTopSellers(companyId),
         
         // Top produtos
-        this.getTopProducts(companyId)
+        this.getTopProducts(companyId),
+        
+        // Custo dos produtos vendidos
+        this.getTotalCostOfSales(companyId),
+        
+        // Perdas de produtos
+        this.getTotalLosses(companyId),
+        this.getTotalLossesValue(companyId),
+        
+        // Contas a pagar do período (este mês)
+        this.getBillsToPayThisMonth(companyId)
       ]);
 
       // Calcular variações percentuais
@@ -181,6 +201,12 @@ export class DashboardService {
           pendingBillsValue: Number(pendingBillsValue._sum.amount || 0),
           paidBillsValue: Number(paidBillsValue._sum.amount || 0),
           stockValue: stockValue,
+          totalCostOfSales: totalCostOfSales,
+          totalLossesValue: totalLossesValue,
+          billsToPayThisMonth: billsToPayThisMonth,
+          // Lucro líquido = Vendas - Custo das vendas - Contas a pagar do período - Perdas
+          netProfit: Number(totalSalesValue._sum.total || 0) - totalCostOfSales - billsToPayThisMonth - totalLossesValue,
+          // Receita líquida (sem descontar custos)
           netRevenue: Number(totalSalesValue._sum.total || 0) - Number(paidBillsValue._sum.amount || 0)
         },
         
@@ -427,5 +453,80 @@ export class DashboardService {
       end: endOfLastMonth.toISOString(),
       label: `${lastMonth.getFullYear()}-${String(lastMonth.getMonth() + 1).padStart(2, '0')}`
     };
+  }
+
+  private async getTotalCostOfSales(companyId: string): Promise<number> {
+    // Buscar todas as vendas com seus itens e produtos
+    const sales = await this.prisma.sale.findMany({
+      where: { companyId },
+      include: {
+        items: {
+          include: {
+            product: {
+              select: {
+                costPrice: true,
+                price: true,
+              },
+            },
+          },
+        },
+      },
+    });
+
+    // Calcular custo total das vendas
+    let totalCost = 0;
+    for (const sale of sales) {
+      for (const item of sale.items) {
+        const unitCost = item.product.costPrice
+          ? Number(item.product.costPrice)
+          : Number(item.product.price);
+        totalCost += unitCost * item.quantity;
+      }
+    }
+
+    return totalCost;
+  }
+
+  private async getTotalLosses(companyId: string): Promise<number> {
+    const result = await this.prisma.productLoss.aggregate({
+      where: { companyId },
+      _sum: { quantity: true },
+    });
+
+    return result._sum.quantity || 0;
+  }
+
+  private async getTotalLossesValue(companyId: string): Promise<number> {
+    const result = await this.prisma.productLoss.aggregate({
+      where: { companyId },
+      _sum: { totalCost: true },
+    });
+
+    return Number(result._sum.totalCost || 0);
+  }
+
+  private async getBillsToPayThisMonth(companyId: string): Promise<number> {
+    const startOfMonth = new Date();
+    startOfMonth.setDate(1);
+    startOfMonth.setHours(0, 0, 0, 0);
+
+    const endOfMonth = new Date();
+    endOfMonth.setMonth(endOfMonth.getMonth() + 1);
+    endOfMonth.setDate(0);
+    endOfMonth.setHours(23, 59, 59, 999);
+
+    const result = await this.prisma.billToPay.aggregate({
+      where: {
+        companyId,
+        dueDate: {
+          gte: startOfMonth,
+          lte: endOfMonth,
+        },
+        isPaid: false, // Apenas contas não pagas
+      },
+      _sum: { amount: true },
+    });
+
+    return Number(result._sum.amount || 0);
   }
 }

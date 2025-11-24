@@ -168,6 +168,10 @@ nano .env  # Editar com suas configurações
 # Executar migrações
 npm run db:migrate:deploy
 
+# ⚠️ IMPORTANTE: Após o deploy, certifique-se de que a migration
+# 20250130000000_add_focus_nfe_to_company foi aplicada com sucesso
+# Esta migration adiciona os campos de configuração do Focus NFe por empresa
+
 # Build
 npm run build
 ```

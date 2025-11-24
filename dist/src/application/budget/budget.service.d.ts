@@ -89,9 +89,9 @@ export declare class BudgetService {
         sellerId: string | null;
         clientEmail: string | null;
         total: import("@prisma/client/runtime/library").Decimal;
+        status: string;
         clientCpfCnpj: string | null;
         clientName: string | null;
-        status: string;
         notes: string | null;
         validUntil: Date;
         clientPhone: string | null;
@@ -127,9 +127,9 @@ export declare class BudgetService {
         sellerId: string | null;
         clientEmail: string | null;
         total: import("@prisma/client/runtime/library").Decimal;
+        status: string;
         clientCpfCnpj: string | null;
         clientName: string | null;
-        status: string;
         notes: string | null;
         validUntil: Date;
         clientPhone: string | null;
@@ -178,9 +178,9 @@ export declare class BudgetService {
         sellerId: string | null;
         clientEmail: string | null;
         total: import("@prisma/client/runtime/library").Decimal;
+        status: string;
         clientCpfCnpj: string | null;
         clientName: string | null;
-        status: string;
         notes: string | null;
         validUntil: Date;
         clientPhone: string | null;
@@ -216,6 +216,7 @@ export declare class BudgetService {
                 size: string | null;
                 stockQuantity: number;
                 price: import("@prisma/client/runtime/library").Decimal;
+                costPrice: import("@prisma/client/runtime/library").Decimal | null;
                 category: string | null;
                 expirationDate: Date | null;
                 ncm: string | null;
@@ -239,9 +240,9 @@ export declare class BudgetService {
         sellerId: string | null;
         clientEmail: string | null;
         total: import("@prisma/client/runtime/library").Decimal;
+        status: string;
         clientCpfCnpj: string | null;
         clientName: string | null;
-        status: string;
         notes: string | null;
         validUntil: Date;
         clientPhone: string | null;

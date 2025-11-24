@@ -106,6 +106,16 @@ model Company {
   catalogPageUrl      String?
   catalogPageEnabled  Boolean  @default(false)
   defaultDataPeriod   DataPeriodFilter @default(THIS_YEAR)
+  
+  // Plan Limits Configuration (Customizable per company)
+  maxProducts        Int?    // null = unlimited, padrão é null (ilimitado)
+  maxCustomers       Int?    // null = unlimited, padrão é null (ilimitado)
+  maxSellers         Int?    // null = unlimited, padrão é null (ilimitado)
+  photoUploadEnabled Boolean @default(true) // Se upload de fotos está habilitado
+  maxPhotosPerProduct Int?   // null = unlimited, padrão é null (ilimitado)
+  nfceEmissionEnabled Boolean @default(true) // Se emissão de NFCe está habilitada
+  nfeEmissionEnabled Boolean @default(true) // Se emissão de NFe está habilitada
+  
   adminId         String
   admin           Admin           @relation(fields: [adminId], references: [id], onDelete: Cascade)
   sellers         Seller[]

@@ -17,20 +17,41 @@ const config_1 = require("@nestjs/config");
 const prisma_service_1 = require("../../infrastructure/database/prisma.service");
 const validation_service_1 = require("../../shared/services/validation.service");
 const ibpt_service_1 = require("../../shared/services/ibpt.service");
+const plan_limits_service_1 = require("../../shared/services/plan-limits.service");
 const fiscal_api_service_1 = require("../../shared/services/fiscal-api.service");
 const xml2js = require("xml2js");
 let FiscalService = FiscalService_1 = class FiscalService {
-    constructor(configService, prisma, fiscalApiService, validationService, ibptService) {
+    constructor(configService, prisma, fiscalApiService, validationService, ibptService, planLimitsService) {
         this.configService = configService;
         this.prisma = prisma;
         this.fiscalApiService = fiscalApiService;
         this.validationService = validationService;
         this.ibptService = ibptService;
+        this.planLimitsService = planLimitsService;
         this.logger = new common_1.Logger(FiscalService_1.name);
     }
     async generateNFe(nfeData) {
         try {
             this.logger.log(`Generating NFe for company: ${nfeData.companyId}`);
+            await this.planLimitsService.validateNfeEmissionEnabled(nfeData.companyId);
+            const company = await this.prisma.company.findUnique({
+                where: { id: nfeData.companyId },
+                select: {
+                    focusNfeApiKey: true,
+                    admin: {
+                        select: {
+                            focusNfeApiKey: true,
+                        },
+                    },
+                },
+            });
+            if (!company) {
+                throw new common_1.NotFoundException('Empresa não encontrada');
+            }
+            const hasFocusNfeApiKey = !!(company.focusNfeApiKey || company.admin?.focusNfeApiKey);
+            if (!hasFocusNfeApiKey) {
+                throw new common_1.BadRequestException('API Key do Focus NFe não configurada. Solicite ao administrador que configure na página de empresas.');
+            }
             const isManualMode = !nfeData.saleId && nfeData.recipient && nfeData.items;
             const isSaleMode = !!nfeData.saleId;
             if (!isManualMode && !isSaleMode) {
@@ -228,6 +249,12 @@ let FiscalService = FiscalService_1 = class FiscalService {
                     idTokenCsc: true,
                     state: true,
                     city: true,
+                    focusNfeApiKey: true,
+                    admin: {
+                        select: {
+                            focusNfeApiKey: true,
+                        },
+                    },
                 },
             });
             if (!company) {
@@ -242,7 +269,8 @@ let FiscalService = FiscalService_1 = class FiscalService {
                 company.idTokenCsc &&
                 company.state &&
                 company.city);
-            return hasRequiredFields;
+            const hasFocusNfeApiKey = !!(company.focusNfeApiKey || company.admin?.focusNfeApiKey);
+            return hasRequiredFields && hasFocusNfeApiKey;
         }
         catch (error) {
             this.logger.error('Error checking fiscal config:', error);
@@ -290,6 +318,7 @@ let FiscalService = FiscalService_1 = class FiscalService {
     async generateNFCe(nfceData) {
         try {
             this.logger.log(`Generating NFCe for sale: ${nfceData.saleId}`);
+            await this.planLimitsService.validateNfceEmissionEnabled(nfceData.companyId);
             const hasValidConfig = await this.hasValidFiscalConfig(nfceData.companyId);
             if (!hasValidConfig) {
                 this.logger.warn(`Empresa ${nfceData.companyId} não tem configuração fiscal válida. Gerando NFCe mockado.`);
@@ -1084,6 +1113,7 @@ exports.FiscalService = FiscalService = FiscalService_1 = __decorate([
         prisma_service_1.PrismaService,
         fiscal_api_service_1.FiscalApiService,
         validation_service_1.ValidationService,
-        ibpt_service_1.IBPTService])
+        ibpt_service_1.IBPTService,
+        plan_limits_service_1.PlanLimitsService])
 ], FiscalService);
 //# sourceMappingURL=fiscal.service.js.map

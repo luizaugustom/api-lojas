@@ -96,6 +96,19 @@ __decorate([
 ], CreateProductDto.prototype, "price", void 0);
 __decorate([
     (0, swagger_1.ApiProperty)({
+        description: 'Preço de custo do produto',
+        example: 800.00,
+        minimum: 0,
+        required: false,
+    }),
+    (0, class_validator_1.IsOptional)(),
+    (0, class_validator_1.IsNumber)(),
+    (0, class_validator_1.Min)(0),
+    (0, class_transformer_1.Type)(() => Number),
+    __metadata("design:type", Number)
+], CreateProductDto.prototype, "costPrice", void 0);
+__decorate([
+    (0, swagger_1.ApiProperty)({
         description: 'Categoria do produto',
         example: 'Eletrônicos',
         required: false,

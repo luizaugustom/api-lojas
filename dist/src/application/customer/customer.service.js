@@ -14,14 +14,17 @@ exports.CustomerService = void 0;
 const common_1 = require("@nestjs/common");
 const prisma_service_1 = require("../../infrastructure/database/prisma.service");
 const email_service_1 = require("../../shared/services/email.service");
+const plan_limits_service_1 = require("../../shared/services/plan-limits.service");
 let CustomerService = CustomerService_1 = class CustomerService {
-    constructor(prisma, emailService) {
+    constructor(prisma, emailService, planLimitsService) {
         this.prisma = prisma;
         this.emailService = emailService;
+        this.planLimitsService = planLimitsService;
         this.logger = new common_1.Logger(CustomerService_1.name);
     }
     async create(companyId, createCustomerDto) {
         try {
+            await this.planLimitsService.validateCustomerLimit(companyId);
             const customer = await this.prisma.customer.create({
                 data: {
                     ...createCustomerDto,
@@ -386,6 +389,7 @@ exports.CustomerService = CustomerService;
 exports.CustomerService = CustomerService = CustomerService_1 = __decorate([
     (0, common_1.Injectable)(),
     __metadata("design:paramtypes", [prisma_service_1.PrismaService,
-        email_service_1.EmailService])
+        email_service_1.EmailService,
+        plan_limits_service_1.PlanLimitsService])
 ], CustomerService);
 //# sourceMappingURL=customer.service.js.map

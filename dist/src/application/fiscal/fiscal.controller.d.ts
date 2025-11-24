@@ -26,10 +26,10 @@ export declare class FiscalController {
             companyId: string;
             metadata: import("@prisma/client/runtime/library").JsonValue | null;
             origin: string;
+            status: string;
             saleId: string | null;
             documentNumber: string;
             accessKey: string | null;
-            status: string;
             xmlContent: string | null;
             pdfUrl: string | null;
             qrCodeUrl: string | null;
@@ -103,10 +103,10 @@ export declare class FiscalController {
         companyId: string;
         metadata: import("@prisma/client/runtime/library").JsonValue | null;
         origin: string;
+        status: string;
         saleId: string | null;
         documentNumber: string;
         accessKey: string | null;
-        status: string;
         xmlContent: string | null;
         pdfUrl: string | null;
         qrCodeUrl: string | null;
@@ -131,10 +131,10 @@ export declare class FiscalController {
         companyId: string;
         metadata: import("@prisma/client/runtime/library").JsonValue | null;
         origin: string;
+        status: string;
         saleId: string | null;
         documentNumber: string;
         accessKey: string | null;
-        status: string;
         xmlContent: string | null;
         pdfUrl: string | null;
         qrCodeUrl: string | null;
@@ -164,10 +164,10 @@ export declare class FiscalController {
         companyId: string;
         metadata: import("@prisma/client/runtime/library").JsonValue | null;
         origin: string;
+        status: string;
         saleId: string | null;
         documentNumber: string;
         accessKey: string | null;
-        status: string;
         xmlContent: string | null;
         pdfUrl: string | null;
         qrCodeUrl: string | null;

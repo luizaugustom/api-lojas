@@ -24,42 +24,88 @@ let PlanLimitsService = class PlanLimitsService {
                     maxProducts: 250,
                     maxSellers: 1,
                     maxBillsToPay: 5,
+                    maxCustomers: null,
+                    photoUploadEnabled: true,
+                    maxPhotosPerProduct: null,
+                    nfceEmissionEnabled: true,
+                    nfeEmissionEnabled: true,
                 };
             case client_1.PlanType.PLUS:
                 return {
                     maxProducts: 800,
                     maxSellers: 2,
                     maxBillsToPay: 15,
+                    maxCustomers: null,
+                    photoUploadEnabled: true,
+                    maxPhotosPerProduct: null,
+                    nfceEmissionEnabled: true,
+                    nfeEmissionEnabled: true,
                 };
             case client_1.PlanType.PRO:
                 return {
                     maxProducts: null,
                     maxSellers: null,
                     maxBillsToPay: null,
+                    maxCustomers: null,
+                    photoUploadEnabled: true,
+                    maxPhotosPerProduct: null,
+                    nfceEmissionEnabled: true,
+                    nfeEmissionEnabled: true,
                 };
             case client_1.PlanType.TRIAL_7_DAYS:
                 return {
                     maxProducts: 800,
                     maxSellers: 2,
                     maxBillsToPay: 15,
+                    maxCustomers: null,
+                    photoUploadEnabled: true,
+                    maxPhotosPerProduct: null,
+                    nfceEmissionEnabled: true,
+                    nfeEmissionEnabled: true,
                 };
             default:
                 return {
                     maxProducts: 250,
                     maxSellers: 1,
                     maxBillsToPay: 5,
+                    maxCustomers: null,
+                    photoUploadEnabled: true,
+                    maxPhotosPerProduct: null,
+                    nfceEmissionEnabled: true,
+                    nfeEmissionEnabled: true,
                 };
         }
     }
-    async validateProductLimit(companyId) {
+    async getCompanyLimits(companyId) {
         const company = await this.prisma.company.findUnique({
             where: { id: companyId },
-            select: { plan: true },
+            select: {
+                maxProducts: true,
+                maxCustomers: true,
+                maxSellers: true,
+                photoUploadEnabled: true,
+                maxPhotosPerProduct: true,
+                nfceEmissionEnabled: true,
+                nfeEmissionEnabled: true,
+                plan: true,
+            },
         });
         if (!company) {
             throw new common_1.BadRequestException('Empresa não encontrada');
         }
-        const limits = this.getPlanLimits(company.plan);
+        return {
+            maxProducts: company.maxProducts ?? null,
+            maxSellers: company.maxSellers ?? null,
+            maxBillsToPay: null,
+            maxCustomers: company.maxCustomers ?? null,
+            photoUploadEnabled: company.photoUploadEnabled ?? true,
+            maxPhotosPerProduct: company.maxPhotosPerProduct ?? null,
+            nfceEmissionEnabled: company.nfceEmissionEnabled ?? true,
+            nfeEmissionEnabled: company.nfeEmissionEnabled ?? true,
+        };
+    }
+    async validateProductLimit(companyId) {
+        const limits = await this.getCompanyLimits(companyId);
         if (limits.maxProducts === null) {
             return;
         }
@@ -67,18 +113,11 @@ let PlanLimitsService = class PlanLimitsService {
             where: { companyId },
         });
         if (currentCount >= limits.maxProducts) {
-            throw new common_1.BadRequestException(`Limite de produtos atingido. Seu plano ${company.plan} permite no máximo ${limits.maxProducts} produtos. Faça upgrade para adicionar mais produtos.`);
+            throw new common_1.BadRequestException(`Limite de produtos atingido. Você pode cadastrar no máximo ${limits.maxProducts} produtos. Entre em contato com o administrador para ajustar o limite.`);
         }
     }
     async validateSellerLimit(companyId) {
-        const company = await this.prisma.company.findUnique({
-            where: { id: companyId },
-            select: { plan: true },
-        });
-        if (!company) {
-            throw new common_1.BadRequestException('Empresa não encontrada');
-        }
-        const limits = this.getPlanLimits(company.plan);
+        const limits = await this.getCompanyLimits(companyId);
         if (limits.maxSellers === null) {
             return;
         }
@@ -86,7 +125,7 @@ let PlanLimitsService = class PlanLimitsService {
             where: { companyId },
         });
         if (currentCount >= limits.maxSellers) {
-            throw new common_1.BadRequestException(`Limite de vendedores atingido. Seu plano ${company.plan} permite no máximo ${limits.maxSellers} vendedor(es). Faça upgrade para adicionar mais vendedores.`);
+            throw new common_1.BadRequestException(`Limite de vendedores atingido. Você pode cadastrar no máximo ${limits.maxSellers} vendedor(es). Entre em contato com o administrador para ajustar o limite.`);
         }
     }
     async validateBillToPayLimit(companyId) {
@@ -119,8 +158,8 @@ let PlanLimitsService = class PlanLimitsService {
         if (!company) {
             throw new common_1.BadRequestException('Empresa não encontrada');
         }
-        const limits = this.getPlanLimits(company.plan);
-        const [productsCount, sellersCount, billsToPayCount] = await Promise.all([
+        const limits = await this.getCompanyLimits(companyId);
+        const [productsCount, sellersCount, billsToPayCount, customersCount] = await Promise.all([
             this.prisma.product.count({ where: { companyId } }),
             this.prisma.seller.count({ where: { companyId } }),
             this.prisma.billToPay.count({
@@ -129,6 +168,7 @@ let PlanLimitsService = class PlanLimitsService {
                     isPaid: false,
                 }
             }),
+            this.prisma.customer.count({ where: { companyId } }),
         ]);
         return {
             plan: company.plan,
@@ -164,8 +204,59 @@ let PlanLimitsService = class PlanLimitsService {
                         ? limits.maxBillsToPay - billsToPayCount
                         : null,
                 },
+                customers: {
+                    current: customersCount,
+                    max: limits.maxCustomers,
+                    percentage: limits.maxCustomers
+                        ? Math.round((customersCount / limits.maxCustomers) * 100)
+                        : 0,
+                    available: limits.maxCustomers
+                        ? limits.maxCustomers - customersCount
+                        : null,
+                },
             },
         };
+    }
+    async validateCustomerLimit(companyId) {
+        const limits = await this.getCompanyLimits(companyId);
+        if (limits.maxCustomers === null) {
+            return;
+        }
+        const currentCount = await this.prisma.customer.count({
+            where: { companyId },
+        });
+        if (currentCount >= limits.maxCustomers) {
+            throw new common_1.BadRequestException(`Limite de clientes atingido. Você pode cadastrar no máximo ${limits.maxCustomers} clientes. Entre em contato com o administrador para ajustar o limite.`);
+        }
+    }
+    async validatePhotoUploadEnabled(companyId) {
+        const limits = await this.getCompanyLimits(companyId);
+        if (!limits.photoUploadEnabled) {
+            throw new common_1.BadRequestException('Upload de fotos está desabilitado para sua empresa. Entre em contato com o administrador para habilitar.');
+        }
+    }
+    async validatePhotoLimitPerProduct(companyId, currentPhotosCount, newPhotosCount) {
+        const limits = await this.getCompanyLimits(companyId);
+        if (limits.maxPhotosPerProduct === null) {
+            return;
+        }
+        const totalPhotos = currentPhotosCount + newPhotosCount;
+        if (totalPhotos > limits.maxPhotosPerProduct) {
+            throw new common_1.BadRequestException(`Limite de fotos por produto excedido. Você pode adicionar no máximo ${limits.maxPhotosPerProduct} foto(s) por produto. ` +
+                `Atualmente: ${currentPhotosCount} foto(s), tentando adicionar: ${newPhotosCount}.`);
+        }
+    }
+    async validateNfceEmissionEnabled(companyId) {
+        const limits = await this.getCompanyLimits(companyId);
+        if (!limits.nfceEmissionEnabled) {
+            throw new common_1.BadRequestException('Emissão de NFCe está desabilitada para sua empresa. Entre em contato com o administrador para habilitar.');
+        }
+    }
+    async validateNfeEmissionEnabled(companyId) {
+        const limits = await this.getCompanyLimits(companyId);
+        if (!limits.nfeEmissionEnabled) {
+            throw new common_1.BadRequestException('Emissão de NFe está desabilitada para sua empresa. Entre em contato com o administrador para habilitar.');
+        }
     }
     async checkNearLimits(companyId) {
         const stats = await this.getCompanyUsageStats(companyId);
@@ -177,6 +268,10 @@ let PlanLimitsService = class PlanLimitsService {
         }
         if (stats.usage.sellers.percentage >= 80 && stats.limits.maxSellers) {
             warnings.push(`Você está usando ${stats.usage.sellers.percentage}% do seu limite de vendedores (${stats.usage.sellers.current}/${stats.usage.sellers.max})`);
+            nearLimit = true;
+        }
+        if (stats.usage.customers.percentage >= 80 && stats.limits.maxCustomers) {
+            warnings.push(`Você está usando ${stats.usage.customers.percentage}% do seu limite de clientes (${stats.usage.customers.current}/${stats.usage.customers.max})`);
             nearLimit = true;
         }
         if (stats.usage.billsToPay.percentage >= 80 && stats.limits.maxBillsToPay) {

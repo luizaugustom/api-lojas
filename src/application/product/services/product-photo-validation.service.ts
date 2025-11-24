@@ -1,6 +1,6 @@
 import { Injectable, BadRequestException } from '@nestjs/common';
 import { PrismaService } from '../../../infrastructure/database/prisma.service';
-import { PlanType } from '@prisma/client';
+import { PlanLimitsService } from '../../../shared/services/plan-limits.service';
 import { 
   MAX_PRODUCT_PHOTOS, 
   PRODUCT_PHOTOS_BY_PLAN,
@@ -12,7 +12,10 @@ import * as path from 'path';
 
 @Injectable()
 export class ProductPhotoValidationService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly planLimitsService: PlanLimitsService,
+  ) {}
 
   /**
    * Valida se pode adicionar mais fotos ao produto
@@ -22,26 +25,15 @@ export class ProductPhotoValidationService {
     currentPhotosCount: number,
     newPhotosCount: number,
   ): Promise<void> {
-    const company = await this.prisma.company.findUnique({
-      where: { id: companyId },
-      select: { plan: true },
-    });
+    // Validar se upload de fotos está habilitado
+    await this.planLimitsService.validatePhotoUploadEnabled(companyId);
 
-    if (!company) {
-      throw new BadRequestException('Empresa não encontrada');
-    }
-
-    // Usar limite padrão de 3 fotos
-    const maxPhotos = MAX_PRODUCT_PHOTOS;
-
-    const totalPhotos = currentPhotosCount + newPhotosCount;
-
-    if (totalPhotos > maxPhotos) {
-      throw new BadRequestException(
-        `Limite de fotos excedido. Você pode adicionar no máximo ${maxPhotos} foto(s) por produto. ` +
-        `Atualmente: ${currentPhotosCount} foto(s), tentando adicionar: ${newPhotosCount}.`
-      );
-    }
+    // Validar limite de fotos por produto
+    await this.planLimitsService.validatePhotoLimitPerProduct(
+      companyId,
+      currentPhotosCount,
+      newPhotosCount,
+    );
   }
 
   /**
@@ -92,20 +84,11 @@ export class ProductPhotoValidationService {
   }
 
   /**
-   * Obtém o número máximo de fotos permitido para um plano
+   * Obtém o número máximo de fotos permitido para uma empresa
    */
-  async getMaxPhotosForCompany(companyId: string): Promise<number> {
-    const company = await this.prisma.company.findUnique({
-      where: { id: companyId },
-      select: { plan: true },
-    });
-
-    if (!company) {
-      return MAX_PRODUCT_PHOTOS;
-    }
-
-    // Retornar limite padrão
-    return MAX_PRODUCT_PHOTOS;
+  async getMaxPhotosForCompany(companyId: string): Promise<number | null> {
+    const limits = await this.planLimitsService.getCompanyLimits(companyId);
+    return limits.maxPhotosPerProduct;
   }
 }
 

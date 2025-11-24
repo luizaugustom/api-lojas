@@ -13,6 +13,7 @@ exports.CreateCompanyDto = void 0;
 const swagger_1 = require("@nestjs/swagger");
 const class_validator_1 = require("class-validator");
 const client_1 = require("@prisma/client");
+const class_transformer_1 = require("class-transformer");
 class CreateCompanyDto {
 }
 exports.CreateCompanyDto = CreateCompanyDto;
@@ -314,4 +315,81 @@ __decorate([
     (0, class_validator_1.IsString)(),
     __metadata("design:type", String)
 ], CreateCompanyDto.prototype, "accountType", void 0);
+__decorate([
+    (0, swagger_1.ApiProperty)({
+        description: 'Limite máximo de produtos (null = ilimitado)',
+        example: 1000,
+        required: false,
+    }),
+    (0, class_validator_1.IsOptional)(),
+    (0, class_validator_1.IsNumber)(),
+    (0, class_transformer_1.Type)(() => Number),
+    __metadata("design:type", Number)
+], CreateCompanyDto.prototype, "maxProducts", void 0);
+__decorate([
+    (0, swagger_1.ApiProperty)({
+        description: 'Limite máximo de clientes (null = ilimitado)',
+        example: 5000,
+        required: false,
+    }),
+    (0, class_validator_1.IsOptional)(),
+    (0, class_validator_1.IsNumber)(),
+    (0, class_transformer_1.Type)(() => Number),
+    __metadata("design:type", Number)
+], CreateCompanyDto.prototype, "maxCustomers", void 0);
+__decorate([
+    (0, swagger_1.ApiProperty)({
+        description: 'Limite máximo de vendedores (null = ilimitado)',
+        example: 10,
+        required: false,
+    }),
+    (0, class_validator_1.IsOptional)(),
+    (0, class_validator_1.IsNumber)(),
+    (0, class_transformer_1.Type)(() => Number),
+    __metadata("design:type", Number)
+], CreateCompanyDto.prototype, "maxSellers", void 0);
+__decorate([
+    (0, swagger_1.ApiProperty)({
+        description: 'Se upload de fotos está habilitado',
+        example: true,
+        default: true,
+        required: false,
+    }),
+    (0, class_validator_1.IsOptional)(),
+    (0, class_validator_1.IsBoolean)(),
+    __metadata("design:type", Boolean)
+], CreateCompanyDto.prototype, "photoUploadEnabled", void 0);
+__decorate([
+    (0, swagger_1.ApiProperty)({
+        description: 'Limite máximo de fotos por produto (null = ilimitado)',
+        example: 10,
+        required: false,
+    }),
+    (0, class_validator_1.IsOptional)(),
+    (0, class_validator_1.IsNumber)(),
+    (0, class_transformer_1.Type)(() => Number),
+    __metadata("design:type", Number)
+], CreateCompanyDto.prototype, "maxPhotosPerProduct", void 0);
+__decorate([
+    (0, swagger_1.ApiProperty)({
+        description: 'Se emissão de NFCe está habilitada',
+        example: true,
+        default: true,
+        required: false,
+    }),
+    (0, class_validator_1.IsOptional)(),
+    (0, class_validator_1.IsBoolean)(),
+    __metadata("design:type", Boolean)
+], CreateCompanyDto.prototype, "nfceEmissionEnabled", void 0);
+__decorate([
+    (0, swagger_1.ApiProperty)({
+        description: 'Se emissão de NFe está habilitada',
+        example: true,
+        default: true,
+        required: false,
+    }),
+    (0, class_validator_1.IsOptional)(),
+    (0, class_validator_1.IsBoolean)(),
+    __metadata("design:type", Boolean)
+], CreateCompanyDto.prototype, "nfeEmissionEnabled", void 0);
 //# sourceMappingURL=create-company.dto.js.map

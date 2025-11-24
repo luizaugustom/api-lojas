@@ -76,6 +76,18 @@ export class CreateProductDto {
   price: number;
 
   @ApiProperty({
+    description: 'Preço de custo do produto',
+    example: 800.00,
+    minimum: 0,
+    required: false,
+  })
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
+  @Type(() => Number)
+  costPrice?: number;
+
+  @ApiProperty({
     description: 'Categoria do produto',
     example: 'Eletrônicos',
     required: false,

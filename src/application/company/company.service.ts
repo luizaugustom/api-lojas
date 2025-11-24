@@ -8,6 +8,7 @@ import { CreateCompanyDto } from './dto/create-company.dto';
 import { UpdateCompanyDto } from './dto/update-company.dto';
 import { UpdateFiscalConfigDto } from './dto/update-fiscal-config.dto';
 import { UpdateCatalogPageDto } from './dto/update-catalog-page.dto';
+import { UpdateFocusNfeConfigDto } from './dto/update-focus-nfe-config.dto';
 import { PlanType, DataPeriodFilter } from '@prisma/client';
 import axios from 'axios';
 import * as fs from 'fs';
@@ -492,6 +493,8 @@ export class CompanyService {
           municipioIbge: true,
           csc: true,
           idTokenCsc: true,
+          focusNfeApiKey: true,
+          focusNfeEnvironment: true,
           admin: {
             select: {
               focusNfeApiKey: true,
@@ -525,9 +528,9 @@ export class CompanyService {
         hasCsc: !!company.csc,
         cscMasked: company.csc ? this.encryptionService.mask('********') : null,
         idTokenCsc: company.idTokenCsc,
-        // Informações sobre configuração do admin (Focus NFe)
-        adminHasFocusNfeApiKey: !!company.admin.focusNfeApiKey,
-        focusNfeEnvironment: company.admin.focusNfeEnvironment || 'sandbox',
+        // Informações sobre configuração do Focus NFe (empresa ou admin como fallback)
+        hasFocusNfeApiKey: !!(company.focusNfeApiKey || company.admin.focusNfeApiKey),
+        focusNfeEnvironment: company.focusNfeEnvironment || company.admin.focusNfeEnvironment || 'sandbox',
       };
     } catch (error) {
       this.logger.error('Error getting fiscal config:', error);
@@ -589,6 +592,8 @@ export class CompanyService {
         select: {
           cnpj: true,
           name: true,
+          focusNfeApiKey: true,
+          focusNfeEnvironment: true,
           admin: {
             select: {
               focusNfeApiKey: true,
@@ -602,26 +607,30 @@ export class CompanyService {
         throw new NotFoundException('Empresa não encontrada');
       }
 
-      if (!company.admin.focusNfeApiKey) {
+      // Usar configuração da empresa, com fallback para admin
+      const apiKey = company.focusNfeApiKey || company.admin.focusNfeApiKey;
+      const environment = company.focusNfeEnvironment || company.admin.focusNfeEnvironment || 'sandbox';
+
+      if (!apiKey) {
         return {
           success: false,
-          message: 'API Key do Focus NFe não configurada',
+          message: 'API Key do Focus NFe não configurada. Configure na página de empresas.',
         };
       }
 
       const cnpjNumeros = company.cnpj.replace(/\D/g, '');
-      const baseUrl = company.admin.focusNfeEnvironment === 'production'
+      const baseUrl = environment === 'production'
         ? 'https://api.focusnfe.com.br'
         : 'https://homologacao.focusnfe.com.br';
 
-      this.logger.log(`Testando conexão com Focus NFe - CNPJ: ${cnpjNumeros}, Ambiente: ${company.admin.focusNfeEnvironment}`);
+      this.logger.log(`Testando conexão com Focus NFe - CNPJ: ${cnpjNumeros}, Ambiente: ${environment}`);
 
       try {
         const response = await axios.get(
           `${baseUrl}/v2/empresas?cnpj=${cnpjNumeros}`,
           {
             auth: {
-              username: company.admin.focusNfeApiKey,
+              username: apiKey,
               password: '',
             },
             timeout: 10000,
@@ -632,7 +641,7 @@ export class CompanyService {
           success: true,
           message: 'Conexão com Focus NFe estabelecida com sucesso',
           empresaCadastrada: response.data && response.data.length > 0,
-          ambiente: company.admin.focusNfeEnvironment,
+          ambiente: environment,
           dados: response.data,
         };
       } catch (error: any) {
@@ -694,6 +703,8 @@ export class CompanyService {
           street: true,
           number: true,
           complement: true,
+          focusNfeApiKey: true,
+          focusNfeEnvironment: true,
           admin: {
             select: {
               focusNfeApiKey: true,
@@ -707,8 +718,12 @@ export class CompanyService {
         throw new NotFoundException('Empresa não encontrada');
       }
 
-      if (!company.admin.focusNfeApiKey) {
-        throw new BadRequestException('API Key do Focus NFe não configurada. Solicite ao administrador.');
+      // Usar configuração da empresa, com fallback para admin
+      const apiKey = company.focusNfeApiKey || company.admin.focusNfeApiKey;
+      const environment = company.focusNfeEnvironment || company.admin.focusNfeEnvironment || 'sandbox';
+
+      if (!apiKey) {
+        throw new BadRequestException('API Key do Focus NFe não configurada. Configure na página de empresas.');
       }
 
       if (!company.certificatePassword) {
@@ -730,11 +745,11 @@ export class CompanyService {
       const certificadoBase64 = file.buffer.toString('base64');
 
       // Determinar URL base
-      const baseUrl = company.admin.focusNfeEnvironment === 'production'
+      const baseUrl = environment === 'production'
         ? 'https://api.focusnfe.com.br'
         : 'https://homologacao.focusnfe.com.br';
 
-      this.logger.log(`Enviando certificado para Focus NFe - CNPJ: ${company.cnpj}, Ambiente: ${company.admin.focusNfeEnvironment}`);
+      this.logger.log(`Enviando certificado para Focus NFe - CNPJ: ${company.cnpj}, Ambiente: ${environment}`);
 
       // PASSO 1: Buscar ID da empresa no Focus NFe usando o CNPJ
       this.logger.log(`Buscando empresa no Focus NFe por CNPJ: ${cnpjNumeros}`);
@@ -746,7 +761,7 @@ export class CompanyService {
           `${baseUrl}/v2/empresas?cnpj=${cnpjNumeros}`,
           {
             auth: {
-              username: company.admin.focusNfeApiKey,
+              username: apiKey,
               password: '',
             },
             timeout: 30000,
@@ -807,7 +822,7 @@ export class CompanyService {
           certificadoPayload,
           {
             auth: {
-              username: company.admin.focusNfeApiKey,
+              username: apiKey,
               password: '',
             },
             headers: {
@@ -882,7 +897,7 @@ export class CompanyService {
             empresaPayload,
             {
               auth: {
-                username: company.admin.focusNfeApiKey,
+                username: apiKey,
                 password: '',
               },
               headers: {
@@ -918,7 +933,7 @@ export class CompanyService {
             },
             {
               auth: {
-                username: company.admin.focusNfeApiKey,
+                username: apiKey,
                 password: '',
               },
               headers: {
@@ -1389,6 +1404,115 @@ export class CompanyService {
       };
     } catch (error) {
       this.logger.error('Error getting public catalog data:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Atualizar configuração do Focus NFe da empresa (apenas admin)
+   */
+  async updateFocusNfeConfig(companyId: string, updateFocusNfeConfigDto: UpdateFocusNfeConfigDto) {
+    try {
+      const company = await this.prisma.company.findUnique({
+        where: { id: companyId },
+      });
+
+      if (!company) {
+        throw new NotFoundException('Empresa não encontrada');
+      }
+
+      const updateData: any = {};
+
+      if (updateFocusNfeConfigDto.focusNfeApiKey !== undefined) {
+        updateData.focusNfeApiKey = updateFocusNfeConfigDto.focusNfeApiKey;
+      }
+
+      if (updateFocusNfeConfigDto.focusNfeEnvironment !== undefined) {
+        updateData.focusNfeEnvironment = updateFocusNfeConfigDto.focusNfeEnvironment;
+      }
+
+      if (updateFocusNfeConfigDto.ibptToken !== undefined) {
+        updateData.ibptToken = updateFocusNfeConfigDto.ibptToken;
+      }
+
+      const updatedCompany = await this.prisma.company.update({
+        where: { id: companyId },
+        data: updateData,
+        select: {
+          id: true,
+          name: true,
+          focusNfeApiKey: true,
+          focusNfeEnvironment: true,
+          ibptToken: true,
+        },
+      });
+
+      this.logger.log(`Focus NFe config updated for company: ${companyId}`);
+      return {
+        id: updatedCompany.id,
+        name: updatedCompany.name,
+        hasFocusNfeApiKey: !!updatedCompany.focusNfeApiKey,
+        focusNfeApiKey: updatedCompany.focusNfeApiKey
+          ? this.encryptionService.mask(updatedCompany.focusNfeApiKey)
+          : null,
+        focusNfeEnvironment: updatedCompany.focusNfeEnvironment || 'sandbox',
+        hasIbptToken: !!updatedCompany.ibptToken,
+        ibptToken: updatedCompany.ibptToken
+          ? this.encryptionService.mask(updatedCompany.ibptToken)
+          : null,
+        message: 'Configurações do Focus NFe atualizadas com sucesso',
+      };
+    } catch (error) {
+      this.logger.error('Error updating Focus NFe config:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Obter configuração do Focus NFe da empresa (dados sensíveis mascarados)
+   */
+  async getFocusNfeConfig(companyId: string) {
+    try {
+      const company = await this.prisma.company.findUnique({
+        where: { id: companyId },
+        select: {
+          id: true,
+          name: true,
+          focusNfeApiKey: true,
+          focusNfeEnvironment: true,
+          ibptToken: true,
+          admin: {
+            select: {
+              focusNfeApiKey: true,
+              focusNfeEnvironment: true,
+            },
+          },
+        },
+      });
+
+      if (!company) {
+        throw new NotFoundException('Empresa não encontrada');
+      }
+
+      // Usar configuração da empresa, com fallback para admin
+      const apiKey = company.focusNfeApiKey || company.admin.focusNfeApiKey;
+      const environment = company.focusNfeEnvironment || company.admin.focusNfeEnvironment || 'sandbox';
+
+      return {
+        id: company.id,
+        name: company.name,
+        hasFocusNfeApiKey: !!apiKey,
+        focusNfeApiKey: apiKey ? this.encryptionService.mask(apiKey) : null,
+        focusNfeEnvironment: environment,
+        isUsingCompanyConfig: !!company.focusNfeApiKey,
+        isUsingAdminConfig: !company.focusNfeApiKey && !!company.admin.focusNfeApiKey,
+        hasIbptToken: !!company.ibptToken,
+        ibptToken: company.ibptToken
+          ? this.encryptionService.mask(company.ibptToken)
+          : null,
+      };
+    } catch (error) {
+      this.logger.error('Error getting Focus NFe config:', error);
       throw error;
     }
   }

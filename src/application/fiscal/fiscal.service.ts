@@ -4,6 +4,7 @@ import { ConfigService } from '@nestjs/config';
 import { PrismaService } from '../../infrastructure/database/prisma.service';
 import { ValidationService } from '../../shared/services/validation.service';
 import { IBPTService } from '../../shared/services/ibpt.service';
+import { PlanLimitsService } from '../../shared/services/plan-limits.service';
 import { 
   FiscalApiService, 
   NFCeRequest, 
@@ -102,11 +103,40 @@ export class FiscalService {
     private readonly fiscalApiService: FiscalApiService,
     private readonly validationService: ValidationService,
     private readonly ibptService: IBPTService,
+    private readonly planLimitsService: PlanLimitsService,
   ) {}
 
   async generateNFe(nfeData: NFeData): Promise<any> {
     try {
       this.logger.log(`Generating NFe for company: ${nfeData.companyId}`);
+
+      // Validar se emissão de NFe está habilitada
+      await this.planLimitsService.validateNfeEmissionEnabled(nfeData.companyId);
+
+      // Verificar se a empresa tem configuração do Focus NFe
+      const company = await this.prisma.company.findUnique({
+        where: { id: nfeData.companyId },
+        select: {
+          focusNfeApiKey: true,
+          admin: {
+            select: {
+              focusNfeApiKey: true,
+            },
+          },
+        },
+      });
+
+      if (!company) {
+        throw new NotFoundException('Empresa não encontrada');
+      }
+
+      // Verificar se a API Key do Focus NFe está configurada
+      const hasFocusNfeApiKey = !!(company.focusNfeApiKey || company.admin?.focusNfeApiKey);
+      if (!hasFocusNfeApiKey) {
+        throw new BadRequestException(
+          'API Key do Focus NFe não configurada. Solicite ao administrador que configure na página de empresas.'
+        );
+      }
 
       // Validar modo de emissão
       const isManualMode = !nfeData.saleId && nfeData.recipient && nfeData.items;
@@ -373,6 +403,12 @@ export class FiscalService {
           idTokenCsc: true,
           state: true,
           city: true,
+          focusNfeApiKey: true,
+          admin: {
+            select: {
+              focusNfeApiKey: true,
+            },
+          },
         },
       });
 
@@ -393,7 +429,10 @@ export class FiscalService {
         company.city
       );
 
-      return hasRequiredFields;
+      // Verificar se a API Key do Focus NFe está configurada (empresa ou admin como fallback)
+      const hasFocusNfeApiKey = !!(company.focusNfeApiKey || company.admin?.focusNfeApiKey);
+
+      return hasRequiredFields && hasFocusNfeApiKey;
     } catch (error) {
       this.logger.error('Error checking fiscal config:', error);
       return false;
@@ -457,6 +496,9 @@ export class FiscalService {
   async generateNFCe(nfceData: NFCeData): Promise<any> {
     try {
       this.logger.log(`Generating NFCe for sale: ${nfceData.saleId}`);
+
+      // Validar se emissão de NFCe está habilitada
+      await this.planLimitsService.validateNfceEmissionEnabled(nfceData.companyId);
 
       // Verificar se a empresa tem configuração fiscal válida
       const hasValidConfig = await this.hasValidFiscalConfig(nfceData.companyId);

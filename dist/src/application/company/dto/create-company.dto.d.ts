@@ -26,4 +26,11 @@ export declare class CreateCompanyDto {
     agency?: string;
     accountNumber?: string;
     accountType?: string;
+    maxProducts?: number | null;
+    maxCustomers?: number | null;
+    maxSellers?: number | null;
+    photoUploadEnabled?: boolean;
+    maxPhotosPerProduct?: number | null;
+    nfceEmissionEnabled?: boolean;
+    nfeEmissionEnabled?: boolean;
 }

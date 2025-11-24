@@ -5,6 +5,7 @@ import { PrinterService } from '../printer/printer.service';
 import { FiscalService } from '../fiscal/fiscal.service';
 import { EmailService } from '../../shared/services/email.service';
 import { IBPTService } from '../../shared/services/ibpt.service';
+import { StoreCreditService } from '../store-credit/store-credit.service';
 import { CreateSaleDto } from './dto/create-sale.dto';
 import { UpdateSaleDto } from './dto/update-sale.dto';
 import { ProcessExchangeDto } from './dto/process-exchange.dto';
@@ -16,8 +17,9 @@ export declare class SaleService {
     private readonly fiscalService;
     private readonly emailService;
     private readonly ibptService;
+    private readonly storeCreditService;
     private readonly logger;
-    constructor(prisma: PrismaService, productService: ProductService, printerService: PrinterService, fiscalService: FiscalService, emailService: EmailService, ibptService: IBPTService);
+    constructor(prisma: PrismaService, productService: ProductService, printerService: PrinterService, fiscalService: FiscalService, emailService: EmailService, ibptService: IBPTService, storeCreditService: StoreCreditService);
     create(companyId: string, sellerId: string, createSaleDto: CreateSaleDto, computerId?: string | null, clientTimeInfo?: ClientTimeInfo): Promise<{
         company: {
             number: string;

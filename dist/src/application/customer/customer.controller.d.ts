@@ -27,6 +27,7 @@ export declare class CustomerController {
         complement: string | null;
         companyId: string;
         cpfCnpj: string | null;
+        storeCreditBalance: import("@prisma/client/runtime/library").Decimal;
     }>;
     findAll(user: any, page?: number, limit?: number, search?: string): Promise<{
         customers: ({
@@ -50,6 +51,7 @@ export declare class CustomerController {
             complement: string | null;
             companyId: string;
             cpfCnpj: string | null;
+            storeCreditBalance: import("@prisma/client/runtime/library").Decimal;
         })[];
         total: number;
         page: number;
@@ -82,6 +84,7 @@ export declare class CustomerController {
         complement: string | null;
         companyId: string;
         cpfCnpj: string | null;
+        storeCreditBalance: import("@prisma/client/runtime/library").Decimal;
     }>;
     findOne(id: string, user: any): Promise<{
         company: {
@@ -104,6 +107,7 @@ export declare class CustomerController {
         complement: string | null;
         companyId: string;
         cpfCnpj: string | null;
+        storeCreditBalance: import("@prisma/client/runtime/library").Decimal;
     }>;
     getInstallments(id: string, user: any): Promise<{
         data: ({
@@ -189,6 +193,7 @@ export declare class CustomerController {
         complement: string | null;
         companyId: string;
         cpfCnpj: string | null;
+        storeCreditBalance: import("@prisma/client/runtime/library").Decimal;
     }>;
     sendPromotionalEmail(id: string, promotionalEmailDto: SendPromotionalEmailDto, user: any, req: Request): Promise<boolean>;
     sendSaleConfirmationEmail(id: string, saleId: string, user: any, req: Request): Promise<boolean>;

@@ -23,6 +23,10 @@ export declare class DashboardService {
             pendingBillsValue: number;
             paidBillsValue: number;
             stockValue: number;
+            totalCostOfSales: number;
+            totalLossesValue: number;
+            billsToPayThisMonth: number;
+            netProfit: number;
             netRevenue: number;
         };
         sales: {
@@ -110,4 +114,8 @@ export declare class DashboardService {
     private calculateGrowthPercentage;
     private getMonthPeriod;
     private getLastMonthPeriod;
+    private getTotalCostOfSales;
+    private getTotalLosses;
+    private getTotalLossesValue;
+    private getBillsToPayThisMonth;
 }

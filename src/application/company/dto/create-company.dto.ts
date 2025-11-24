@@ -1,6 +1,7 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { IsString, IsNotEmpty, MinLength, MaxLength, IsEmail, IsOptional, Matches, Length, IsBoolean, IsEnum } from 'class-validator';
+import { IsString, IsNotEmpty, MinLength, MaxLength, IsEmail, IsOptional, Matches, Length, IsBoolean, IsEnum, IsInt, IsNumber } from 'class-validator';
 import { PlanType } from '@prisma/client';
+import { Type } from 'class-transformer';
 
 export class CreateCompanyDto {
   @ApiProperty({
@@ -276,4 +277,75 @@ export class CreateCompanyDto {
   @IsOptional()
   @IsString()
   accountType?: string;
+
+  // Plan Limits Configuration
+  @ApiProperty({
+    description: 'Limite máximo de produtos (null = ilimitado)',
+    example: 1000,
+    required: false,
+  })
+  @IsOptional()
+  @IsNumber()
+  @Type(() => Number)
+  maxProducts?: number | null;
+
+  @ApiProperty({
+    description: 'Limite máximo de clientes (null = ilimitado)',
+    example: 5000,
+    required: false,
+  })
+  @IsOptional()
+  @IsNumber()
+  @Type(() => Number)
+  maxCustomers?: number | null;
+
+  @ApiProperty({
+    description: 'Limite máximo de vendedores (null = ilimitado)',
+    example: 10,
+    required: false,
+  })
+  @IsOptional()
+  @IsNumber()
+  @Type(() => Number)
+  maxSellers?: number | null;
+
+  @ApiProperty({
+    description: 'Se upload de fotos está habilitado',
+    example: true,
+    default: true,
+    required: false,
+  })
+  @IsOptional()
+  @IsBoolean()
+  photoUploadEnabled?: boolean;
+
+  @ApiProperty({
+    description: 'Limite máximo de fotos por produto (null = ilimitado)',
+    example: 10,
+    required: false,
+  })
+  @IsOptional()
+  @IsNumber()
+  @Type(() => Number)
+  maxPhotosPerProduct?: number | null;
+
+  @ApiProperty({
+    description: 'Se emissão de NFCe está habilitada',
+    example: true,
+    default: true,
+    required: false,
+  })
+  @IsOptional()
+  @IsBoolean()
+  nfceEmissionEnabled?: boolean;
+
+  @ApiProperty({
+    description: 'Se emissão de NFe está habilitada',
+    example: true,
+    default: true,
+    required: false,
+  })
+  @IsOptional()
+  @IsBoolean()
+  nfeEmissionEnabled?: boolean;
 }

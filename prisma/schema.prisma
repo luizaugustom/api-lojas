@@ -113,6 +113,11 @@ model Company {
   csc                 String? // Código de Segurança do Contribuinte (criptografado)
   idTokenCsc          String?    @default("000001") // ID do Token CSC
 
+  // Focus NFe Configuration (Company-specific)
+  focusNfeApiKey      String? // API Key do Focus NFe para esta empresa
+  focusNfeEnvironment String? @default("sandbox") // sandbox ou production
+  ibptToken           String? // Token da API IBPT (opcional)
+
   // Automatic Message Configuration
   autoMessageEnabled Boolean @default(false) // Ativa/desativa envio automático de mensagens de cobrança
 
@@ -120,6 +125,15 @@ model Company {
   catalogPageUrl     String? // URL única para página pública de catálogo (ex: "masolucoes")
   catalogPageEnabled Boolean @default(false) // Se a página de catálogo está ativada
   defaultDataPeriod  DataPeriodFilter @default(THIS_YEAR)
+
+  // Plan Limits Configuration (Customizable per company)
+  maxProducts        Int?    // null = unlimited, padrão é null (ilimitado)
+  maxCustomers       Int?    // null = unlimited, padrão é null (ilimitado)
+  maxSellers         Int?    // null = unlimited, padrão é null (ilimitado)
+  photoUploadEnabled Boolean @default(true) // Se upload de fotos está habilitado
+  maxPhotosPerProduct Int?   // null = unlimited, padrão é null (ilimitado)
+  nfceEmissionEnabled Boolean @default(true) // Se emissão de NFCe está habilitada
+  nfeEmissionEnabled Boolean @default(true) // Se emissão de NFe está habilitada
 
   // Relations
   adminId         String
@@ -136,6 +150,8 @@ model Company {
   scales          Scale[]
   installments    Installment[]
   budgets         Budget[]
+  storeCreditTransactions StoreCreditTransaction[]
+  productLosses   ProductLoss[]
 
   @@map("companies")
 }
@@ -162,6 +178,7 @@ model Seller {
   budgets           Budget[]
   cashClosures      CashClosure[] // Caixas individuais do vendedor
   processedExchanges ProductExchange[] @relation("ProductExchangeProcessedBy")
+  productLosses     ProductLoss[]
 
   @@map("sellers")
 }
@@ -174,6 +191,7 @@ model Product {
   size           String?
   stockQuantity  Int       @default(0)
   price          Decimal   @db.Decimal(10, 2)
+  costPrice      Decimal?  @db.Decimal(10, 2) // Preço de custo do produto
   category       String?
   expirationDate DateTime?
   ncm            String?   @default("99999999") // Nomenclatura Comum do Mercosul (8 dígitos)
@@ -188,6 +206,7 @@ model Product {
   saleItems        SaleItem[]
   exchangeItems    ProductExchangeItem[]
   budgetItems      BudgetItem[]
+  losses           ProductLoss[]
 
   @@map("products")
 }
@@ -256,6 +275,7 @@ model Customer {
   phone     String?
   email     String?
   cpfCnpj   String?
+  storeCreditBalance Decimal @default(0) @db.Decimal(10, 2) // Saldo de crédito em loja
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -272,6 +292,7 @@ model Customer {
   companyId    String
   company      Company       @relation(fields: [companyId], references: [id], onDelete: Cascade)
   installments Installment[]
+  storeCreditTransactions StoreCreditTransaction[]
 
   @@map("customers")
 }
@@ -495,6 +516,31 @@ model InstallmentPayment {
   @@map("installment_payments")
 }
 
+model StoreCreditTransaction {
+  id            String   @id @default(uuid())
+  type          String   // 'CREDIT' (adicionado) ou 'DEBIT' (usado)
+  amount        Decimal  @db.Decimal(10, 2)
+  balanceBefore Decimal  @db.Decimal(10, 2) // Saldo antes da transação
+  balanceAfter  Decimal  @db.Decimal(10, 2) // Saldo depois da transação
+  description   String? // Descrição da transação
+  createdAt     DateTime @default(now())
+
+  // Relations
+  customerId String
+  customer   Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  companyId  String
+  company    Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  
+  // Referências opcionais
+  exchangeId String? // ID da troca que gerou o crédito
+  saleId     String? // ID da venda que usou o crédito
+  createdById String? // ID do usuário que criou a transação
+
+  @@index([customerId, createdAt])
+  @@index([companyId, createdAt])
+  @@map("store_credit_transactions")
+}
+
 model NotificationPreference {
   id       String @id @default(uuid())
   userId   String // ID do usuário (Admin, Company ou Seller)
@@ -588,4 +634,26 @@ model BudgetItem {
   product   Product @relation(fields: [productId], references: [id])
 
   @@map("budget_items")
+}
+
+model ProductLoss {
+  id          String   @id @default(uuid())
+  quantity    Int      // Quantidade perdida
+  unitCost    Decimal  @db.Decimal(10, 2) // Custo unitário no momento da perda
+  totalCost   Decimal  @db.Decimal(10, 2) // Custo total da perda
+  reason      String   // Motivo da perda (ex: vencimento, quebra, roubo, etc.)
+  notes       String?  // Observações adicionais
+  lossDate    DateTime @default(now())
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  // Relations
+  companyId   String
+  company     Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  productId   String
+  product     Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+  sellerId    String? // Vendedor que registrou a perda (opcional)
+  seller      Seller? @relation(fields: [sellerId], references: [id], onDelete: SetNull)
+
+  @@map("product_losses")
 }

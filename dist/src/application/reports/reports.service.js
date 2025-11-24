@@ -235,13 +235,14 @@ let ReportsService = ReportsService_1 = class ReportsService {
         };
     }
     async generateCompleteReport(companyId, startDate, endDate, sellerId) {
-        const [salesReport, productsReport, invoicesReport, billsToPay, cashClosures, commissions] = await Promise.all([
+        const [salesReport, productsReport, invoicesReport, billsToPay, cashClosures, commissions, productLosses] = await Promise.all([
             this.generateSalesReport(companyId, startDate, endDate, sellerId),
             this.generateProductsReport(companyId),
             this.generateInvoicesReport(companyId, startDate, endDate),
             this.getBillsToPay(companyId, startDate, endDate),
             this.getCashClosures(companyId, startDate, endDate),
             this.getCommissionsReport(companyId, startDate, endDate),
+            this.getProductLosses(companyId, startDate, endDate),
         ]);
         return {
             sales: salesReport,
@@ -250,6 +251,7 @@ let ReportsService = ReportsService_1 = class ReportsService {
             billsToPay,
             cashClosures,
             commissions,
+            productLosses,
         };
     }
     async getBillsToPay(companyId, startDate, endDate) {
@@ -397,6 +399,7 @@ let ReportsService = ReportsService_1 = class ReportsService {
             this.addBillsSheet(workbook, data.data.billsToPay, clientTimeInfo);
             this.addCashClosuresSheet(workbook, data.data.cashClosures, clientTimeInfo);
             this.addCommissionsSheet(workbook, data.data.commissions);
+            this.addProductLossesSheet(workbook, data.data.productLosses, clientTimeInfo);
         }
         const arrayBuffer = await workbook.xlsx.writeBuffer();
         return Buffer.isBuffer(arrayBuffer) ? arrayBuffer : Buffer.from(arrayBuffer);
@@ -547,6 +550,116 @@ let ReportsService = ReportsService_1 = class ReportsService {
         };
         sheet.getColumn('totalRevenue').numFmt = 'R$ #,##0.00';
         sheet.getColumn('commissionAmount').numFmt = 'R$ #,##0.00';
+    }
+    async getProductLosses(companyId, startDate, endDate) {
+        const where = { companyId };
+        if (startDate || endDate) {
+            where.lossDate = {};
+            if (startDate) {
+                where.lossDate.gte = new Date(startDate);
+            }
+            if (endDate) {
+                where.lossDate.lte = new Date(endDate);
+            }
+        }
+        const losses = await this.prisma.productLoss.findMany({
+            where,
+            include: {
+                product: {
+                    select: {
+                        id: true,
+                        name: true,
+                        barcode: true,
+                    },
+                },
+                seller: {
+                    select: {
+                        id: true,
+                        name: true,
+                    },
+                },
+            },
+            orderBy: {
+                lossDate: 'desc',
+            },
+        });
+        const totalLosses = losses.length;
+        const totalQuantity = losses.reduce((sum, loss) => sum + loss.quantity, 0);
+        const totalCost = losses.reduce((sum, loss) => sum + Number(loss.totalCost), 0);
+        return {
+            summary: {
+                totalLosses,
+                totalQuantity,
+                totalCost,
+            },
+            losses: losses.map((loss) => ({
+                id: loss.id,
+                productName: loss.product.name,
+                productBarcode: loss.product.barcode,
+                quantity: loss.quantity,
+                unitCost: Number(loss.unitCost),
+                totalCost: Number(loss.totalCost),
+                reason: loss.reason,
+                notes: loss.notes,
+                lossDate: loss.lossDate,
+                sellerName: loss.seller?.name || null,
+            })),
+        };
+    }
+    addProductLossesSheet(workbook, lossesData, clientTimeInfo) {
+        const sheet = workbook.addWorksheet('Perdas de Produtos');
+        sheet.columns = [
+            { header: 'Data', key: 'lossDate', width: 20 },
+            { header: 'Produto', key: 'productName', width: 30 },
+            { header: 'Código de Barras', key: 'productBarcode', width: 20 },
+            { header: 'Quantidade', key: 'quantity', width: 15 },
+            { header: 'Custo Unitário', key: 'unitCost', width: 18 },
+            { header: 'Custo Total', key: 'totalCost', width: 18 },
+            { header: 'Motivo', key: 'reason', width: 20 },
+            { header: 'Observações', key: 'notes', width: 40 },
+            { header: 'Vendedor', key: 'sellerName', width: 25 },
+        ];
+        const losses = Array.isArray(lossesData) ? lossesData : lossesData?.losses || [];
+        losses.forEach((loss) => {
+            sheet.addRow({
+                lossDate: (0, client_time_util_1.formatClientDate)(loss.lossDate, clientTimeInfo),
+                productName: loss.productName,
+                productBarcode: loss.productBarcode,
+                quantity: loss.quantity,
+                unitCost: loss.unitCost.toFixed(2),
+                totalCost: loss.totalCost.toFixed(2),
+                reason: loss.reason,
+                notes: loss.notes || '',
+                sellerName: loss.sellerName || '-',
+            });
+        });
+        sheet.getRow(1).font = { bold: true };
+        sheet.getRow(1).fill = {
+            type: 'pattern',
+            pattern: 'solid',
+            fgColor: { argb: 'FFE0E0E0' },
+        };
+        if (losses.length > 0 && lossesData?.summary) {
+            const totalRow = sheet.addRow({
+                lossDate: 'TOTAL',
+                productName: '',
+                productBarcode: '',
+                quantity: lossesData.summary.totalQuantity,
+                unitCost: '',
+                totalCost: lossesData.summary.totalCost.toFixed(2),
+                reason: '',
+                notes: '',
+                sellerName: '',
+            });
+            totalRow.font = { bold: true };
+            totalRow.fill = {
+                type: 'pattern',
+                pattern: 'solid',
+                fgColor: { argb: 'FFFFEB3B' },
+            };
+        }
+        sheet.getColumn('unitCost').numFmt = 'R$ #,##0.00';
+        sheet.getColumn('totalCost').numFmt = 'R$ #,##0.00';
     }
     async generateReportFile(reportWithCompany, reportType, format, clientTimeInfo, reportBaseName) {
         switch (format) {

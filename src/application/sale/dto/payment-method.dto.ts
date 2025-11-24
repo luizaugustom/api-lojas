@@ -9,6 +9,7 @@ export enum PaymentMethod {
   PIX = 'pix',
   INSTALLMENT = 'installment',
   STORE_CREDIT = 'store_credit',
+  LOSS = 'loss', // Perda de produto
 }
 
 export class PaymentMethodDto {

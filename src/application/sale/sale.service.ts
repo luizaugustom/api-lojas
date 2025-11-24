@@ -6,6 +6,7 @@ import { PrinterService } from '../printer/printer.service';
 import { FiscalService, NFCeData } from '../fiscal/fiscal.service';
 import { EmailService } from '../../shared/services/email.service';
 import { IBPTService } from '../../shared/services/ibpt.service';
+import { StoreCreditService } from '../store-credit/store-credit.service';
 import { CreateSaleDto } from './dto/create-sale.dto';
 import { UpdateSaleDto } from './dto/update-sale.dto';
 import { ProcessExchangeDto } from './dto/process-exchange.dto';
@@ -66,6 +67,7 @@ export class SaleService {
     private readonly fiscalService: FiscalService,
     private readonly emailService: EmailService,
     private readonly ibptService: IBPTService,
+    private readonly storeCreditService: StoreCreditService,
   ) {}
 
   async create(
@@ -1193,6 +1195,50 @@ export class SaleService {
       });
 
       this.logger.log(`Exchange processed: ${exchange.id} for sale: ${originalSaleId}`);
+
+      // Criar transação de crédito se houver valor de crédito gerado
+      if (storeCreditAmount > tolerance && sale.clientCpfCnpj) {
+        try {
+          // Buscar ou criar cliente pelo CPF/CNPJ
+          let customer = await this.prisma.customer.findFirst({
+            where: {
+              cpfCnpj: sale.clientCpfCnpj,
+              companyId,
+            },
+          });
+
+          if (!customer) {
+            // Criar cliente se não existir
+            customer = await this.prisma.customer.create({
+              data: {
+                name: sale.clientName || 'Cliente',
+                cpfCnpj: sale.clientCpfCnpj,
+                companyId,
+              },
+            });
+          }
+
+          // Adicionar crédito
+          await this.storeCreditService.addCredit(
+            companyId,
+            customer.id,
+            storeCreditAmount,
+            `Crédito gerado pela troca #${exchange.id}`,
+            exchange.id,
+            processedById || undefined,
+          );
+
+          this.logger.log(
+            `Store credit added: Customer ${customer.id}, Amount: ${storeCreditAmount}, Exchange: ${exchange.id}`,
+          );
+        } catch (creditError) {
+          this.logger.error(
+            `Error adding store credit for exchange ${exchange.id}:`,
+            creditError,
+          );
+          // Não falha a troca se houver erro ao adicionar crédito, apenas loga
+        }
+      }
 
       const fiscalWarnings: string[] = [];
       const fiscalErrors: string[] = [];

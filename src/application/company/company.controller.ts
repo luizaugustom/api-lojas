@@ -26,6 +26,7 @@ import { UpdateCompanyDto } from './dto/update-company.dto';
 import { UpdateFiscalConfigDto } from './dto/update-fiscal-config.dto';
 import { UpdateCatalogPageDto } from './dto/update-catalog-page.dto';
 import { UpdateCompanyDataPeriodDto } from './dto/update-data-period.dto';
+import { UpdateFocusNfeConfigDto } from './dto/update-focus-nfe-config.dto';
 import { JwtAuthGuard } from '../../shared/guards/jwt-auth.guard';
 import { RolesGuard } from '../../shared/guards/roles.guard';
 import { Roles, UserRole } from '../../shared/decorators/roles.decorator';
@@ -312,5 +313,28 @@ export class CompanyController {
   @ApiResponse({ status: 200, description: 'Configurações da página de catálogo' })
   getCatalogPageConfig(@CurrentUser() user: any) {
     return this.companyService.getCatalogPageConfig(user.companyId);
+  }
+
+  @Patch(':id/focus-nfe-config')
+  @Roles(UserRole.ADMIN)
+  @ApiOperation({ summary: 'Atualizar configuração do Focus NFe da empresa (apenas admin)' })
+  @ApiResponse({ status: 200, description: 'Configuração do Focus NFe atualizada com sucesso' })
+  @ApiResponse({ status: 404, description: 'Empresa não encontrada' })
+  @ApiResponse({ status: 400, description: 'ID inválido' })
+  updateFocusNfeConfig(
+    @Param('id', UuidValidationPipe) id: string,
+    @Body() updateFocusNfeConfigDto: UpdateFocusNfeConfigDto,
+  ) {
+    return this.companyService.updateFocusNfeConfig(id, updateFocusNfeConfigDto);
+  }
+
+  @Get(':id/focus-nfe-config')
+  @Roles(UserRole.ADMIN)
+  @ApiOperation({ summary: 'Obter configuração do Focus NFe da empresa (apenas admin)' })
+  @ApiResponse({ status: 200, description: 'Configuração do Focus NFe' })
+  @ApiResponse({ status: 404, description: 'Empresa não encontrada' })
+  @ApiResponse({ status: 400, description: 'ID inválido' })
+  getFocusNfeConfig(@Param('id', UuidValidationPipe) id: string) {
+    return this.companyService.getFocusNfeConfig(id);
   }
 }

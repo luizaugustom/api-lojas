@@ -14,6 +14,7 @@ const prisma_module_1 = require("../../infrastructure/database/prisma.module");
 const config_1 = require("@nestjs/config");
 const fiscal_api_service_1 = require("../../shared/services/fiscal-api.service");
 const validation_module_1 = require("../../shared/services/validation.module");
+const plan_limits_module_1 = require("../../shared/services/plan-limits.module");
 const ibpt_service_1 = require("../../shared/services/ibpt.service");
 const platform_express_1 = require("@nestjs/platform-express");
 let FiscalModule = class FiscalModule {
@@ -25,6 +26,7 @@ exports.FiscalModule = FiscalModule = __decorate([
             prisma_module_1.PrismaModule,
             config_1.ConfigModule,
             validation_module_1.ValidationModule,
+            plan_limits_module_1.PlanLimitsModule,
             platform_express_1.MulterModule.register({
                 limits: {
                     fileSize: 10 * 1024 * 1024,

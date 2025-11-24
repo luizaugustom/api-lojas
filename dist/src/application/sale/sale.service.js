@@ -19,6 +19,7 @@ const printer_service_1 = require("../printer/printer.service");
 const fiscal_service_1 = require("../fiscal/fiscal.service");
 const email_service_1 = require("../../shared/services/email.service");
 const ibpt_service_1 = require("../../shared/services/ibpt.service");
+const store_credit_service_1 = require("../store-credit/store-credit.service");
 const payment_method_dto_1 = require("./dto/payment-method.dto");
 const client_time_util_1 = require("../../shared/utils/client-time.util");
 const PRODUCT_EXCHANGE_INCLUDE = {
@@ -60,13 +61,14 @@ const PRODUCT_EXCHANGE_INCLUDE = {
     fiscalDocuments: true,
 };
 let SaleService = SaleService_1 = class SaleService {
-    constructor(prisma, productService, printerService, fiscalService, emailService, ibptService) {
+    constructor(prisma, productService, printerService, fiscalService, emailService, ibptService, storeCreditService) {
         this.prisma = prisma;
         this.productService = productService;
         this.printerService = printerService;
         this.fiscalService = fiscalService;
         this.emailService = emailService;
         this.ibptService = ibptService;
+        this.storeCreditService = storeCreditService;
         this.logger = new common_1.Logger(SaleService_1.name);
     }
     async create(companyId, sellerId, createSaleDto, computerId, clientTimeInfo) {
@@ -965,6 +967,30 @@ let SaleService = SaleService_1 = class SaleService {
                 return createdExchange;
             });
             this.logger.log(`Exchange processed: ${exchange.id} for sale: ${originalSaleId}`);
+            if (storeCreditAmount > tolerance && sale.clientCpfCnpj) {
+                try {
+                    let customer = await this.prisma.customer.findFirst({
+                        where: {
+                            cpfCnpj: sale.clientCpfCnpj,
+                            companyId,
+                        },
+                    });
+                    if (!customer) {
+                        customer = await this.prisma.customer.create({
+                            data: {
+                                name: sale.clientName || 'Cliente',
+                                cpfCnpj: sale.clientCpfCnpj,
+                                companyId,
+                            },
+                        });
+                    }
+                    await this.storeCreditService.addCredit(companyId, customer.id, storeCreditAmount, `Crédito gerado pela troca #${exchange.id}`, exchange.id, processedById || undefined);
+                    this.logger.log(`Store credit added: Customer ${customer.id}, Amount: ${storeCreditAmount}, Exchange: ${exchange.id}`);
+                }
+                catch (creditError) {
+                    this.logger.error(`Error adding store credit for exchange ${exchange.id}:`, creditError);
+                }
+            }
             const fiscalWarnings = [];
             const fiscalErrors = [];
             const hasValidFiscalConfig = await this.fiscalService.hasValidFiscalConfig(companyId);
@@ -1756,6 +1782,7 @@ exports.SaleService = SaleService = SaleService_1 = __decorate([
         printer_service_1.PrinterService,
         fiscal_service_1.FiscalService,
         email_service_1.EmailService,
-        ibpt_service_1.IBPTService])
+        ibpt_service_1.IBPTService,
+        store_credit_service_1.StoreCreditService])
 ], SaleService);
 //# sourceMappingURL=sale.service.js.map

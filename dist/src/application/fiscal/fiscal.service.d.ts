@@ -2,6 +2,7 @@ import { ConfigService } from '@nestjs/config';
 import { PrismaService } from '../../infrastructure/database/prisma.service';
 import { ValidationService } from '../../shared/services/validation.service';
 import { IBPTService } from '../../shared/services/ibpt.service';
+import { PlanLimitsService } from '../../shared/services/plan-limits.service';
 import { FiscalApiService } from '../../shared/services/fiscal-api.service';
 export interface NFeData {
     companyId: string;
@@ -82,8 +83,9 @@ export declare class FiscalService {
     private readonly fiscalApiService;
     private readonly validationService;
     private readonly ibptService;
+    private readonly planLimitsService;
     private readonly logger;
-    constructor(configService: ConfigService, prisma: PrismaService, fiscalApiService: FiscalApiService, validationService: ValidationService, ibptService: IBPTService);
+    constructor(configService: ConfigService, prisma: PrismaService, fiscalApiService: FiscalApiService, validationService: ValidationService, ibptService: IBPTService, planLimitsService: PlanLimitsService);
     generateNFe(nfeData: NFeData): Promise<any>;
     hasValidFiscalConfig(companyId: string): Promise<boolean>;
     generateMockNFCe(nfceData: NFCeData): Promise<any>;
@@ -104,10 +106,10 @@ export declare class FiscalService {
             companyId: string;
             metadata: import("@prisma/client/runtime/library").JsonValue | null;
             origin: string;
+            status: string;
             saleId: string | null;
             documentNumber: string;
             accessKey: string | null;
-            status: string;
             xmlContent: string | null;
             pdfUrl: string | null;
             qrCodeUrl: string | null;
@@ -137,10 +139,10 @@ export declare class FiscalService {
         companyId: string;
         metadata: import("@prisma/client/runtime/library").JsonValue | null;
         origin: string;
+        status: string;
         saleId: string | null;
         documentNumber: string;
         accessKey: string | null;
-        status: string;
         xmlContent: string | null;
         pdfUrl: string | null;
         qrCodeUrl: string | null;
@@ -159,10 +161,10 @@ export declare class FiscalService {
         companyId: string;
         metadata: import("@prisma/client/runtime/library").JsonValue | null;
         origin: string;
+        status: string;
         saleId: string | null;
         documentNumber: string;
         accessKey: string | null;
-        status: string;
         xmlContent: string | null;
         pdfUrl: string | null;
         qrCodeUrl: string | null;
@@ -210,10 +212,10 @@ export declare class FiscalService {
         companyId: string;
         metadata: import("@prisma/client/runtime/library").JsonValue | null;
         origin: string;
+        status: string;
         saleId: string | null;
         documentNumber: string;
         accessKey: string | null;
-        status: string;
         xmlContent: string | null;
         pdfUrl: string | null;
         qrCodeUrl: string | null;

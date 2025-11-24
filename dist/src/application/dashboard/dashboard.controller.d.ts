@@ -22,6 +22,10 @@ export declare class DashboardController {
             pendingBillsValue: number;
             paidBillsValue: number;
             stockValue: number;
+            totalCostOfSales: number;
+            totalLossesValue: number;
+            billsToPayThisMonth: number;
+            netProfit: number;
             netRevenue: number;
         };
         sales: {

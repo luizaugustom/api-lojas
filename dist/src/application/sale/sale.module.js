@@ -15,13 +15,14 @@ const product_module_1 = require("../product/product.module");
 const printer_module_1 = require("../printer/printer.module");
 const fiscal_module_1 = require("../fiscal/fiscal.module");
 const email_module_1 = require("../../shared/services/email.module");
+const store_credit_module_1 = require("../store-credit/store-credit.module");
 const ibpt_service_1 = require("../../shared/services/ibpt.service");
 let SaleModule = class SaleModule {
 };
 exports.SaleModule = SaleModule;
 exports.SaleModule = SaleModule = __decorate([
     (0, common_1.Module)({
-        imports: [prisma_module_1.PrismaModule, product_module_1.ProductModule, printer_module_1.PrinterModule, fiscal_module_1.FiscalModule, email_module_1.EmailModule],
+        imports: [prisma_module_1.PrismaModule, product_module_1.ProductModule, printer_module_1.PrinterModule, fiscal_module_1.FiscalModule, email_module_1.EmailModule, store_credit_module_1.StoreCreditModule],
         providers: [sale_service_1.SaleService, ibpt_service_1.IBPTService],
         controllers: [sale_controller_1.SaleController],
         exports: [sale_service_1.SaleService],

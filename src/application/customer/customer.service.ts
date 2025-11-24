@@ -1,6 +1,7 @@
 import { Injectable, NotFoundException, ConflictException, Logger } from '@nestjs/common';
 import { PrismaService } from '../../infrastructure/database/prisma.service';
 import { EmailService } from '../../shared/services/email.service';
+import { PlanLimitsService } from '../../shared/services/plan-limits.service';
 import { CreateCustomerDto } from './dto/create-customer.dto';
 import { UpdateCustomerDto } from './dto/update-customer.dto';
 import { ClientTimeInfo } from '../../shared/utils/client-time.util';
@@ -12,10 +13,14 @@ export class CustomerService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly emailService: EmailService,
+    private readonly planLimitsService: PlanLimitsService,
   ) {}
 
   async create(companyId: string, createCustomerDto: CreateCustomerDto) {
     try {
+      // Validar limite de clientes do plano
+      await this.planLimitsService.validateCustomerLimit(companyId);
+
       const customer = await this.prisma.customer.create({
         data: {
           ...createCustomerDto,

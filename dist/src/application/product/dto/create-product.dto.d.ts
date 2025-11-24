@@ -5,6 +5,7 @@ export declare class CreateProductDto {
     size?: string;
     stockQuantity: number;
     price: number;
+    costPrice?: number;
     category?: string;
     expirationDate?: string;
     ncm?: string;

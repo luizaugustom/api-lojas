@@ -12,26 +12,17 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.ProductPhotoValidationService = void 0;
 const common_1 = require("@nestjs/common");
 const prisma_service_1 = require("../../../infrastructure/database/prisma.service");
+const plan_limits_service_1 = require("../../../shared/services/plan-limits.service");
 const upload_constants_1 = require("../../../shared/constants/upload.constants");
 const path = require("path");
 let ProductPhotoValidationService = class ProductPhotoValidationService {
-    constructor(prisma) {
+    constructor(prisma, planLimitsService) {
         this.prisma = prisma;
+        this.planLimitsService = planLimitsService;
     }
     async validatePhotoLimit(companyId, currentPhotosCount, newPhotosCount) {
-        const company = await this.prisma.company.findUnique({
-            where: { id: companyId },
-            select: { plan: true },
-        });
-        if (!company) {
-            throw new common_1.BadRequestException('Empresa não encontrada');
-        }
-        const maxPhotos = upload_constants_1.MAX_PRODUCT_PHOTOS;
-        const totalPhotos = currentPhotosCount + newPhotosCount;
-        if (totalPhotos > maxPhotos) {
-            throw new common_1.BadRequestException(`Limite de fotos excedido. Você pode adicionar no máximo ${maxPhotos} foto(s) por produto. ` +
-                `Atualmente: ${currentPhotosCount} foto(s), tentando adicionar: ${newPhotosCount}.`);
-        }
+        await this.planLimitsService.validatePhotoUploadEnabled(companyId);
+        await this.planLimitsService.validatePhotoLimitPerProduct(companyId, currentPhotosCount, newPhotosCount);
     }
     validateImageFile(file) {
         if (file.size > upload_constants_1.MAX_FILE_SIZE) {
@@ -60,19 +51,14 @@ let ProductPhotoValidationService = class ProductPhotoValidationService {
         });
     }
     async getMaxPhotosForCompany(companyId) {
-        const company = await this.prisma.company.findUnique({
-            where: { id: companyId },
-            select: { plan: true },
-        });
-        if (!company) {
-            return upload_constants_1.MAX_PRODUCT_PHOTOS;
-        }
-        return upload_constants_1.MAX_PRODUCT_PHOTOS;
+        const limits = await this.planLimitsService.getCompanyLimits(companyId);
+        return limits.maxPhotosPerProduct;
     }
 };
 exports.ProductPhotoValidationService = ProductPhotoValidationService;
 exports.ProductPhotoValidationService = ProductPhotoValidationService = __decorate([
     (0, common_1.Injectable)(),
-    __metadata("design:paramtypes", [prisma_service_1.PrismaService])
+    __metadata("design:paramtypes", [prisma_service_1.PrismaService,
+        plan_limits_service_1.PlanLimitsService])
 ], ProductPhotoValidationService);
 //# sourceMappingURL=product-photo-validation.service.js.map

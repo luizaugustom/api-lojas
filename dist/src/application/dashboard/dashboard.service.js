@@ -31,7 +31,7 @@ let DashboardService = DashboardService_1 = class DashboardService {
             if (!company.isActive) {
                 throw new common_1.NotFoundException('Empresa inativa');
             }
-            const [totalProducts, totalCustomers, totalSellers, totalSales, totalBillsToPay, totalSalesValue, pendingBillsValue, paidBillsValue, salesThisMonth, salesValueThisMonth, salesLastMonth, salesValueLastMonth, lowStockProducts, expiringProducts, totalStockValue, currentCashClosure, closedCashClosures, totalFiscalDocuments, fiscalDocumentsThisMonth, topSellers, topProducts] = await Promise.all([
+            const [totalProducts, totalCustomers, totalSellers, totalSales, totalBillsToPay, totalSalesValue, pendingBillsValue, paidBillsValue, salesThisMonth, salesValueThisMonth, salesLastMonth, salesValueLastMonth, lowStockProducts, expiringProducts, totalStockValue, currentCashClosure, closedCashClosures, totalFiscalDocuments, fiscalDocumentsThisMonth, topSellers, topProducts, totalCostOfSales, totalLosses, totalLossesValue, billsToPayThisMonth] = await Promise.all([
                 this.prisma.product.count({ where: { companyId } }),
                 this.prisma.customer.count({ where: { companyId } }),
                 this.prisma.seller.count({ where: { companyId } }),
@@ -82,7 +82,11 @@ let DashboardService = DashboardService_1 = class DashboardService {
                 this.prisma.fiscalDocument.count({ where: { companyId } }),
                 this.getFiscalDocumentsThisMonth(companyId),
                 this.getTopSellers(companyId),
-                this.getTopProducts(companyId)
+                this.getTopProducts(companyId),
+                this.getTotalCostOfSales(companyId),
+                this.getTotalLosses(companyId),
+                this.getTotalLossesValue(companyId),
+                this.getBillsToPayThisMonth(companyId)
             ]);
             const salesGrowth = this.calculateGrowthPercentage(salesValueThisMonth, salesValueLastMonth);
             const salesCountGrowth = this.calculateGrowthPercentage(salesThisMonth, salesLastMonth);
@@ -112,6 +116,10 @@ let DashboardService = DashboardService_1 = class DashboardService {
                     pendingBillsValue: Number(pendingBillsValue._sum.amount || 0),
                     paidBillsValue: Number(paidBillsValue._sum.amount || 0),
                     stockValue: stockValue,
+                    totalCostOfSales: totalCostOfSales,
+                    totalLossesValue: totalLossesValue,
+                    billsToPayThisMonth: billsToPayThisMonth,
+                    netProfit: Number(totalSalesValue._sum.total || 0) - totalCostOfSales - billsToPayThisMonth - totalLossesValue,
                     netRevenue: Number(totalSalesValue._sum.total || 0) - Number(paidBillsValue._sum.amount || 0)
                 },
                 sales: {
@@ -321,6 +329,68 @@ let DashboardService = DashboardService_1 = class DashboardService {
             end: endOfLastMonth.toISOString(),
             label: `${lastMonth.getFullYear()}-${String(lastMonth.getMonth() + 1).padStart(2, '0')}`
         };
+    }
+    async getTotalCostOfSales(companyId) {
+        const sales = await this.prisma.sale.findMany({
+            where: { companyId },
+            include: {
+                items: {
+                    include: {
+                        product: {
+                            select: {
+                                costPrice: true,
+                                price: true,
+                            },
+                        },
+                    },
+                },
+            },
+        });
+        let totalCost = 0;
+        for (const sale of sales) {
+            for (const item of sale.items) {
+                const unitCost = item.product.costPrice
+                    ? Number(item.product.costPrice)
+                    : Number(item.product.price);
+                totalCost += unitCost * item.quantity;
+            }
+        }
+        return totalCost;
+    }
+    async getTotalLosses(companyId) {
+        const result = await this.prisma.productLoss.aggregate({
+            where: { companyId },
+            _sum: { quantity: true },
+        });
+        return result._sum.quantity || 0;
+    }
+    async getTotalLossesValue(companyId) {
+        const result = await this.prisma.productLoss.aggregate({
+            where: { companyId },
+            _sum: { totalCost: true },
+        });
+        return Number(result._sum.totalCost || 0);
+    }
+    async getBillsToPayThisMonth(companyId) {
+        const startOfMonth = new Date();
+        startOfMonth.setDate(1);
+        startOfMonth.setHours(0, 0, 0, 0);
+        const endOfMonth = new Date();
+        endOfMonth.setMonth(endOfMonth.getMonth() + 1);
+        endOfMonth.setDate(0);
+        endOfMonth.setHours(23, 59, 59, 999);
+        const result = await this.prisma.billToPay.aggregate({
+            where: {
+                companyId,
+                dueDate: {
+                    gte: startOfMonth,
+                    lte: endOfMonth,
+                },
+                isPaid: false,
+            },
+            _sum: { amount: true },
+        });
+        return Number(result._sum.amount || 0);
     }
 };
 exports.DashboardService = DashboardService;

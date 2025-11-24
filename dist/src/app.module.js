@@ -35,6 +35,8 @@ const dashboard_module_1 = require("./application/dashboard/dashboard.module");
 const installment_module_1 = require("./application/installment/installment.module");
 const notification_module_1 = require("./application/notification/notification.module");
 const budget_module_1 = require("./application/budget/budget.module");
+const store_credit_module_1 = require("./application/store-credit/store-credit.module");
+const product_loss_module_1 = require("./application/product-loss/product-loss.module");
 let AppModule = class AppModule {
 };
 exports.AppModule = AppModule;
@@ -78,6 +80,8 @@ exports.AppModule = AppModule = __decorate([
             installment_module_1.InstallmentModule,
             notification_module_1.NotificationModule,
             budget_module_1.BudgetModule,
+            store_credit_module_1.StoreCreditModule,
+            product_loss_module_1.ProductLossModule,
             health_module_1.HealthModule,
             scale_module_1.ScaleModule,
         ],

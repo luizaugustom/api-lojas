@@ -455,13 +455,32 @@ export class FiscalApiService {
   }
 
   private async generateNFCeFocusNFe(request: NFCeRequest): Promise<NFCeResponse> {
-    // Buscar API Key e ambiente do banco de dados (configuração do admin)
-    const apiKey = await this.getFocusNfeApiKey();
-    const environment = await this.getFocusNfeEnvironment();
+    // Buscar dados da empresa para obter configuração do Focus NFe
+    const company = await this.prisma.company.findUnique({
+      where: { id: request.companyId },
+      select: {
+        focusNfeApiKey: true,
+        focusNfeEnvironment: true,
+        admin: {
+          select: {
+            focusNfeApiKey: true,
+            focusNfeEnvironment: true,
+          },
+        },
+      },
+    });
+
+    if (!company) {
+      throw new BadRequestException('Empresa não encontrada');
+    }
+
+    // Usar configuração da empresa, com fallback para admin e depois variável de ambiente
+    const apiKey = company.focusNfeApiKey || company.admin?.focusNfeApiKey || await this.getFocusNfeApiKey();
+    const environment = company.focusNfeEnvironment || company.admin?.focusNfeEnvironment || await this.getFocusNfeEnvironment();
     
     // Validar API Key
     if (!apiKey || apiKey.trim() === '') {
-      const errorMsg = 'API Key do Focus NFe não configurada. Configure em Configurações > Fiscal ou na variável de ambiente FOCUSNFE_API_KEY.';
+      const errorMsg = 'API Key do Focus NFe não configurada. Configure na página de empresas ou na variável de ambiente FOCUSNFE_API_KEY.';
       this.logger.error(errorMsg);
       throw new BadRequestException(errorMsg);
     }
@@ -654,7 +673,26 @@ export class FiscalApiService {
       // Buscar dados da empresa
       const company = await this.prisma.company.findUnique({
         where: { id: request.companyId },
-        include: {
+        select: {
+          id: true,
+          name: true,
+          cnpj: true,
+          email: true,
+          phone: true,
+          stateRegistration: true,
+          municipalRegistration: true,
+          taxRegime: true,
+          cnae: true,
+          municipioIbge: true,
+          zipCode: true,
+          state: true,
+          city: true,
+          district: true,
+          street: true,
+          number: true,
+          complement: true,
+          focusNfeApiKey: true,
+          focusNfeEnvironment: true,
           admin: {
             select: {
               focusNfeApiKey: true,
@@ -664,13 +702,17 @@ export class FiscalApiService {
         },
       });
 
-      if (!company || !company.admin) {
-        throw new BadRequestException('Empresa ou configurações fiscais não encontradas');
+      if (!company) {
+        throw new BadRequestException('Empresa não encontrada');
       }
 
+      // Usar configuração da empresa, com fallback para admin
+      const apiKey = company.focusNfeApiKey || company.admin?.focusNfeApiKey;
+      const environment = company.focusNfeEnvironment || company.admin?.focusNfeEnvironment;
+
       // Validar se tem configuração do Focus NFe
-      if (!company.admin.focusNfeApiKey) {
-        throw new BadRequestException('API Key do Focus NFe não configurada');
+      if (!apiKey) {
+        throw new BadRequestException('API Key do Focus NFe não configurada. Configure na página de empresas.');
       }
 
       // Validar dados obrigatórios da empresa para emissão de NF-e
@@ -739,13 +781,13 @@ export class FiscalApiService {
 
   private async generateNFeFocusNFe(request: NFeRequest, company: any): Promise<NFeResponse> {
     try {
-      // Buscar API Key e ambiente do banco de dados (configuração do admin)
-      const apiKey = company.admin.focusNfeApiKey || await this.getFocusNfeApiKey();
-      const environment = company.admin.focusNfeEnvironment || await this.getFocusNfeEnvironment();
+      // Usar configuração da empresa, com fallback para admin e depois variável de ambiente
+      const apiKey = company.focusNfeApiKey || company.admin?.focusNfeApiKey || await this.getFocusNfeApiKey();
+      const environment = company.focusNfeEnvironment || company.admin?.focusNfeEnvironment || await this.getFocusNfeEnvironment();
       
       // Validar API Key
       if (!apiKey || apiKey.trim() === '') {
-        const errorMsg = 'API Key do Focus NFe não configurada. Configure em Configurações > Fiscal ou na variável de ambiente FOCUSNFE_API_KEY.';
+        const errorMsg = 'API Key do Focus NFe não configurada. Configure na página de empresas ou na variável de ambiente FOCUSNFE_API_KEY.';
         this.logger.error(errorMsg);
         throw new BadRequestException(errorMsg);
       }

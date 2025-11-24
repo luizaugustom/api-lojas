@@ -4,6 +4,7 @@ import { UpdateCompanyDto } from './dto/update-company.dto';
 import { UpdateFiscalConfigDto } from './dto/update-fiscal-config.dto';
 import { UpdateCatalogPageDto } from './dto/update-catalog-page.dto';
 import { UpdateCompanyDataPeriodDto } from './dto/update-data-period.dto';
+import { UpdateFocusNfeConfigDto } from './dto/update-focus-nfe-config.dto';
 import { PlanLimitsService } from '../../shared/services/plan-limits.service';
 export declare class CompanyController {
     private readonly companyService;
@@ -105,6 +106,12 @@ export declare class CompanyController {
                 available: number;
             };
             billsToPay: {
+                current: number;
+                max: number;
+                percentage: number;
+                available: number;
+            };
+            customers: {
                 current: number;
                 max: number;
                 percentage: number;
@@ -239,14 +246,51 @@ export declare class CompanyController {
         hasCsc: boolean;
         cscMasked: string;
         idTokenCsc: string;
+        hasFocusNfeApiKey: boolean;
+        focusNfeEnvironment: string;
     }>;
     hasValidFiscalConfig(user: any): Promise<{
         hasValidConfig: boolean;
     }>;
     uploadCertificate(user: any, file: Express.Multer.File): Promise<{
+        success: boolean;
+        message: string;
+        empresaId: string;
+        data: any;
+        status?: undefined;
+        focusNfeResponse?: undefined;
+    } | {
         message: string;
         status: string;
         focusNfeResponse: any;
+        success?: undefined;
+        empresaId?: undefined;
+        data?: undefined;
+    }>;
+    testFocusNfe(user: any): Promise<{
+        success: boolean;
+        message: string;
+        empresaCadastrada?: undefined;
+        ambiente?: undefined;
+        dados?: undefined;
+        detalhe?: undefined;
+        status?: undefined;
+    } | {
+        success: boolean;
+        message: string;
+        empresaCadastrada: boolean;
+        ambiente: string;
+        dados: any;
+        detalhe?: undefined;
+        status?: undefined;
+    } | {
+        success: boolean;
+        message: string;
+        detalhe: any;
+        status: any;
+        empresaCadastrada?: undefined;
+        ambiente?: undefined;
+        dados?: undefined;
     }>;
     uploadLogo(user: any, file: Express.Multer.File): Promise<{
         success: boolean;
@@ -284,5 +328,26 @@ export declare class CompanyController {
         catalogPageUrl: string;
         catalogPageEnabled: boolean;
         pageUrl: string;
+    }>;
+    updateFocusNfeConfig(id: string, updateFocusNfeConfigDto: UpdateFocusNfeConfigDto): Promise<{
+        id: string;
+        name: string;
+        hasFocusNfeApiKey: boolean;
+        focusNfeApiKey: string;
+        focusNfeEnvironment: string;
+        hasIbptToken: boolean;
+        ibptToken: string;
+        message: string;
+    }>;
+    getFocusNfeConfig(id: string): Promise<{
+        id: string;
+        name: string;
+        hasFocusNfeApiKey: boolean;
+        focusNfeApiKey: string;
+        focusNfeEnvironment: string;
+        isUsingCompanyConfig: boolean;
+        isUsingAdminConfig: boolean;
+        hasIbptToken: boolean;
+        ibptToken: string;
     }>;
 }

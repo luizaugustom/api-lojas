@@ -4,8 +4,13 @@ import { PlanType } from '@prisma/client';
 
 export interface PlanLimits {
   maxProducts: number | null; // null = unlimited
-  maxSellers: number | null;
+  maxSellers: number | null; // null = unlimited
   maxBillsToPay: number | null;
+  maxCustomers: number | null; // null = unlimited
+  photoUploadEnabled: boolean;
+  maxPhotosPerProduct: number | null; // null = unlimited
+  nfceEmissionEnabled: boolean;
+  nfeEmissionEnabled: boolean;
 }
 
 @Injectable()
@@ -13,7 +18,7 @@ export class PlanLimitsService {
   constructor(private readonly prisma: PrismaService) {}
 
   /**
-   * Retorna os limites de um plano
+   * Retorna os limites de um plano (método legado, mantido para compatibilidade)
    */
   getPlanLimits(plan: PlanType): PlanLimits {
     switch (plan) {
@@ -22,18 +27,33 @@ export class PlanLimitsService {
           maxProducts: 250,
           maxSellers: 1,
           maxBillsToPay: 5,
+          maxCustomers: null,
+          photoUploadEnabled: true,
+          maxPhotosPerProduct: null,
+          nfceEmissionEnabled: true,
+          nfeEmissionEnabled: true,
         };
       case PlanType.PLUS:
         return {
           maxProducts: 800,
           maxSellers: 2,
           maxBillsToPay: 15,
+          maxCustomers: null,
+          photoUploadEnabled: true,
+          maxPhotosPerProduct: null,
+          nfceEmissionEnabled: true,
+          nfeEmissionEnabled: true,
         };
       case PlanType.PRO:
         return {
           maxProducts: null, // unlimited
           maxSellers: null,
           maxBillsToPay: null,
+          maxCustomers: null,
+          photoUploadEnabled: true,
+          maxPhotosPerProduct: null,
+          nfceEmissionEnabled: true,
+          nfeEmissionEnabled: true,
         };
       case PlanType.TRIAL_7_DAYS:
         // Plano de teste tem os mesmos limites do PLUS
@@ -41,30 +61,66 @@ export class PlanLimitsService {
           maxProducts: 800,
           maxSellers: 2,
           maxBillsToPay: 15,
+          maxCustomers: null,
+          photoUploadEnabled: true,
+          maxPhotosPerProduct: null,
+          nfceEmissionEnabled: true,
+          nfeEmissionEnabled: true,
         };
       default:
         return {
           maxProducts: 250,
           maxSellers: 1,
           maxBillsToPay: 5,
+          maxCustomers: null,
+          photoUploadEnabled: true,
+          maxPhotosPerProduct: null,
+          nfceEmissionEnabled: true,
+          nfeEmissionEnabled: true,
         };
     }
   }
 
   /**
-   * Valida se a empresa pode adicionar mais produtos
+   * Obtém os limites personalizados da empresa (padrão é tudo ilimitado)
    */
-  async validateProductLimit(companyId: string): Promise<void> {
+  async getCompanyLimits(companyId: string): Promise<PlanLimits> {
     const company = await this.prisma.company.findUnique({
       where: { id: companyId },
-      select: { plan: true },
+      select: {
+        maxProducts: true,
+        maxCustomers: true,
+        maxSellers: true,
+        photoUploadEnabled: true,
+        maxPhotosPerProduct: true,
+        nfceEmissionEnabled: true,
+        nfeEmissionEnabled: true,
+        plan: true,
+      },
     });
 
     if (!company) {
       throw new BadRequestException('Empresa não encontrada');
     }
 
-    const limits = this.getPlanLimits(company.plan);
+    // Retornar limites personalizados da empresa (null = ilimitado por padrão)
+    return {
+      maxProducts: company.maxProducts ?? null, // null = ilimitado
+      maxSellers: company.maxSellers ?? null, // null = ilimitado
+      maxBillsToPay: null, // Mantido para compatibilidade, mas não usado mais
+      maxCustomers: company.maxCustomers ?? null, // null = ilimitado
+      photoUploadEnabled: company.photoUploadEnabled ?? true,
+      maxPhotosPerProduct: company.maxPhotosPerProduct ?? null, // null = ilimitado
+      nfceEmissionEnabled: company.nfceEmissionEnabled ?? true,
+      nfeEmissionEnabled: company.nfeEmissionEnabled ?? true,
+    };
+  }
+
+  /**
+   * Valida se a empresa pode adicionar mais produtos
+   */
+  async validateProductLimit(companyId: string): Promise<void> {
+    const limits = await this.getCompanyLimits(companyId);
 
     // Se for ilimitado, não precisa validar
     if (limits.maxProducts === null) {
@@ -77,7 +133,7 @@ export class PlanLimitsService {
 
     if (currentCount >= limits.maxProducts) {
       throw new BadRequestException(
-        `Limite de produtos atingido. Seu plano ${company.plan} permite no máximo ${limits.maxProducts} produtos. Faça upgrade para adicionar mais produtos.`,
+        `Limite de produtos atingido. Você pode cadastrar no máximo ${limits.maxProducts} produtos. Entre em contato com o administrador para ajustar o limite.`,
       );
     }
   }
@@ -86,16 +142,7 @@ export class PlanLimitsService {
    * Valida se a empresa pode adicionar mais vendedores
    */
   async validateSellerLimit(companyId: string): Promise<void> {
-    const company = await this.prisma.company.findUnique({
-      where: { id: companyId },
-      select: { plan: true },
-    });
-
-    if (!company) {
-      throw new BadRequestException('Empresa não encontrada');
-    }
-
-    const limits = this.getPlanLimits(company.plan);
+    const limits = await this.getCompanyLimits(companyId);
 
     // Se for ilimitado, não precisa validar
     if (limits.maxSellers === null) {
@@ -108,7 +155,7 @@ export class PlanLimitsService {
 
     if (currentCount >= limits.maxSellers) {
       throw new BadRequestException(
-        `Limite de vendedores atingido. Seu plano ${company.plan} permite no máximo ${limits.maxSellers} vendedor(es). Faça upgrade para adicionar mais vendedores.`,
+        `Limite de vendedores atingido. Você pode cadastrar no máximo ${limits.maxSellers} vendedor(es). Entre em contato com o administrador para ajustar o limite.`,
       );
     }
   }
@@ -161,9 +208,9 @@ export class PlanLimitsService {
       throw new BadRequestException('Empresa não encontrada');
     }
 
-    const limits = this.getPlanLimits(company.plan);
+    const limits = await this.getCompanyLimits(companyId);
 
-    const [productsCount, sellersCount, billsToPayCount] = await Promise.all([
+    const [productsCount, sellersCount, billsToPayCount, customersCount] = await Promise.all([
       this.prisma.product.count({ where: { companyId } }),
       this.prisma.seller.count({ where: { companyId } }),
       this.prisma.billToPay.count({ 
@@ -172,6 +219,7 @@ export class PlanLimitsService {
           isPaid: false,
         } 
       }),
+      this.prisma.customer.count({ where: { companyId } }),
     ]);
 
     return {
@@ -208,8 +256,104 @@ export class PlanLimitsService {
             ? limits.maxBillsToPay - billsToPayCount 
             : null,
         },
+        customers: {
+          current: customersCount,
+          max: limits.maxCustomers,
+          percentage: limits.maxCustomers 
+            ? Math.round((customersCount / limits.maxCustomers) * 100) 
+            : 0,
+          available: limits.maxCustomers 
+            ? limits.maxCustomers - customersCount 
+            : null,
+        },
       },
     };
+  }
+
+  /**
+   * Valida se a empresa pode adicionar mais clientes
+   */
+  async validateCustomerLimit(companyId: string): Promise<void> {
+    const limits = await this.getCompanyLimits(companyId);
+
+    // Se for ilimitado, não precisa validar
+    if (limits.maxCustomers === null) {
+      return;
+    }
+
+    const currentCount = await this.prisma.customer.count({
+      where: { companyId },
+    });
+
+    if (currentCount >= limits.maxCustomers) {
+      throw new BadRequestException(
+        `Limite de clientes atingido. Você pode cadastrar no máximo ${limits.maxCustomers} clientes. Entre em contato com o administrador para ajustar o limite.`,
+      );
+    }
+  }
+
+  /**
+   * Valida se a empresa pode fazer upload de fotos
+   */
+  async validatePhotoUploadEnabled(companyId: string): Promise<void> {
+    const limits = await this.getCompanyLimits(companyId);
+
+    if (!limits.photoUploadEnabled) {
+      throw new BadRequestException(
+        'Upload de fotos está desabilitado para sua empresa. Entre em contato com o administrador para habilitar.',
+      );
+    }
+  }
+
+  /**
+   * Valida se a empresa pode adicionar mais fotos ao produto
+   */
+  async validatePhotoLimitPerProduct(
+    companyId: string,
+    currentPhotosCount: number,
+    newPhotosCount: number,
+  ): Promise<void> {
+    const limits = await this.getCompanyLimits(companyId);
+
+    // Se for ilimitado, não precisa validar
+    if (limits.maxPhotosPerProduct === null) {
+      return;
+    }
+
+    const totalPhotos = currentPhotosCount + newPhotosCount;
+
+    if (totalPhotos > limits.maxPhotosPerProduct) {
+      throw new BadRequestException(
+        `Limite de fotos por produto excedido. Você pode adicionar no máximo ${limits.maxPhotosPerProduct} foto(s) por produto. ` +
+        `Atualmente: ${currentPhotosCount} foto(s), tentando adicionar: ${newPhotosCount}.`,
+      );
+    }
+  }
+
+  /**
+   * Valida se a empresa pode emitir NFCe
+   */
+  async validateNfceEmissionEnabled(companyId: string): Promise<void> {
+    const limits = await this.getCompanyLimits(companyId);
+
+    if (!limits.nfceEmissionEnabled) {
+      throw new BadRequestException(
+        'Emissão de NFCe está desabilitada para sua empresa. Entre em contato com o administrador para habilitar.',
+      );
+    }
+  }
+
+  /**
+   * Valida se a empresa pode emitir NFe
+   */
+  async validateNfeEmissionEnabled(companyId: string): Promise<void> {
+    const limits = await this.getCompanyLimits(companyId);
+
+    if (!limits.nfeEmissionEnabled) {
+      throw new BadRequestException(
+        'Emissão de NFe está desabilitada para sua empresa. Entre em contato com o administrador para habilitar.',
+      );
+    }
   }
 
   /**
@@ -233,6 +377,13 @@ export class PlanLimitsService {
     if (stats.usage.sellers.percentage >= 80 && stats.limits.maxSellers) {
       warnings.push(
         `Você está usando ${stats.usage.sellers.percentage}% do seu limite de vendedores (${stats.usage.sellers.current}/${stats.usage.sellers.max})`,
+      );
+      nearLimit = true;
+    }
+
+    if (stats.usage.customers.percentage >= 80 && stats.limits.maxCustomers) {
+      warnings.push(
+        `Você está usando ${stats.usage.customers.percentage}% do seu limite de clientes (${stats.usage.customers.current}/${stats.usage.customers.max})`,
       );
       nearLimit = true;
     }

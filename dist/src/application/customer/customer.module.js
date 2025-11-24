@@ -12,12 +12,13 @@ const customer_service_1 = require("./customer.service");
 const customer_controller_1 = require("./customer.controller");
 const prisma_module_1 = require("../../infrastructure/database/prisma.module");
 const email_module_1 = require("../../shared/services/email.module");
+const plan_limits_module_1 = require("../../shared/services/plan-limits.module");
 let CustomerModule = class CustomerModule {
 };
 exports.CustomerModule = CustomerModule;
 exports.CustomerModule = CustomerModule = __decorate([
     (0, common_1.Module)({
-        imports: [prisma_module_1.PrismaModule, email_module_1.EmailModule],
+        imports: [prisma_module_1.PrismaModule, email_module_1.EmailModule, plan_limits_module_1.PlanLimitsModule],
         providers: [customer_service_1.CustomerService],
         controllers: [customer_controller_1.CustomerController],
         exports: [customer_service_1.CustomerService],
