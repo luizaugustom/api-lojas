@@ -29,6 +29,8 @@ describe('Plan Limits E2E Tests (with auto-cleanup)', () => {
   let companyTrialToken: string;
   let companyProLimitedToken: string;
   let companyProToken: string;
+  let companyBasicToken: string; // Alias para companyTrialToken (compatibilidade)
+  let companyPlusToken: string; // Alias para companyProLimitedToken (compatibilidade)
   
   let companyBasicId: string; // Mantido para compatibilidade com testes (agora é TRIAL)
   let companyPlusId: string; // Mantido para compatibilidade com testes (agora é PRO com limites)
