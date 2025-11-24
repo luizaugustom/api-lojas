@@ -606,6 +606,18 @@ export class CompanyService {
           cnpj: true,
           certificatePassword: true,
           name: true,
+          email: true,
+          phone: true,
+          stateRegistration: true,
+          municipalRegistration: true,
+          taxRegime: true,
+          zipCode: true,
+          state: true,
+          city: true,
+          district: true,
+          street: true,
+          number: true,
+          complement: true,
           admin: {
             select: {
               focusNfeApiKey: true,
@@ -684,16 +696,42 @@ export class CompanyService {
         // Criar empresa no Focus NFe com o certificado
         this.logger.log(`Criando empresa no Focus NFe - CNPJ: ${cnpjNumeros}, Nome: ${company.name}`);
         
+        // Mapear regime tributário
+        const regimeTributarioMap = {
+          'SIMPLES_NACIONAL': 1,
+          'SIMPLES_NACIONAL_EXCESSO': 2,
+          'REGIME_NORMAL': 3,
+          'MEI': 4,
+        };
+        
+        const empresaData: any = {
+          nome: company.name,
+          cnpj: cnpjNumeros,
+          arquivo_certificado_base64: certificadoBase64,
+          senha_certificado: certificatePassword,
+          habilita_nfce: true,
+          habilita_nfe: true,
+        };
+
+        // Adicionar campos opcionais se disponíveis
+        if (company.email) empresaData.email = company.email;
+        if (company.phone) empresaData.telefone = company.phone.replace(/\D/g, '');
+        if (company.stateRegistration) empresaData.inscricao_estadual = company.stateRegistration;
+        if (company.municipalRegistration) empresaData.inscricao_municipal = company.municipalRegistration;
+        if (company.taxRegime) empresaData.regime_tributario = regimeTributarioMap[company.taxRegime] || 1;
+        if (company.street) empresaData.logradouro = company.street;
+        if (company.number) empresaData.numero = company.number;
+        if (company.complement) empresaData.complemento = company.complement;
+        if (company.district) empresaData.bairro = company.district;
+        if (company.city) empresaData.municipio = company.city;
+        if (company.state) empresaData.uf = company.state;
+        if (company.zipCode) empresaData.cep = company.zipCode.replace(/\D/g, '');
+        
         try {
           response = await axios.post(
             `${baseUrl}/v2/empresas`,
             {
-              empresa: {
-                nome: company.name,
-                cnpj: cnpjNumeros,
-                arquivo_certificado_base64: certificadoBase64,
-                senha_certificado: certificatePassword,
-              }
+              empresa: empresaData
             },
             {
               auth: {
@@ -714,6 +752,7 @@ export class CompanyService {
             response: createError.response?.data,
             status: createError.response?.status,
             url: `${baseUrl}/v2/empresas`,
+            empresaData: { ...empresaData, arquivo_certificado_base64: '[REDACTED]', senha_certificado: '[REDACTED]' },
           });
           throw createError;
         }
@@ -773,6 +812,10 @@ export class CompanyService {
         message: error.message,
         response: error.response?.data,
         status: error.response?.status,
+        statusText: error.response?.statusText,
+        headers: error.response?.headers,
+        url: error.config?.url,
+        method: error.config?.method,
         stack: error.stack,
       });
       
