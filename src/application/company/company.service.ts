@@ -736,11 +736,10 @@ export class CompanyService {
 
       this.logger.log(`Enviando certificado para Focus NFe - CNPJ: ${company.cnpj}, Ambiente: ${company.admin.focusNfeEnvironment}`);
 
-      // Buscar ID da empresa no Focus NFe usando o CNPJ
-      this.logger.log(`Buscando ID da empresa no Focus NFe - CNPJ: ${cnpjNumeros}`);
+      // PASSO 1: Buscar ID da empresa no Focus NFe usando o CNPJ
+      this.logger.log(`Buscando empresa no Focus NFe por CNPJ: ${cnpjNumeros}`);
       
-      let empresaId: string;
-      let empresaExiste = false;
+      let empresaId: string | null = null;
       
       try {
         const consultaResponse = await axios.get(
@@ -756,20 +755,93 @@ export class CompanyService {
 
         const empresas = consultaResponse.data;
         
-        if (empresas && empresas.length > 0) {
+        if (empresas && Array.isArray(empresas) && empresas.length > 0) {
           empresaId = empresas[0].id;
-          empresaExiste = true;
-          this.logger.log(`ID da empresa encontrado: ${empresaId}`);
+          this.logger.log(`✅ Empresa encontrada no Focus NFe! ID: ${empresaId}`);
+        } else {
+          this.logger.warn(`⚠️ Empresa não encontrada no Focus NFe`);
         }
         
-      } catch (error: any) {
-        this.logger.warn('Empresa não encontrada no Focus NFe, será criada automaticamente');
+      } catch (consultaError: any) {
+        this.logger.error('Erro ao consultar empresa:', {
+          message: consultaError.message,
+          response: consultaError.response?.data,
+          status: consultaError.response?.status,
+        });
       }
 
-      let response;
+      // PASSO 2: Se empresa não existe, mostrar mensagem de erro
+      if (!empresaId) {
+        throw new BadRequestException(
+          `❌ EMPRESA NÃO CADASTRADA NO FOCUS NFE\n\n` +
+          `O CNPJ ${company.cnpj} não foi encontrado no Focus NFe.\n\n` +
+          `📋 AÇÃO NECESSÁRIA:\n` +
+          `1. Acesse o painel Focus NFe: https://app.focusnfe.com.br\n` +
+          `2. Faça login com a API Key: sZpZRkLG1uzJk7ge73fkBdSlXLMD4ZUi\n` +
+          `3. Vá em "Empresas" → "Nova Empresa"\n` +
+          `4. Cadastre a empresa:\n` +
+          `   • CNPJ: ${company.cnpj}\n` +
+          `   • Razão Social: ${company.name}\n` +
+          `   • Inscrição Estadual: ${company.stateRegistration || '(não informada)'}\n` +
+          `   • Endereço completo\n` +
+          `   • Regime tributário\n` +
+          `5. Marque "Habilita NFe" e "Habilita NFCe"\n` +
+          `6. Após cadastrar, volte aqui e faça upload do certificado\n\n` +
+          `⚠️ O cadastro de empresas emitentes no Focus NFe é MANUAL pelo painel.`
+        );
+      }
 
-      // Criar ou atualizar empresa
-      if (!empresaExiste) {
+      // PASSO 3: Atualizar empresa com o certificado
+      this.logger.log(`Enviando certificado para empresa ID: ${empresaId}`);
+      
+      const certificadoPayload = {
+        arquivo_certificado_base64: certificadoBase64,
+        senha_certificado: certificatePassword,
+      };
+
+      let response;
+      
+      try {
+        response = await axios.put(
+          `${baseUrl}/v2/empresas/${empresaId}`,
+          certificadoPayload,
+          {
+            auth: {
+              username: company.admin.focusNfeApiKey,
+              password: '',
+            },
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            timeout: 30000,
+          }
+        );
+
+        this.logger.log('✅ Certificado enviado com sucesso!');
+        this.logger.log(`Response: ${JSON.stringify(response.data)}`);
+
+        return {
+          success: true,
+          message: 'Certificado enviado com sucesso para o Focus NFe',
+          empresaId: empresaId,
+          data: response.data,
+        };
+
+      } catch (error: any) {
+        this.logger.error('Erro ao enviar certificado:', {
+          message: error.message,
+          response: error.response?.data,
+          status: error.response?.status,
+          url: error.config?.url,
+        });
+
+        throw new BadRequestException(
+          `Erro ao enviar certificado: ${error.response?.data?.mensagem || error.message}`
+        );
+      }
+
+      // Código antigo removido
+      if (false) {
         // Criar nova empresa no Focus NFe
         this.logger.log(`Criando empresa no Focus NFe - CNPJ: ${cnpjNumeros}, Nome: ${company.name}`);
         
