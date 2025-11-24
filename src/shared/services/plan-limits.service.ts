@@ -22,28 +22,6 @@ export class PlanLimitsService {
    */
   getPlanLimits(plan: PlanType): PlanLimits {
     switch (plan) {
-      case PlanType.BASIC:
-        return {
-          maxProducts: 250,
-          maxSellers: 1,
-          maxBillsToPay: 5,
-          maxCustomers: null,
-          photoUploadEnabled: true,
-          maxPhotosPerProduct: null,
-          nfceEmissionEnabled: true,
-          nfeEmissionEnabled: true,
-        };
-      case PlanType.PLUS:
-        return {
-          maxProducts: 800,
-          maxSellers: 2,
-          maxBillsToPay: 15,
-          maxCustomers: null,
-          photoUploadEnabled: true,
-          maxPhotosPerProduct: null,
-          nfceEmissionEnabled: true,
-          nfeEmissionEnabled: true,
-        };
       case PlanType.PRO:
         return {
           maxProducts: null, // unlimited
@@ -56,11 +34,11 @@ export class PlanLimitsService {
           nfeEmissionEnabled: true,
         };
       case PlanType.TRIAL_7_DAYS:
-        // Plano de teste tem os mesmos limites do PLUS
+        // Plano de teste tem os mesmos limites do PRO (ilimitado)
         return {
-          maxProducts: 800,
-          maxSellers: 2,
-          maxBillsToPay: 15,
+          maxProducts: null, // unlimited
+          maxSellers: null,
+          maxBillsToPay: null,
           maxCustomers: null,
           photoUploadEnabled: true,
           maxPhotosPerProduct: null,
@@ -68,10 +46,11 @@ export class PlanLimitsService {
           nfeEmissionEnabled: true,
         };
       default:
+        // Default é PRO (ilimitado)
         return {
-          maxProducts: 250,
-          maxSellers: 1,
-          maxBillsToPay: 5,
+          maxProducts: null,
+          maxSellers: null,
+          maxBillsToPay: null,
           maxCustomers: null,
           photoUploadEnabled: true,
           maxPhotosPerProduct: null,

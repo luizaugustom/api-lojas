@@ -192,48 +192,131 @@ let NotificationService = NotificationService_1 = class NotificationService {
             throw error;
         }
     }
+    async shouldSendNotification(userId, userRole, preferenceType) {
+        try {
+            const preferences = await this.getPreferences(userId, userRole);
+            if (!preferences[preferenceType]) {
+                this.logger.debug(`Notificação ${preferenceType} desabilitada para usuário ${userId} (${userRole})`);
+                return false;
+            }
+            if (!preferences.emailEnabled && !preferences.inAppEnabled) {
+                this.logger.debug(`Nenhum canal de notificação habilitado para usuário ${userId} (${userRole})`);
+                return false;
+            }
+            return true;
+        }
+        catch (error) {
+            this.logger.error(`Erro ao verificar preferências de notificação: ${error.message}`);
+            return true;
+        }
+    }
     async createStockAlert(companyId, productName, quantity) {
-        return this.create({
-            userId: companyId,
-            userRole: 'company',
-            type: 'stock_alert',
-            title: 'Estoque Baixo',
-            message: `O produto "${productName}" está com estoque baixo (${quantity} unidades restantes)`,
-            priority: 'high',
-            category: 'estoque',
-            actionUrl: '/products',
-            actionLabel: 'Ver Produtos',
-            metadata: JSON.stringify({ productName, quantity }),
-        });
+        const shouldSend = await this.shouldSendNotification(companyId, 'company', 'stockAlerts');
+        if (!shouldSend) {
+            this.logger.debug(`Alertas de estoque desabilitados para empresa ${companyId}`);
+            return null;
+        }
+        const preferences = await this.getPreferences(companyId, 'company');
+        if (preferences.inAppEnabled) {
+            await this.create({
+                userId: companyId,
+                userRole: 'company',
+                type: 'stock_alert',
+                title: 'Estoque Baixo',
+                message: `O produto "${productName}" está com estoque baixo (${quantity} unidades restantes)`,
+                priority: 'high',
+                category: 'estoque',
+                actionUrl: '/products',
+                actionLabel: 'Ver Produtos',
+                metadata: JSON.stringify({ productName, quantity }),
+            });
+        }
+        if (preferences.emailEnabled) {
+            const company = await this.prisma.company.findUnique({
+                where: { id: companyId },
+                select: { email: true, name: true },
+            });
+            if (company?.email) {
+                this.logger.log(`Email de alerta de estoque seria enviado para ${company.email}`);
+            }
+        }
+        return { success: true };
     }
     async createBillReminder(companyId, billTitle, dueDate, amount) {
+        const shouldSend = await this.shouldSendNotification(companyId, 'company', 'billReminders');
+        if (!shouldSend) {
+            this.logger.debug(`Lembretes de contas desabilitados para empresa ${companyId}`);
+            return null;
+        }
+        const preferences = await this.getPreferences(companyId, 'company');
         const daysUntilDue = Math.ceil((dueDate.getTime() - Date.now()) / (1000 * 60 * 60 * 24));
-        return this.create({
-            userId: companyId,
-            userRole: 'company',
-            type: 'bill_reminder',
-            title: 'Conta a Vencer',
-            message: `A conta "${billTitle}" vence em ${daysUntilDue} dia(s). Valor: R$ ${amount.toFixed(2)}`,
-            priority: daysUntilDue <= 3 ? 'urgent' : 'normal',
-            category: 'financeiro',
-            actionUrl: '/bills',
-            actionLabel: 'Ver Contas',
-            metadata: JSON.stringify({ billTitle, dueDate, amount }),
-        });
+        if (preferences.inAppEnabled) {
+            await this.create({
+                userId: companyId,
+                userRole: 'company',
+                type: 'bill_reminder',
+                title: 'Conta a Vencer',
+                message: `A conta "${billTitle}" vence em ${daysUntilDue} dia(s). Valor: R$ ${amount.toFixed(2)}`,
+                priority: daysUntilDue <= 3 ? 'urgent' : 'normal',
+                category: 'financeiro',
+                actionUrl: '/bills',
+                actionLabel: 'Ver Contas',
+                metadata: JSON.stringify({ billTitle, dueDate, amount }),
+            });
+        }
+        if (preferences.emailEnabled) {
+            const company = await this.prisma.company.findUnique({
+                where: { id: companyId },
+                select: { email: true, name: true },
+            });
+            if (company?.email) {
+                this.logger.log(`Email de lembrete de conta seria enviado para ${company.email}`);
+            }
+        }
+        return { success: true };
     }
     async createSaleAlert(userId, userRole, saleTotal, items) {
-        return this.create({
-            userId,
-            userRole,
-            type: 'sale_alert',
-            title: 'Nova Venda Realizada',
-            message: `Venda de R$ ${saleTotal.toFixed(2)} com ${items} item(ns) foi registrada com sucesso!`,
-            priority: 'normal',
-            category: 'vendas',
-            actionUrl: '/sales',
-            actionLabel: 'Ver Vendas',
-            metadata: JSON.stringify({ saleTotal, items }),
-        });
+        const shouldSend = await this.shouldSendNotification(userId, userRole, 'salesAlerts');
+        if (!shouldSend) {
+            this.logger.debug(`Alertas de vendas desabilitados para usuário ${userId} (${userRole})`);
+            return null;
+        }
+        const preferences = await this.getPreferences(userId, userRole);
+        if (preferences.inAppEnabled) {
+            await this.create({
+                userId,
+                userRole,
+                type: 'sale_alert',
+                title: 'Nova Venda Realizada',
+                message: `Venda de R$ ${saleTotal.toFixed(2)} com ${items} item(ns) foi registrada com sucesso!`,
+                priority: 'normal',
+                category: 'vendas',
+                actionUrl: '/sales',
+                actionLabel: 'Ver Vendas',
+                metadata: JSON.stringify({ saleTotal, items }),
+            });
+        }
+        if (preferences.emailEnabled) {
+            let email = null;
+            if (userRole === 'company') {
+                const company = await this.prisma.company.findUnique({
+                    where: { id: userId },
+                    select: { email: true },
+                });
+                email = company?.email || null;
+            }
+            else if (userRole === 'seller') {
+                const seller = await this.prisma.seller.findUnique({
+                    where: { id: userId },
+                    select: { email: true },
+                });
+                email = seller?.email || null;
+            }
+            if (email) {
+                this.logger.log(`Email de alerta de venda seria enviado para ${email}`);
+            }
+        }
+        return { success: true };
     }
     async cleanExpiredNotifications() {
         const result = await this.prisma.notification.deleteMany({
@@ -251,21 +334,37 @@ let NotificationService = NotificationService_1 = class NotificationService {
             const notifications = [];
             if (target === 'companies' || target === 'all') {
                 const companies = await this.prisma.company.findMany({
+                    where: { isActive: true },
                     select: { id: true },
                 });
                 for (const company of companies) {
-                    notifications.push({
-                        userId: company.id,
-                        userRole: 'company',
-                        type: 'system_update',
-                        title,
-                        message,
-                        priority: 'normal',
-                        category: 'sistema',
-                        actionUrl: actionUrl || null,
-                        actionLabel: actionLabel || null,
-                        expiresAt: expiresAt ? new Date(expiresAt) : null,
-                    });
+                    const shouldSend = await this.shouldSendNotification(company.id, 'company', 'systemUpdates');
+                    if (shouldSend) {
+                        const preferences = await this.getPreferences(company.id, 'company');
+                        if (preferences.inAppEnabled) {
+                            notifications.push({
+                                userId: company.id,
+                                userRole: 'company',
+                                type: 'system_update',
+                                title,
+                                message,
+                                priority: 'normal',
+                                category: 'sistema',
+                                actionUrl: actionUrl || null,
+                                actionLabel: actionLabel || null,
+                                expiresAt: expiresAt ? new Date(expiresAt) : null,
+                            });
+                        }
+                        if (preferences.emailEnabled) {
+                            const companyData = await this.prisma.company.findUnique({
+                                where: { id: company.id },
+                                select: { email: true, name: true },
+                            });
+                            if (companyData?.email) {
+                                this.logger.log(`Email de atualização do sistema seria enviado para ${companyData.email}`);
+                            }
+                        }
+                    }
                 }
             }
             if (target === 'sellers' || target === 'all') {
@@ -273,29 +372,54 @@ let NotificationService = NotificationService_1 = class NotificationService {
                     select: { id: true },
                 });
                 for (const seller of sellers) {
-                    notifications.push({
-                        userId: seller.id,
-                        userRole: 'seller',
-                        type: 'system_update',
-                        title,
-                        message,
-                        priority: 'normal',
-                        category: 'sistema',
-                        actionUrl: actionUrl || null,
-                        actionLabel: actionLabel || null,
-                        expiresAt: expiresAt ? new Date(expiresAt) : null,
-                    });
+                    const shouldSend = await this.shouldSendNotification(seller.id, 'seller', 'systemUpdates');
+                    if (shouldSend) {
+                        const preferences = await this.getPreferences(seller.id, 'seller');
+                        if (preferences.inAppEnabled) {
+                            notifications.push({
+                                userId: seller.id,
+                                userRole: 'seller',
+                                type: 'system_update',
+                                title,
+                                message,
+                                priority: 'normal',
+                                category: 'sistema',
+                                actionUrl: actionUrl || null,
+                                actionLabel: actionLabel || null,
+                                expiresAt: expiresAt ? new Date(expiresAt) : null,
+                            });
+                        }
+                        if (preferences.emailEnabled) {
+                            const sellerData = await this.prisma.seller.findUnique({
+                                where: { id: seller.id },
+                                select: { email: true, name: true },
+                            });
+                            if (sellerData?.email) {
+                                this.logger.log(`Email de atualização do sistema seria enviado para ${sellerData.email}`);
+                            }
+                        }
+                    }
                 }
             }
-            const result = await this.prisma.notification.createMany({
-                data: notifications,
-            });
-            this.logger.log(`Broadcast notification sent to ${result.count} users (target: ${target})`);
-            return {
-                message: 'Notificação enviada com sucesso',
-                count: result.count,
-                target,
-            };
+            if (notifications.length > 0) {
+                const result = await this.prisma.notification.createMany({
+                    data: notifications,
+                });
+                this.logger.log(`Broadcast notification sent to ${result.count} users (target: ${target})`);
+                return {
+                    message: 'Notificação enviada com sucesso',
+                    count: result.count,
+                    target,
+                };
+            }
+            else {
+                this.logger.log(`Nenhuma notificação criada (usuários com preferências desabilitadas)`);
+                return {
+                    message: 'Nenhuma notificação criada',
+                    count: 0,
+                    target,
+                };
+            }
         }
         catch (error) {
             this.logger.error('Error broadcasting notification:', error);

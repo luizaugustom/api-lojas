@@ -115,13 +115,13 @@ export class CreateCompanyDto {
   @ApiProperty({
     description: 'Plano da empresa',
     enum: PlanType,
-    example: PlanType.BASIC,
-    default: PlanType.BASIC,
+    example: PlanType.PRO,
+    default: PlanType.PRO,
     required: false,
   })
   @IsOptional()
   @IsEnum(PlanType, {
-    message: 'Plano deve ser BASIC, PLUS, PRO ou TRIAL_7_DAYS',
+    message: 'Plano deve ser PRO ou TRIAL_7_DAYS',
   })
   plan?: PlanType;
 
@@ -348,4 +348,25 @@ export class CreateCompanyDto {
   @IsOptional()
   @IsBoolean()
   nfeEmissionEnabled?: boolean;
+
+  // Feature Permissions
+  @ApiProperty({
+    description: 'Se a empresa pode usar catálogo digital',
+    example: true,
+    default: true,
+    required: false,
+  })
+  @IsOptional()
+  @IsBoolean()
+  catalogPageAllowed?: boolean;
+
+  @ApiProperty({
+    description: 'Se a empresa pode usar mensagens automáticas de cobrança',
+    example: true,
+    default: true,
+    required: false,
+  })
+  @IsOptional()
+  @IsBoolean()
+  autoMessageAllowed?: boolean;
 }

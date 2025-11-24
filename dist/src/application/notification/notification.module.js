@@ -10,15 +10,19 @@ exports.NotificationModule = void 0;
 const common_1 = require("@nestjs/common");
 const notification_service_1 = require("./notification.service");
 const notification_controller_1 = require("./notification.controller");
+const notification_scheduler_service_1 = require("./notification-scheduler.service");
 const prisma_module_1 = require("../../infrastructure/database/prisma.module");
+const product_module_1 = require("../product/product.module");
+const email_module_1 = require("../../shared/services/email.module");
+const reports_module_1 = require("../reports/reports.module");
 let NotificationModule = class NotificationModule {
 };
 exports.NotificationModule = NotificationModule;
 exports.NotificationModule = NotificationModule = __decorate([
     (0, common_1.Module)({
-        imports: [prisma_module_1.PrismaModule],
+        imports: [prisma_module_1.PrismaModule, product_module_1.ProductModule, email_module_1.EmailModule, reports_module_1.ReportsModule],
         controllers: [notification_controller_1.NotificationController],
-        providers: [notification_service_1.NotificationService],
+        providers: [notification_service_1.NotificationService, notification_scheduler_service_1.NotificationSchedulerService],
         exports: [notification_service_1.NotificationService],
     })
 ], NotificationModule);

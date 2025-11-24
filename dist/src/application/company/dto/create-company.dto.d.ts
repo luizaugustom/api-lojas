@@ -33,4 +33,6 @@ export declare class CreateCompanyDto {
     maxPhotosPerProduct?: number | null;
     nfceEmissionEnabled?: boolean;
     nfeEmissionEnabled?: boolean;
+    catalogPageAllowed?: boolean;
+    autoMessageAllowed?: boolean;
 }

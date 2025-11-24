@@ -19,28 +19,6 @@ let PlanLimitsService = class PlanLimitsService {
     }
     getPlanLimits(plan) {
         switch (plan) {
-            case client_1.PlanType.BASIC:
-                return {
-                    maxProducts: 250,
-                    maxSellers: 1,
-                    maxBillsToPay: 5,
-                    maxCustomers: null,
-                    photoUploadEnabled: true,
-                    maxPhotosPerProduct: null,
-                    nfceEmissionEnabled: true,
-                    nfeEmissionEnabled: true,
-                };
-            case client_1.PlanType.PLUS:
-                return {
-                    maxProducts: 800,
-                    maxSellers: 2,
-                    maxBillsToPay: 15,
-                    maxCustomers: null,
-                    photoUploadEnabled: true,
-                    maxPhotosPerProduct: null,
-                    nfceEmissionEnabled: true,
-                    nfeEmissionEnabled: true,
-                };
             case client_1.PlanType.PRO:
                 return {
                     maxProducts: null,
@@ -54,9 +32,9 @@ let PlanLimitsService = class PlanLimitsService {
                 };
             case client_1.PlanType.TRIAL_7_DAYS:
                 return {
-                    maxProducts: 800,
-                    maxSellers: 2,
-                    maxBillsToPay: 15,
+                    maxProducts: null,
+                    maxSellers: null,
+                    maxBillsToPay: null,
                     maxCustomers: null,
                     photoUploadEnabled: true,
                     maxPhotosPerProduct: null,
@@ -65,9 +43,9 @@ let PlanLimitsService = class PlanLimitsService {
                 };
             default:
                 return {
-                    maxProducts: 250,
-                    maxSellers: 1,
-                    maxBillsToPay: 5,
+                    maxProducts: null,
+                    maxSellers: null,
+                    maxBillsToPay: null,
                     maxCustomers: null,
                     photoUploadEnabled: true,
                     maxPhotosPerProduct: null,

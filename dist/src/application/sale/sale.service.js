@@ -20,6 +20,7 @@ const fiscal_service_1 = require("../fiscal/fiscal.service");
 const email_service_1 = require("../../shared/services/email.service");
 const ibpt_service_1 = require("../../shared/services/ibpt.service");
 const store_credit_service_1 = require("../store-credit/store-credit.service");
+const notification_service_1 = require("../notification/notification.service");
 const payment_method_dto_1 = require("./dto/payment-method.dto");
 const client_time_util_1 = require("../../shared/utils/client-time.util");
 const PRODUCT_EXCHANGE_INCLUDE = {
@@ -61,7 +62,7 @@ const PRODUCT_EXCHANGE_INCLUDE = {
     fiscalDocuments: true,
 };
 let SaleService = SaleService_1 = class SaleService {
-    constructor(prisma, productService, printerService, fiscalService, emailService, ibptService, storeCreditService) {
+    constructor(prisma, productService, printerService, fiscalService, emailService, ibptService, storeCreditService, notificationService) {
         this.prisma = prisma;
         this.productService = productService;
         this.printerService = printerService;
@@ -69,6 +70,7 @@ let SaleService = SaleService_1 = class SaleService {
         this.emailService = emailService;
         this.ibptService = ibptService;
         this.storeCreditService = storeCreditService;
+        this.notificationService = notificationService;
         this.logger = new common_1.Logger(SaleService_1.name);
     }
     async create(companyId, sellerId, createSaleDto, computerId, clientTimeInfo) {
@@ -470,6 +472,31 @@ let SaleService = SaleService_1 = class SaleService {
                 catch (emailError) {
                     this.logger.error('Failed to send sale confirmation email:', emailError);
                 }
+            }
+            try {
+                await this.notificationService.createSaleAlert(companyId, 'company', Number(completeSale.total), completeSale.items?.length || 0);
+                if (sellerId && sellerId !== companyId) {
+                    await this.notificationService.createSaleAlert(sellerId, 'seller', Number(completeSale.total), completeSale.items?.length || 0);
+                }
+            }
+            catch (notificationError) {
+                this.logger.error('Erro ao criar notificação de venda:', notificationError);
+            }
+            try {
+                for (const item of completeSale.items || []) {
+                    if (item.product) {
+                        const updatedProduct = await this.prisma.product.findUnique({
+                            where: { id: item.productId },
+                            select: { stockQuantity: true, name: true },
+                        });
+                        if (updatedProduct && updatedProduct.stockQuantity <= 3) {
+                            await this.notificationService.createStockAlert(companyId, updatedProduct.name, updatedProduct.stockQuantity);
+                        }
+                    }
+                }
+            }
+            catch (stockAlertError) {
+                this.logger.error('Erro ao verificar estoque baixo após venda:', stockAlertError);
             }
             this.logger.log(`Sale created: ${result.id} for company: ${companyId}`);
             return completeSale;
@@ -1783,6 +1810,7 @@ exports.SaleService = SaleService = SaleService_1 = __decorate([
         fiscal_service_1.FiscalService,
         email_service_1.EmailService,
         ibpt_service_1.IBPTService,
-        store_credit_service_1.StoreCreditService])
+        store_credit_service_1.StoreCreditService,
+        notification_service_1.NotificationService])
 ], SaleService);
 //# sourceMappingURL=sale.service.js.map

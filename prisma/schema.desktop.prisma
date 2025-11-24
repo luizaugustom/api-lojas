@@ -13,9 +13,8 @@ datasource db {
 // Atenção: Decimal em SQLite é mapeado para texto/numérico pelo Prisma
 
 enum PlanType {
-  BASIC
-  PLUS
   PRO
+  TRIAL_7_DAYS
 }
 
 enum TaxRegime {
@@ -77,7 +76,7 @@ model Company {
   logoUrl         String?
   brandColor      String?
   customFooter    String?
-  plan            PlanType @default(BASIC)
+  plan            PlanType @default(PRO)
   isActive        Boolean  @default(true)
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
@@ -102,7 +101,9 @@ model Company {
   municipioIbge       String?
   csc                 String?
   idTokenCsc          String? @default("000001")
+  autoMessageAllowed  Boolean  @default(true)
   autoMessageEnabled  Boolean  @default(false)
+  catalogPageAllowed  Boolean  @default(true)
   catalogPageUrl      String?
   catalogPageEnabled  Boolean  @default(false)
   defaultDataPeriod   DataPeriodFilter @default(THIS_YEAR)

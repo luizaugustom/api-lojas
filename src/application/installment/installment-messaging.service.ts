@@ -37,14 +37,12 @@ export class InstallmentMessagingService {
     this.logger.log(`✅ Instância WhatsApp conectada. Status: ${instanceStatus.status}`);
 
     try {
-      // Buscar empresas que têm o envio automático ativado e planos PLUS, PRO ou TRIAL_7_DAYS
+      // Buscar empresas que têm o envio automático ativado e permissão para usar
       const companies = await this.prisma.company.findMany({
         where: {
           autoMessageEnabled: true,
+          autoMessageAllowed: true,
           isActive: true,
-          plan: {
-            in: [PlanType.PLUS, PlanType.PRO, PlanType.TRIAL_7_DAYS],
-          },
         },
         select: {
           id: true,
@@ -52,7 +50,7 @@ export class InstallmentMessagingService {
         },
       });
 
-      this.logger.log(`📊 Encontradas ${companies.length} empresas com envio automático ativado e planos PLUS, PRO ou TRIAL_7_DAYS`);
+      this.logger.log(`📊 Encontradas ${companies.length} empresas com envio automático ativado e planos PRO ou TRIAL_7_DAYS`);
 
       let totalMessagesSent = 0;
       let totalMessagesFailed = 0;

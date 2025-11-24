@@ -17,7 +17,6 @@ const hash_service_1 = require("../../shared/services/hash.service");
 const encryption_service_1 = require("../../shared/services/encryption.service");
 const validation_service_1 = require("../../shared/services/validation.service");
 const upload_service_1 = require("../upload/upload.service");
-const client_1 = require("@prisma/client");
 const axios_1 = require("axios");
 const fs = require("fs");
 const path = require("path");
@@ -136,6 +135,15 @@ let CompanyService = CompanyService_1 = class CompanyService {
                 agency: true,
                 accountNumber: true,
                 accountType: true,
+                maxProducts: true,
+                maxCustomers: true,
+                maxSellers: true,
+                photoUploadEnabled: true,
+                maxPhotosPerProduct: true,
+                nfceEmissionEnabled: true,
+                nfeEmissionEnabled: true,
+                catalogPageAllowed: true,
+                autoMessageAllowed: true,
                 createdAt: true,
                 updatedAt: true,
                 admin: {
@@ -1020,10 +1028,13 @@ let CompanyService = CompanyService_1 = class CompanyService {
         try {
             const company = await this.prisma.company.findUnique({
                 where: { id: companyId },
-                select: { id: true, name: true, autoMessageEnabled: true },
+                select: { id: true, name: true, autoMessageEnabled: true, autoMessageAllowed: true },
             });
             if (!company) {
                 throw new common_1.NotFoundException('Empresa não encontrada');
+            }
+            if (enabled && !company.autoMessageAllowed) {
+                throw new common_1.BadRequestException('A empresa não tem permissão para usar mensagens automáticas de cobrança. Entre em contato com o administrador.');
             }
             const updatedCompany = await this.prisma.company.update({
                 where: { id: companyId },
@@ -1032,6 +1043,7 @@ let CompanyService = CompanyService_1 = class CompanyService {
                     id: true,
                     name: true,
                     autoMessageEnabled: true,
+                    autoMessageAllowed: true,
                 },
             });
             this.logger.log(`Envio automático de mensagens ${enabled ? 'ativado' : 'desativado'} para empresa ${companyId}`);
@@ -1091,8 +1103,8 @@ let CompanyService = CompanyService_1 = class CompanyService {
             if (!company) {
                 throw new common_1.NotFoundException('Empresa não encontrada');
             }
-            if (updateCatalogPageDto.catalogPageEnabled === true && company.plan !== client_1.PlanType.PRO) {
-                throw new common_1.BadRequestException('O catálogo público está disponível apenas para empresas com plano PRO');
+            if (updateCatalogPageDto.catalogPageEnabled === true && !company.catalogPageAllowed) {
+                throw new common_1.BadRequestException('A empresa não tem permissão para usar catálogo digital. Entre em contato com o administrador.');
             }
             const updateData = {};
             if (updateCatalogPageDto.catalogPageUrl !== undefined) {
@@ -1208,8 +1220,8 @@ let CompanyService = CompanyService_1 = class CompanyService {
             if (!company) {
                 throw new common_1.NotFoundException('Página de catálogo não encontrada ou não está habilitada');
             }
-            if (company.plan !== client_1.PlanType.PRO) {
-                throw new common_1.NotFoundException('O catálogo público está disponível apenas para empresas com plano PRO');
+            if (!company.catalogPageAllowed) {
+                throw new common_1.NotFoundException('A empresa não tem permissão para usar catálogo digital. Entre em contato com o administrador.');
             }
             const addressParts = [
                 company.street,

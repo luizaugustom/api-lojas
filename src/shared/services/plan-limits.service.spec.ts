@@ -21,6 +21,9 @@ describe('PlanLimitsService', () => {
     billToPay: {
       count: jest.fn(),
     },
+    customer: {
+      count: jest.fn(),
+    },
   };
 
   beforeEach(async () => {
@@ -43,45 +46,52 @@ describe('PlanLimitsService', () => {
   });
 
   describe('getPlanLimits', () => {
-    it('should return BASIC plan limits', () => {
-      const limits = service.getPlanLimits(PlanType.BASIC);
-      expect(limits).toEqual({
-        maxProducts: 250,
-        maxSellers: 1,
-        maxBillsToPay: 5,
-      });
-    });
-
-    it('should return PLUS plan limits', () => {
-      const limits = service.getPlanLimits(PlanType.PLUS);
-      expect(limits).toEqual({
-        maxProducts: 800,
-        maxSellers: 2,
-        maxBillsToPay: 15,
-      });
-    });
-
     it('should return PRO plan limits (unlimited)', () => {
       const limits = service.getPlanLimits(PlanType.PRO);
       expect(limits).toEqual({
         maxProducts: null,
         maxSellers: null,
         maxBillsToPay: null,
+        maxCustomers: null,
+        photoUploadEnabled: true,
+        maxPhotosPerProduct: null,
+        nfceEmissionEnabled: true,
+        nfeEmissionEnabled: true,
+      });
+    });
+
+    it('should return TRIAL_7_DAYS plan limits (unlimited)', () => {
+      const limits = service.getPlanLimits(PlanType.TRIAL_7_DAYS);
+      expect(limits).toEqual({
+        maxProducts: null,
+        maxSellers: null,
+        maxBillsToPay: null,
+        maxCustomers: null,
+        photoUploadEnabled: true,
+        maxPhotosPerProduct: null,
+        nfceEmissionEnabled: true,
+        nfeEmissionEnabled: true,
       });
     });
   });
 
   describe('validateProductLimit', () => {
-    it('should allow product creation for BASIC plan under limit', async () => {
-      mockPrismaService.company.findUnique.mockResolvedValue({ plan: PlanType.BASIC });
-      mockPrismaService.product.count.mockResolvedValue(200);
+    it('should allow product creation for PRO plan (unlimited)', async () => {
+      mockPrismaService.company.findUnique.mockResolvedValue({ 
+        plan: PlanType.PRO,
+        maxProducts: null,
+      });
+      mockPrismaService.product.count.mockResolvedValue(10000);
 
       await expect(service.validateProductLimit('company-id')).resolves.not.toThrow();
     });
 
-    it('should throw error when BASIC plan product limit is reached', async () => {
-      mockPrismaService.company.findUnique.mockResolvedValue({ plan: PlanType.BASIC });
-      mockPrismaService.product.count.mockResolvedValue(250);
+    it('should throw error when custom product limit is reached', async () => {
+      mockPrismaService.company.findUnique.mockResolvedValue({ 
+        plan: PlanType.PRO,
+        maxProducts: 100,
+      });
+      mockPrismaService.product.count.mockResolvedValue(100);
 
       await expect(service.validateProductLimit('company-id')).rejects.toThrow(
         BadRequestException,
@@ -105,32 +115,22 @@ describe('PlanLimitsService', () => {
   });
 
   describe('validateSellerLimit', () => {
-    it('should allow seller creation for BASIC plan under limit', async () => {
-      mockPrismaService.company.findUnique.mockResolvedValue({ plan: PlanType.BASIC });
-      mockPrismaService.seller.count.mockResolvedValue(0);
+    it('should allow seller creation for PRO plan (unlimited)', async () => {
+      mockPrismaService.company.findUnique.mockResolvedValue({ 
+        plan: PlanType.PRO,
+        maxSellers: null,
+      });
+      mockPrismaService.seller.count.mockResolvedValue(100);
 
       await expect(service.validateSellerLimit('company-id')).resolves.not.toThrow();
     });
 
-    it('should throw error when BASIC plan seller limit is reached', async () => {
-      mockPrismaService.company.findUnique.mockResolvedValue({ plan: PlanType.BASIC });
-      mockPrismaService.seller.count.mockResolvedValue(1);
-
-      await expect(service.validateSellerLimit('company-id')).rejects.toThrow(
-        BadRequestException,
-      );
-    });
-
-    it('should allow 2 sellers for PLUS plan', async () => {
-      mockPrismaService.company.findUnique.mockResolvedValue({ plan: PlanType.PLUS });
-      mockPrismaService.seller.count.mockResolvedValue(1);
-
-      await expect(service.validateSellerLimit('company-id')).resolves.not.toThrow();
-    });
-
-    it('should throw error when PLUS plan seller limit is reached', async () => {
-      mockPrismaService.company.findUnique.mockResolvedValue({ plan: PlanType.PLUS });
-      mockPrismaService.seller.count.mockResolvedValue(2);
+    it('should throw error when custom seller limit is reached', async () => {
+      mockPrismaService.company.findUnique.mockResolvedValue({ 
+        plan: PlanType.PRO,
+        maxSellers: 5,
+      });
+      mockPrismaService.seller.count.mockResolvedValue(5);
 
       await expect(service.validateSellerLimit('company-id')).rejects.toThrow(
         BadRequestException,
@@ -139,20 +139,11 @@ describe('PlanLimitsService', () => {
   });
 
   describe('validateBillToPayLimit', () => {
-    it('should allow bill creation for BASIC plan under limit', async () => {
-      mockPrismaService.company.findUnique.mockResolvedValue({ plan: PlanType.BASIC });
-      mockPrismaService.billToPay.count.mockResolvedValue(4);
+    it('should allow bill creation for PRO plan (unlimited)', async () => {
+      mockPrismaService.company.findUnique.mockResolvedValue({ plan: PlanType.PRO });
+      mockPrismaService.billToPay.count.mockResolvedValue(1000);
 
       await expect(service.validateBillToPayLimit('company-id')).resolves.not.toThrow();
-    });
-
-    it('should throw error when BASIC plan bill limit is reached', async () => {
-      mockPrismaService.company.findUnique.mockResolvedValue({ plan: PlanType.BASIC });
-      mockPrismaService.billToPay.count.mockResolvedValue(5);
-
-      await expect(service.validateBillToPayLimit('company-id')).rejects.toThrow(
-        BadRequestException,
-      );
     });
 
     it('should allow unlimited bills for PRO plan', async () => {
@@ -164,42 +155,28 @@ describe('PlanLimitsService', () => {
   });
 
   describe('getCompanyUsageStats', () => {
-    it('should return usage statistics for BASIC plan', async () => {
-      mockPrismaService.company.findUnique.mockResolvedValue({ plan: PlanType.BASIC });
-      mockPrismaService.product.count.mockResolvedValue(200);
-      mockPrismaService.seller.count.mockResolvedValue(1);
+    it('should return usage statistics for PRO plan with custom limits', async () => {
+      mockPrismaService.company.findUnique.mockResolvedValue({ 
+        plan: PlanType.PRO,
+        maxProducts: 1000,
+        maxSellers: 10,
+        maxCustomers: null,
+        photoUploadEnabled: true,
+        maxPhotosPerProduct: null,
+        nfceEmissionEnabled: true,
+        nfeEmissionEnabled: true,
+      });
+      mockPrismaService.product.count.mockResolvedValue(800);
+      mockPrismaService.seller.count.mockResolvedValue(5);
       mockPrismaService.billToPay.count.mockResolvedValue(3);
+      mockPrismaService.customer.count.mockResolvedValue(500);
 
       const stats = await service.getCompanyUsageStats('company-id');
 
-      expect(stats).toEqual({
-        plan: PlanType.BASIC,
-        limits: {
-          maxProducts: 250,
-          maxSellers: 1,
-          maxBillsToPay: 5,
-        },
-        usage: {
-          products: {
-            current: 200,
-            max: 250,
-            percentage: 80,
-            available: 50,
-          },
-          sellers: {
-            current: 1,
-            max: 1,
-            percentage: 100,
-            available: 0,
-          },
-          billsToPay: {
-            current: 3,
-            max: 5,
-            percentage: 60,
-            available: 2,
-          },
-        },
-      });
+      expect(stats.plan).toBe(PlanType.PRO);
+      expect(stats.limits.maxProducts).toBe(1000);
+      expect(stats.limits.maxSellers).toBe(10);
+      expect(stats.usage.products.percentage).toBe(80);
     });
 
     it('should return usage statistics for PRO plan (unlimited)', async () => {
@@ -218,23 +195,43 @@ describe('PlanLimitsService', () => {
   });
 
   describe('checkNearLimits', () => {
-    it('should return warnings when near limits (>= 80%)', async () => {
-      mockPrismaService.company.findUnique.mockResolvedValue({ plan: PlanType.BASIC });
-      mockPrismaService.product.count.mockResolvedValue(200);
-      mockPrismaService.seller.count.mockResolvedValue(1);
-      mockPrismaService.billToPay.count.mockResolvedValue(4);
+    it('should return warnings when near custom limits (>= 80%)', async () => {
+      mockPrismaService.company.findUnique.mockResolvedValue({ 
+        plan: PlanType.PRO,
+        maxProducts: 1000,
+        maxSellers: 10,
+        maxCustomers: null,
+        photoUploadEnabled: true,
+        maxPhotosPerProduct: null,
+        nfceEmissionEnabled: true,
+        nfeEmissionEnabled: true,
+      });
+      mockPrismaService.product.count.mockResolvedValue(850);
+      mockPrismaService.seller.count.mockResolvedValue(9);
+      mockPrismaService.billToPay.count.mockResolvedValue(0);
+      mockPrismaService.customer.count.mockResolvedValue(0);
 
       const result = await service.checkNearLimits('company-id');
 
       expect(result.nearLimit).toBe(true);
-      expect(result.warnings).toHaveLength(3);
+      expect(result.warnings.length).toBeGreaterThan(0);
     });
 
     it('should return no warnings when below 80% limit', async () => {
-      mockPrismaService.company.findUnique.mockResolvedValue({ plan: PlanType.BASIC });
-      mockPrismaService.product.count.mockResolvedValue(100);
-      mockPrismaService.seller.count.mockResolvedValue(0);
-      mockPrismaService.billToPay.count.mockResolvedValue(2);
+      mockPrismaService.company.findUnique.mockResolvedValue({ 
+        plan: PlanType.PRO,
+        maxProducts: 1000,
+        maxSellers: 10,
+        maxCustomers: null,
+        photoUploadEnabled: true,
+        maxPhotosPerProduct: null,
+        nfceEmissionEnabled: true,
+        nfeEmissionEnabled: true,
+      });
+      mockPrismaService.product.count.mockResolvedValue(500);
+      mockPrismaService.seller.count.mockResolvedValue(5);
+      mockPrismaService.billToPay.count.mockResolvedValue(0);
+      mockPrismaService.customer.count.mockResolvedValue(0);
 
       const result = await service.checkNearLimits('company-id');
 

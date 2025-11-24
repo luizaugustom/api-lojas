@@ -11,8 +11,6 @@ datasource db {
 }
 
 enum PlanType {
-  BASIC
-  PLUS
   PRO
   TRIAL_7_DAYS
 }
@@ -81,7 +79,7 @@ model Company {
   logoUrl               String?
   brandColor            String?
   customFooter          String? // Footer personalizado para NFCe
-  plan                  PlanType @default(BASIC)
+  plan                  PlanType @default(PRO)
   isActive              Boolean  @default(true)
   createdAt             DateTime @default(now())
   updatedAt             DateTime @updatedAt
@@ -120,9 +118,11 @@ model Company {
   ibptToken           String? // Token da API IBPT (opcional)
 
   // Automatic Message Configuration
+  autoMessageAllowed Boolean @default(true) // Se a empresa pode usar mensagens automáticas de cobrança
   autoMessageEnabled Boolean @default(false) // Ativa/desativa envio automático de mensagens de cobrança
 
   // Catalog Page Configuration
+  catalogPageAllowed Boolean @default(true) // Se a empresa pode ter catálogo digital
   catalogPageUrl     String? // URL única para página pública de catálogo (ex: "masolucoes")
   catalogPageEnabled Boolean @default(false) // Se a página de catálogo está ativada
   defaultDataPeriod  DataPeriodFilter @default(THIS_YEAR)

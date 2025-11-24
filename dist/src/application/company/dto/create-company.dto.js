@@ -139,13 +139,13 @@ __decorate([
     (0, swagger_1.ApiProperty)({
         description: 'Plano da empresa',
         enum: client_1.PlanType,
-        example: client_1.PlanType.BASIC,
-        default: client_1.PlanType.BASIC,
+        example: client_1.PlanType.PRO,
+        default: client_1.PlanType.PRO,
         required: false,
     }),
     (0, class_validator_1.IsOptional)(),
     (0, class_validator_1.IsEnum)(client_1.PlanType, {
-        message: 'Plano deve ser BASIC, PLUS, PRO ou TRIAL_7_DAYS',
+        message: 'Plano deve ser PRO ou TRIAL_7_DAYS',
     }),
     __metadata("design:type", String)
 ], CreateCompanyDto.prototype, "plan", void 0);
@@ -392,4 +392,26 @@ __decorate([
     (0, class_validator_1.IsBoolean)(),
     __metadata("design:type", Boolean)
 ], CreateCompanyDto.prototype, "nfeEmissionEnabled", void 0);
+__decorate([
+    (0, swagger_1.ApiProperty)({
+        description: 'Se a empresa pode usar catálogo digital',
+        example: true,
+        default: true,
+        required: false,
+    }),
+    (0, class_validator_1.IsOptional)(),
+    (0, class_validator_1.IsBoolean)(),
+    __metadata("design:type", Boolean)
+], CreateCompanyDto.prototype, "catalogPageAllowed", void 0);
+__decorate([
+    (0, swagger_1.ApiProperty)({
+        description: 'Se a empresa pode usar mensagens automáticas de cobrança',
+        example: true,
+        default: true,
+        required: false,
+    }),
+    (0, class_validator_1.IsOptional)(),
+    (0, class_validator_1.IsBoolean)(),
+    __metadata("design:type", Boolean)
+], CreateCompanyDto.prototype, "autoMessageAllowed", void 0);
 //# sourceMappingURL=create-company.dto.js.map

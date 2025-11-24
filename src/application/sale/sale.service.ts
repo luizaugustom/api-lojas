@@ -7,6 +7,7 @@ import { FiscalService, NFCeData } from '../fiscal/fiscal.service';
 import { EmailService } from '../../shared/services/email.service';
 import { IBPTService } from '../../shared/services/ibpt.service';
 import { StoreCreditService } from '../store-credit/store-credit.service';
+import { NotificationService } from '../notification/notification.service';
 import { CreateSaleDto } from './dto/create-sale.dto';
 import { UpdateSaleDto } from './dto/update-sale.dto';
 import { ProcessExchangeDto } from './dto/process-exchange.dto';
@@ -68,6 +69,7 @@ export class SaleService {
     private readonly emailService: EmailService,
     private readonly ibptService: IBPTService,
     private readonly storeCreditService: StoreCreditService,
+    private readonly notificationService: NotificationService,
   ) {}
 
   async create(
@@ -558,6 +560,54 @@ export class SaleService {
           this.logger.error('Failed to send sale confirmation email:', emailError);
           // Não falha a venda se o email falhar
         }
+      }
+
+      // Enviar notificação de nova venda se habilitado
+      try {
+        // Notificar a empresa
+        await this.notificationService.createSaleAlert(
+          companyId,
+          'company',
+          Number(completeSale.total),
+          completeSale.items?.length || 0,
+        );
+
+        // Notificar o vendedor se for diferente da empresa
+        if (sellerId && sellerId !== companyId) {
+          await this.notificationService.createSaleAlert(
+            sellerId,
+            'seller',
+            Number(completeSale.total),
+            completeSale.items?.length || 0,
+          );
+        }
+      } catch (notificationError) {
+        this.logger.error('Erro ao criar notificação de venda:', notificationError);
+        // Não falha a venda se a notificação falhar
+      }
+
+      // Verificar estoque baixo após a venda
+      try {
+        for (const item of completeSale.items || []) {
+          if (item.product) {
+            // Buscar produto atualizado para verificar estoque
+            const updatedProduct = await this.prisma.product.findUnique({
+              where: { id: item.productId },
+              select: { stockQuantity: true, name: true },
+            });
+
+            if (updatedProduct && updatedProduct.stockQuantity <= 3) {
+              await this.notificationService.createStockAlert(
+                companyId,
+                updatedProduct.name,
+                updatedProduct.stockQuantity,
+              );
+            }
+          }
+        }
+      } catch (stockAlertError) {
+        this.logger.error('Erro ao verificar estoque baixo após venda:', stockAlertError);
+        // Não falha a venda se a verificação de estoque falhar
       }
 
       this.logger.log(`Sale created: ${result.id} for company: ${companyId}`);

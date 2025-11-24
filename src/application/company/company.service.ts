@@ -141,6 +141,17 @@ export class CompanyService {
         agency: true,
         accountNumber: true,
         accountType: true,
+        // Plan Limits Configuration
+        maxProducts: true,
+        maxCustomers: true,
+        maxSellers: true,
+        photoUploadEnabled: true,
+        maxPhotosPerProduct: true,
+        nfceEmissionEnabled: true,
+        nfeEmissionEnabled: true,
+        // Feature Permissions
+        catalogPageAllowed: true,
+        autoMessageAllowed: true,
         createdAt: true,
         updatedAt: true,
         admin: {
@@ -1241,11 +1252,18 @@ export class CompanyService {
     try {
       const company = await this.prisma.company.findUnique({
         where: { id: companyId },
-        select: { id: true, name: true, autoMessageEnabled: true },
+        select: { id: true, name: true, autoMessageEnabled: true, autoMessageAllowed: true },
       });
 
       if (!company) {
         throw new NotFoundException('Empresa não encontrada');
+      }
+
+      // Validar se a empresa tem permissão para usar mensagens automáticas
+      if (enabled && !company.autoMessageAllowed) {
+        throw new BadRequestException(
+          'A empresa não tem permissão para usar mensagens automáticas de cobrança. Entre em contato com o administrador.'
+        );
       }
 
       const updatedCompany = await this.prisma.company.update({
@@ -1255,6 +1273,7 @@ export class CompanyService {
           id: true,
           name: true,
           autoMessageEnabled: true,
+          autoMessageAllowed: true,
         },
       });
 
@@ -1332,10 +1351,10 @@ export class CompanyService {
         throw new NotFoundException('Empresa não encontrada');
       }
 
-      // Validar plano PRO se estiver habilitando o catálogo
-      if (updateCatalogPageDto.catalogPageEnabled === true && company.plan !== PlanType.PRO) {
+      // Validar se a empresa tem permissão para usar catálogo digital
+      if (updateCatalogPageDto.catalogPageEnabled === true && !company.catalogPageAllowed) {
         throw new BadRequestException(
-          'O catálogo público está disponível apenas para empresas com plano PRO'
+          'A empresa não tem permissão para usar catálogo digital. Entre em contato com o administrador.'
         );
       }
 
@@ -1475,10 +1494,10 @@ export class CompanyService {
         );
       }
 
-      // Verificar se a empresa tem plano PRO
-      if (company.plan !== PlanType.PRO) {
+      // Verificar se a empresa tem permissão para usar catálogo digital
+      if (!company.catalogPageAllowed) {
         throw new NotFoundException(
-          'O catálogo público está disponível apenas para empresas com plano PRO'
+          'A empresa não tem permissão para usar catálogo digital. Entre em contato com o administrador.'
         );
       }
 
