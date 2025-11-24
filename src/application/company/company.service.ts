@@ -648,10 +648,55 @@ export class CompanyService {
 
       this.logger.log(`Enviando certificado para Focus NFe - CNPJ: ${company.cnpj}, Ambiente: ${company.admin.focusNfeEnvironment}`);
 
+      // Primeiro, buscar o ID da empresa no Focus NFe usando o CNPJ
+      this.logger.log(`Buscando ID da empresa no Focus NFe - CNPJ: ${cnpjNumeros}`);
+      
+      let empresaId: string;
+      
+      try {
+        const consultaResponse = await axios.get(
+          `${baseUrl}/v2/empresas?cnpj=${cnpjNumeros}`,
+          {
+            auth: {
+              username: company.admin.focusNfeApiKey,
+              password: '',
+            },
+            timeout: 30000,
+          }
+        );
+
+        // A API retorna um array de empresas
+        const empresas = consultaResponse.data;
+        
+        if (!empresas || empresas.length === 0) {
+          throw new BadRequestException(
+            'Empresa não cadastrada no Focus NFe. Cadastre a empresa primeiro antes de enviar o certificado.'
+          );
+        }
+
+        empresaId = empresas[0].id;
+        this.logger.log(`ID da empresa encontrado: ${empresaId}`);
+        
+      } catch (error: any) {
+        if (error instanceof BadRequestException) {
+          throw error;
+        }
+        
+        this.logger.error('Erro ao buscar empresa no Focus NFe:', {
+          message: error.message,
+          response: error.response?.data,
+          status: error.response?.status,
+        });
+        
+        throw new BadRequestException(
+          'Erro ao consultar empresa no Focus NFe. Verifique se a empresa está cadastrada.'
+        );
+      }
+
       // Atualizar empresa com o certificado através da API de empresas
       // Segundo a documentação do Focus NFe, o certificado é enviado em base64
       const response = await axios.put(
-        `${baseUrl}/v2/empresas/${cnpjNumeros}`,
+        `${baseUrl}/v2/empresas/${empresaId}`,
         {
           arquivo_certificado_base64: certificadoBase64,
           senha_certificado: certificatePassword,
