@@ -33,7 +33,8 @@
     "migrate:firebase": "ts-node scripts/migrate-to-firebase.ts",
     "migrate:firebase:dry": "ts-node scripts/migrate-to-firebase.ts --dry-run",
     "fix:exchanged-quantity": "node scripts/fix-exchanged-quantity.js",
-    "build:desktop": "nest build"
+    "build:desktop": "nest build",
+    "fix:exchanged": "node scripts/fix-exchanged-quantity.js"
   },
   "dependencies": {
     "@nestjs/common": "^10.0.0",
