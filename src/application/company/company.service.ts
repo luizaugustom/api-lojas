@@ -493,6 +493,12 @@ export class CompanyService {
           municipioIbge: true,
           csc: true,
           idTokenCsc: true,
+          admin: {
+            select: {
+              focusNfeApiKey: true,
+              focusNfeEnvironment: true,
+            },
+          },
         },
       });
 
@@ -520,6 +526,9 @@ export class CompanyService {
         hasCsc: !!company.csc,
         cscMasked: company.csc ? this.encryptionService.mask('********') : null,
         idTokenCsc: company.idTokenCsc,
+        // Informações sobre configuração do admin (Focus NFe)
+        adminHasFocusNfeApiKey: !!company.admin.focusNfeApiKey,
+        focusNfeEnvironment: company.admin.focusNfeEnvironment || 'sandbox',
       };
     } catch (error) {
       this.logger.error('Error getting fiscal config:', error);
@@ -581,6 +590,11 @@ export class CompanyService {
         throw new BadRequestException('Arquivo de certificado é obrigatório');
       }
 
+      // Validar tamanho do arquivo (máximo 10MB)
+      if (file.size > 10 * 1024 * 1024) {
+        throw new BadRequestException('Arquivo muito grande. Tamanho máximo: 10MB');
+      }
+
       // Validar extensão
       if (!file.originalname.endsWith('.pfx') && !file.originalname.endsWith('.p12')) {
         throw new BadRequestException('Arquivo deve ser .pfx ou .p12');
@@ -592,6 +606,7 @@ export class CompanyService {
         select: {
           cnpj: true,
           certificatePassword: true,
+          name: true,
           admin: {
             select: {
               focusNfeApiKey: true,
@@ -613,15 +628,27 @@ export class CompanyService {
         throw new BadRequestException('Configure a senha do certificado antes de fazer upload');
       }
 
+      // Validar CNPJ
+      const cnpjNumeros = company.cnpj.replace(/\D/g, '');
+      if (cnpjNumeros.length !== 14) {
+        throw new BadRequestException('CNPJ inválido');
+      }
+
       // Descriptografar senha do certificado
       const certificatePassword = this.encryptionService.decrypt(company.certificatePassword);
 
+      this.logger.log(`Preparando upload do certificado - Arquivo: ${file.originalname}, Tamanho: ${file.size} bytes`);
+
       // Preparar dados para envio
       const formData = new FormData();
+      
+      // Anexar o buffer do arquivo corretamente
       formData.append('certificado', file.buffer, {
         filename: file.originalname,
         contentType: 'application/x-pkcs12',
+        knownLength: file.size,
       });
+      
       formData.append('senha', certificatePassword);
 
       // Determinar URL base
@@ -629,16 +656,23 @@ export class CompanyService {
         ? 'https://api.focusnfe.com.br'
         : 'https://homologacao.focusnfe.com.br';
 
+      this.logger.log(`Enviando certificado para Focus NFe - CNPJ: ${company.cnpj}, Ambiente: ${company.admin.focusNfeEnvironment}`);
+
       // Enviar para Focus NFe
       const response = await axios.post(
-        `${baseUrl}/v2/empresas/${company.cnpj.replace(/\D/g, '')}/certificado`,
+        `${baseUrl}/v2/empresas/${cnpjNumeros}/certificado`,
         formData,
         {
           headers: {
-            'Authorization': company.admin.focusNfeApiKey,
             ...formData.getHeaders(),
           },
+          auth: {
+            username: company.admin.focusNfeApiKey,
+            password: '',
+          },
           timeout: 30000, // 30 segundos
+          maxContentLength: Infinity,
+          maxBodyLength: Infinity,
         }
       );
 
@@ -656,20 +690,28 @@ export class CompanyService {
         throw error;
       }
 
-      this.logger.error('Erro ao enviar certificado ao Focus NFe:', error);
+      this.logger.error('Erro ao enviar certificado ao Focus NFe:', {
+        message: error.message,
+        response: error.response?.data,
+        status: error.response?.status,
+        stack: error.stack,
+      });
       
       if (error.response?.data) {
         // Erro da API Focus NFe
         const focusError = error.response.data;
+        const errorMessage = focusError.mensagem || 
+                           focusError.message || 
+                           focusError.erros?.[0]?.mensagem ||
+                           JSON.stringify(focusError);
+        
         throw new BadRequestException(
-          focusError.mensagem || 
-          focusError.message || 
-          'Erro ao enviar certificado ao Focus NFe'
+          `Erro do Focus NFe: ${errorMessage}`
         );
       }
       
       throw new BadRequestException(
-        error.message || 'Erro ao enviar certificado ao Focus NFe'
+        `Erro ao enviar certificado: ${error.message || 'Erro desconhecido'}`
       );
     }
   }
