@@ -337,4 +337,14 @@ export class CompanyController {
   getFocusNfeConfig(@Param('id', UuidValidationPipe) id: string) {
     return this.companyService.getFocusNfeConfig(id);
   }
+
+  @Get(':id/fiscal-config')
+  @Roles(UserRole.ADMIN)
+  @ApiOperation({ summary: 'Obter configurações fiscais completas da empresa (apenas admin, sem mascaramento)' })
+  @ApiResponse({ status: 200, description: 'Configurações fiscais completas' })
+  @ApiResponse({ status: 404, description: 'Empresa não encontrada' })
+  @ApiResponse({ status: 400, description: 'ID inválido' })
+  getFiscalConfigForAdmin(@Param('id', UuidValidationPipe) id: string) {
+    return this.companyService.getFiscalConfigForAdmin(id);
+  }
 }

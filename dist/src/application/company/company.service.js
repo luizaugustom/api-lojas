@@ -385,6 +385,9 @@ let CompanyService = CompanyService_1 = class CompanyService {
             if (updateFiscalConfigDto.certificatePassword) {
                 updateData.certificatePassword = this.encryptionService.encrypt(updateFiscalConfigDto.certificatePassword);
             }
+            if (updateFiscalConfigDto.certificateFileUrl !== undefined) {
+                updateData.certificateFileUrl = updateFiscalConfigDto.certificateFileUrl;
+            }
             if (updateFiscalConfigDto.csc) {
                 updateData.csc = this.encryptionService.encrypt(updateFiscalConfigDto.csc);
             }
@@ -427,6 +430,7 @@ let CompanyService = CompanyService_1 = class CompanyService {
                     taxRegime: true,
                     cnae: true,
                     certificatePassword: true,
+                    certificateFileUrl: true,
                     nfceSerie: true,
                     municipioIbge: true,
                     csc: true,
@@ -458,6 +462,7 @@ let CompanyService = CompanyService_1 = class CompanyService {
                 certificatePasswordMasked: company.certificatePassword
                     ? this.encryptionService.mask('********')
                     : null,
+                certificateFileUrl: company.certificateFileUrl,
                 nfceSerie: company.nfceSerie,
                 municipioIbge: company.municipioIbge,
                 hasCsc: !!company.csc,
@@ -469,6 +474,66 @@ let CompanyService = CompanyService_1 = class CompanyService {
         }
         catch (error) {
             this.logger.error('Error getting fiscal config:', error);
+            throw error;
+        }
+    }
+    async getFiscalConfigForAdmin(companyId) {
+        try {
+            const company = await this.prisma.company.findUnique({
+                where: { id: companyId },
+                select: {
+                    id: true,
+                    name: true,
+                    cnpj: true,
+                    stateRegistration: true,
+                    municipalRegistration: true,
+                    state: true,
+                    city: true,
+                    taxRegime: true,
+                    cnae: true,
+                    certificatePassword: true,
+                    certificateFileUrl: true,
+                    nfceSerie: true,
+                    municipioIbge: true,
+                    csc: true,
+                    idTokenCsc: true,
+                    focusNfeApiKey: true,
+                    focusNfeEnvironment: true,
+                    admin: {
+                        select: {
+                            focusNfeApiKey: true,
+                            focusNfeEnvironment: true,
+                        },
+                    },
+                },
+            });
+            if (!company) {
+                throw new common_1.NotFoundException('Empresa não encontrada');
+            }
+            return {
+                id: company.id,
+                name: company.name,
+                cnpj: company.cnpj,
+                stateRegistration: company.stateRegistration,
+                municipalRegistration: company.municipalRegistration,
+                state: company.state,
+                city: company.city,
+                taxRegime: company.taxRegime,
+                cnae: company.cnae,
+                certificatePassword: company.certificatePassword
+                    ? this.encryptionService.decrypt(company.certificatePassword)
+                    : null,
+                certificateFileUrl: company.certificateFileUrl,
+                nfceSerie: company.nfceSerie,
+                municipioIbge: company.municipioIbge,
+                csc: company.csc ? this.encryptionService.decrypt(company.csc) : null,
+                idTokenCsc: company.idTokenCsc,
+                focusNfeApiKey: company.focusNfeApiKey || company.admin.focusNfeApiKey,
+                focusNfeEnvironment: company.focusNfeEnvironment || company.admin.focusNfeEnvironment || 'sandbox',
+            };
+        }
+        catch (error) {
+            this.logger.error('Error getting fiscal config for admin:', error);
             throw error;
         }
     }
@@ -591,6 +656,7 @@ let CompanyService = CompanyService_1 = class CompanyService {
                 select: {
                     cnpj: true,
                     certificatePassword: true,
+                    certificateFileUrl: true,
                     name: true,
                     email: true,
                     phone: true,
@@ -631,6 +697,31 @@ let CompanyService = CompanyService_1 = class CompanyService {
             }
             const certificatePassword = this.encryptionService.decrypt(company.certificatePassword);
             this.logger.log(`Preparando upload do certificado - Arquivo: ${file.originalname}, Tamanho: ${file.size} bytes`);
+            let certificateFileUrl = null;
+            try {
+                const companyWithCert = await this.prisma.company.findUnique({
+                    where: { id: companyId },
+                    select: { certificateFileUrl: true },
+                });
+                if (companyWithCert?.certificateFileUrl) {
+                    try {
+                        await this.uploadService.deleteFile(companyWithCert.certificateFileUrl);
+                        this.logger.log(`Certificado antigo removido: ${companyWithCert.certificateFileUrl}`);
+                    }
+                    catch (error) {
+                        this.logger.warn('Erro ao remover certificado antigo:', error);
+                    }
+                }
+                certificateFileUrl = await this.uploadService.uploadFile(file, 'certificates');
+                await this.prisma.company.update({
+                    where: { id: companyId },
+                    data: { certificateFileUrl },
+                });
+                this.logger.log(`Certificado salvo no storage: ${certificateFileUrl}`);
+            }
+            catch (error) {
+                this.logger.error('Erro ao fazer upload do certificado para storage:', error);
+            }
             const certificadoBase64 = file.buffer.toString('base64');
             const baseUrl = environment === 'production'
                 ? 'https://api.focusnfe.com.br'

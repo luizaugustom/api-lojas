@@ -8,6 +8,7 @@ export declare class UpdateFiscalConfigDto {
     taxRegime?: TaxRegime;
     cnae?: string;
     certificatePassword?: string;
+    certificateFileUrl?: string;
     nfceSerie?: string;
     municipioIbge?: string;
     csc?: string;

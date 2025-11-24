@@ -125,6 +125,9 @@ let CompanyController = class CompanyController {
     getFocusNfeConfig(id) {
         return this.companyService.getFocusNfeConfig(id);
     }
+    getFiscalConfigForAdmin(id) {
+        return this.companyService.getFiscalConfigForAdmin(id);
+    }
 };
 exports.CompanyController = CompanyController;
 __decorate([
@@ -448,6 +451,18 @@ __decorate([
     __metadata("design:paramtypes", [String]),
     __metadata("design:returntype", void 0)
 ], CompanyController.prototype, "getFocusNfeConfig", null);
+__decorate([
+    (0, common_1.Get)(':id/fiscal-config'),
+    (0, roles_decorator_1.Roles)(roles_decorator_1.UserRole.ADMIN),
+    (0, swagger_1.ApiOperation)({ summary: 'Obter configurações fiscais completas da empresa (apenas admin, sem mascaramento)' }),
+    (0, swagger_1.ApiResponse)({ status: 200, description: 'Configurações fiscais completas' }),
+    (0, swagger_1.ApiResponse)({ status: 404, description: 'Empresa não encontrada' }),
+    (0, swagger_1.ApiResponse)({ status: 400, description: 'ID inválido' }),
+    __param(0, (0, common_1.Param)('id', uuid_validation_pipe_1.UuidValidationPipe)),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String]),
+    __metadata("design:returntype", void 0)
+], CompanyController.prototype, "getFiscalConfigForAdmin", null);
 exports.CompanyController = CompanyController = __decorate([
     (0, swagger_1.ApiTags)('company'),
     (0, common_1.Controller)('company'),

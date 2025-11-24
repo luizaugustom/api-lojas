@@ -58,6 +58,16 @@ __decorate([
 ], UpdateFiscalConfigDto.prototype, "certificatePassword", void 0);
 __decorate([
     (0, swagger_1.ApiProperty)({
+        description: 'URL do arquivo do certificado digital',
+        example: 'https://storage.googleapis.com/...',
+        required: false,
+    }),
+    (0, class_validator_1.IsOptional)(),
+    (0, class_validator_1.IsString)(),
+    __metadata("design:type", String)
+], UpdateFiscalConfigDto.prototype, "certificateFileUrl", void 0);
+__decorate([
+    (0, swagger_1.ApiProperty)({
         description: 'Série da NFC-e (geralmente 1)',
         example: '1',
         required: false,

@@ -241,6 +241,7 @@ export declare class CompanyController {
         cnae: string;
         hasCertificatePassword: boolean;
         certificatePasswordMasked: string;
+        certificateFileUrl: string;
         nfceSerie: string;
         municipioIbge: string;
         hasCsc: boolean;
@@ -349,5 +350,24 @@ export declare class CompanyController {
         isUsingAdminConfig: boolean;
         hasIbptToken: boolean;
         ibptToken: string;
+    }>;
+    getFiscalConfigForAdmin(id: string): Promise<{
+        id: string;
+        name: string;
+        cnpj: string;
+        stateRegistration: string;
+        municipalRegistration: string;
+        state: string;
+        city: string;
+        taxRegime: import(".prisma/client").$Enums.TaxRegime;
+        cnae: string;
+        certificatePassword: string;
+        certificateFileUrl: string;
+        nfceSerie: string;
+        municipioIbge: string;
+        csc: string;
+        idTokenCsc: string;
+        focusNfeApiKey: string;
+        focusNfeEnvironment: string;
     }>;
 }

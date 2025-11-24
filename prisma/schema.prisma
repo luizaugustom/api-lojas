@@ -108,6 +108,7 @@ model Company {
   taxRegime           TaxRegime? @default(SIMPLES_NACIONAL) // Regime tributário
   cnae                String? // CNAE - Classificação Nacional de Atividades Econômicas (7 dígitos)
   certificatePassword String? // Senha do certificado digital (criptografada)
+  certificateFileUrl  String? // URL do arquivo do certificado digital armazenado
   nfceSerie           String?    @default("1") // Série da NFC-e
   municipioIbge       String? // Código IBGE do município (ex: 4205407)
   csc                 String? // Código de Segurança do Contribuinte (criptografado)

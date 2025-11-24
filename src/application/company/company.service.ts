@@ -440,6 +440,10 @@ export class CompanyService {
         );
       }
 
+      if (updateFiscalConfigDto.certificateFileUrl !== undefined) {
+        updateData.certificateFileUrl = updateFiscalConfigDto.certificateFileUrl;
+      }
+
       if (updateFiscalConfigDto.csc) {
         updateData.csc = this.encryptionService.encrypt(updateFiscalConfigDto.csc);
       }
@@ -489,6 +493,7 @@ export class CompanyService {
           taxRegime: true,
           cnae: true,
           certificatePassword: true,
+          certificateFileUrl: true,
           nfceSerie: true,
           municipioIbge: true,
           csc: true,
@@ -523,6 +528,7 @@ export class CompanyService {
         certificatePasswordMasked: company.certificatePassword
           ? this.encryptionService.mask('********')
           : null,
+        certificateFileUrl: company.certificateFileUrl,
         nfceSerie: company.nfceSerie,
         municipioIbge: company.municipioIbge,
         hasCsc: !!company.csc,
@@ -534,6 +540,72 @@ export class CompanyService {
       };
     } catch (error) {
       this.logger.error('Error getting fiscal config:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Obter configurações fiscais completas para admin (sem mascaramento)
+   */
+  async getFiscalConfigForAdmin(companyId: string) {
+    try {
+      const company = await this.prisma.company.findUnique({
+        where: { id: companyId },
+        select: {
+          id: true,
+          name: true,
+          cnpj: true,
+          stateRegistration: true,
+          municipalRegistration: true,
+          state: true,
+          city: true,
+          taxRegime: true,
+          cnae: true,
+          certificatePassword: true,
+          certificateFileUrl: true,
+          nfceSerie: true,
+          municipioIbge: true,
+          csc: true,
+          idTokenCsc: true,
+          focusNfeApiKey: true,
+          focusNfeEnvironment: true,
+          admin: {
+            select: {
+              focusNfeApiKey: true,
+              focusNfeEnvironment: true,
+            },
+          },
+        },
+      });
+
+      if (!company) {
+        throw new NotFoundException('Empresa não encontrada');
+      }
+
+      // Descriptografar dados sensíveis para admin
+      return {
+        id: company.id,
+        name: company.name,
+        cnpj: company.cnpj,
+        stateRegistration: company.stateRegistration,
+        municipalRegistration: company.municipalRegistration,
+        state: company.state,
+        city: company.city,
+        taxRegime: company.taxRegime,
+        cnae: company.cnae,
+        certificatePassword: company.certificatePassword
+          ? this.encryptionService.decrypt(company.certificatePassword)
+          : null,
+        certificateFileUrl: company.certificateFileUrl,
+        nfceSerie: company.nfceSerie,
+        municipioIbge: company.municipioIbge,
+        csc: company.csc ? this.encryptionService.decrypt(company.csc) : null,
+        idTokenCsc: company.idTokenCsc,
+        focusNfeApiKey: company.focusNfeApiKey || company.admin.focusNfeApiKey,
+        focusNfeEnvironment: company.focusNfeEnvironment || company.admin.focusNfeEnvironment || 'sandbox',
+      };
+    } catch (error) {
+      this.logger.error('Error getting fiscal config for admin:', error);
       throw error;
     }
   }
@@ -690,6 +762,7 @@ export class CompanyService {
         select: {
           cnpj: true,
           certificatePassword: true,
+          certificateFileUrl: true,
           name: true,
           email: true,
           phone: true,
@@ -740,6 +813,40 @@ export class CompanyService {
       const certificatePassword = this.encryptionService.decrypt(company.certificatePassword);
 
       this.logger.log(`Preparando upload do certificado - Arquivo: ${file.originalname}, Tamanho: ${file.size} bytes`);
+
+      // Fazer upload do certificado para Firebase Storage e salvar URL no banco
+      let certificateFileUrl: string | null = null;
+      try {
+        // Buscar empresa novamente para pegar certificateFileUrl atual
+        const companyWithCert = await this.prisma.company.findUnique({
+          where: { id: companyId },
+          select: { certificateFileUrl: true },
+        });
+
+        // Se já existe um certificado, remover o antigo
+        if (companyWithCert?.certificateFileUrl) {
+          try {
+            await this.uploadService.deleteFile(companyWithCert.certificateFileUrl);
+            this.logger.log(`Certificado antigo removido: ${companyWithCert.certificateFileUrl}`);
+          } catch (error) {
+            this.logger.warn('Erro ao remover certificado antigo:', error);
+          }
+        }
+
+        // Fazer upload do novo certificado
+        certificateFileUrl = await this.uploadService.uploadFile(file, 'certificates');
+        
+        // Atualizar URL do certificado no banco
+        await this.prisma.company.update({
+          where: { id: companyId },
+          data: { certificateFileUrl },
+        });
+
+        this.logger.log(`Certificado salvo no storage: ${certificateFileUrl}`);
+      } catch (error) {
+        this.logger.error('Erro ao fazer upload do certificado para storage:', error);
+        // Continuar mesmo se falhar o upload para storage, pois ainda precisa enviar para Focus NFe
+      }
 
       // Converter o buffer do arquivo para base64
       const certificadoBase64 = file.buffer.toString('base64');

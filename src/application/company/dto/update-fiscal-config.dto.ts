@@ -41,6 +41,15 @@ export class UpdateFiscalConfigDto {
   certificatePassword?: string;
 
   @ApiProperty({
+    description: 'URL do arquivo do certificado digital',
+    example: 'https://storage.googleapis.com/...',
+    required: false,
+  })
+  @IsOptional()
+  @IsString()
+  certificateFileUrl?: string;
+
+  @ApiProperty({
     description: 'Série da NFC-e (geralmente 1)',
     example: '1',
     required: false,
