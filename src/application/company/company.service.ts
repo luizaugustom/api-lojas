@@ -1344,7 +1344,7 @@ export class CompanyService {
     try {
       const company = await this.prisma.company.findUnique({
         where: { id: companyId },
-        select: { id: true, name: true, catalogPageUrl: true, catalogPageEnabled: true, plan: true },
+        select: { id: true, name: true, catalogPageUrl: true, catalogPageEnabled: true, catalogPageAllowed: true, plan: true },
       });
 
       if (!company) {
@@ -1449,6 +1449,7 @@ export class CompanyService {
         where: {
           catalogPageUrl: url,
           catalogPageEnabled: true,
+          catalogPageAllowed: true,
         },
         select: {
           id: true,
@@ -1458,6 +1459,7 @@ export class CompanyService {
           logoUrl: true,
           brandColor: true,
           plan: true,
+          catalogPageAllowed: true,
           street: true,
           number: true,
           district: true,

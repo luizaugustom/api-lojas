@@ -26,12 +26,12 @@ describe('Plan Limits E2E Tests (with auto-cleanup)', () => {
   };
 
   let adminToken: string;
-  let companyBasicToken: string;
-  let companyPlusToken: string;
+  let companyTrialToken: string;
+  let companyProLimitedToken: string;
   let companyProToken: string;
   
-  let companyBasicId: string;
-  let companyPlusId: string;
+  let companyBasicId: string; // Mantido para compatibilidade com testes (agora é TRIAL)
+  let companyPlusId: string; // Mantido para compatibilidade com testes (agora é PRO com limites)
   let companyProId: string;
 
   beforeAll(async () => {
@@ -68,32 +68,38 @@ describe('Plan Limits E2E Tests (with auto-cleanup)', () => {
     adminToken = adminLoginResponse.body.access_token;
 
     // Criar empresas de teste com diferentes planos
-    const companyBasic = await request(app.getHttpServer())
+    // Usando TRIAL_7_DAYS para testes de limites (substitui BASIC)
+    const companyTrial = await request(app.getHttpServer())
       .post('/company')
       .set('Authorization', `Bearer ${adminToken}`)
       .send({
-        name: 'Empresa BASIC Test',
-        login: 'basic-test@test.com',
-        password: 'basic123',
+        name: 'Empresa TRIAL Test',
+        login: 'trial-test@test.com',
+        password: 'trial123',
         cnpj: '11.111.111/0001-11',
-        email: 'basic-test@test.com',
-        plan: PlanType.BASIC,
+        email: 'trial-test@test.com',
+        plan: PlanType.TRIAL_7_DAYS,
+        maxProducts: 250, // Limite customizado para teste
+        maxSellers: 1,
       });
-    companyBasicId = companyBasic.body.id;
+    companyBasicId = companyTrial.body.id;
     createdIds.companies.push(companyBasicId);
 
-    const companyPlus = await request(app.getHttpServer())
+    // Usando PRO com limites customizados (substitui PLUS)
+    const companyProLimited = await request(app.getHttpServer())
       .post('/company')
       .set('Authorization', `Bearer ${adminToken}`)
       .send({
-        name: 'Empresa PLUS Test',
-        login: 'plus-test@test.com',
-        password: 'plus123',
+        name: 'Empresa PRO Limited Test',
+        login: 'pro-limited-test@test.com',
+        password: 'prolimited123',
         cnpj: '22.222.222/0001-22',
-        email: 'plus-test@test.com',
-        plan: PlanType.PLUS,
+        email: 'pro-limited-test@test.com',
+        plan: PlanType.PRO,
+        maxProducts: 800, // Limite customizado para teste
+        maxSellers: 2,
       });
-    companyPlusId = companyPlus.body.id;
+    companyPlusId = companyProLimited.body.id;
     createdIds.companies.push(companyPlusId);
 
     const companyPro = await request(app.getHttpServer())
@@ -111,23 +117,25 @@ describe('Plan Limits E2E Tests (with auto-cleanup)', () => {
     createdIds.companies.push(companyProId);
 
     // Login empresas
-    const basicLoginResponse = await request(app.getHttpServer())
+    const trialLoginResponse = await request(app.getHttpServer())
       .post('/auth/login')
       .send({
-        login: 'basic-test@test.com',
-        password: 'basic123',
+        login: 'trial-test@test.com',
+        password: 'trial123',
         role: 'company',
       });
-    companyBasicToken = basicLoginResponse.body.access_token;
+    companyTrialToken = trialLoginResponse.body.access_token;
+    companyBasicToken = companyTrialToken; // Alias para compatibilidade
 
-    const plusLoginResponse = await request(app.getHttpServer())
+    const proLimitedLoginResponse = await request(app.getHttpServer())
       .post('/auth/login')
       .send({
-        login: 'plus-test@test.com',
-        password: 'plus123',
+        login: 'pro-limited-test@test.com',
+        password: 'prolimited123',
         role: 'company',
       });
-    companyPlusToken = plusLoginResponse.body.access_token;
+    companyProLimitedToken = proLimitedLoginResponse.body.access_token;
+    companyPlusToken = companyProLimitedToken; // Alias para compatibilidade
 
     const proLoginResponse = await request(app.getHttpServer())
       .post('/auth/login')
@@ -193,14 +201,14 @@ describe('Plan Limits E2E Tests (with auto-cleanup)', () => {
   });
 
   describe('Product Limits', () => {
-    it('should allow creating products within BASIC plan limit (250)', async () => {
+    it('should allow creating products within custom limit (250)', async () => {
       // Criar produto dentro do limite
       const response = await request(app.getHttpServer())
         .post('/product')
         .set('Authorization', `Bearer ${companyBasicToken}`)
         .send({
-          name: 'Produto Test Basic 1',
-          barcode: `BASIC-TEST-${Date.now()}`,
+          name: 'Produto Test 1',
+          barcode: `TEST-${Date.now()}`,
           price: 10.0,
           stockQuantity: 100,
         });
@@ -209,7 +217,7 @@ describe('Plan Limits E2E Tests (with auto-cleanup)', () => {
       createdIds.products.push(response.body.id);
     });
 
-    it('should block creating products beyond BASIC plan limit', async () => {
+    it('should block creating products beyond custom limit', async () => {
       // Criar 250 produtos para atingir o limite
       const promises = [];
       for (let i = 0; i < 250; i++) {
@@ -281,7 +289,7 @@ describe('Plan Limits E2E Tests (with auto-cleanup)', () => {
   });
 
   describe('Seller Limits', () => {
-    it('should allow creating 1 seller for BASIC plan', async () => {
+    it('should allow creating 1 seller within custom limit', async () => {
       const response = await request(app.getHttpServer())
         .post('/seller')
         .set('Authorization', `Bearer ${companyBasicToken}`)
@@ -295,7 +303,7 @@ describe('Plan Limits E2E Tests (with auto-cleanup)', () => {
       createdIds.sellers.push(response.body.id);
     });
 
-    it('should block creating 2nd seller for BASIC plan', async () => {
+    it('should block creating 2nd seller when limit is reached', async () => {
       const response = await request(app.getHttpServer())
         .post('/seller')
         .set('Authorization', `Bearer ${companyBasicToken}`)
@@ -309,7 +317,7 @@ describe('Plan Limits E2E Tests (with auto-cleanup)', () => {
       expect(response.body.message).toContain('Limite de vendedores atingido');
     });
 
-    it('should allow creating 2 sellers for PLUS plan', async () => {
+    it('should allow creating 2 sellers within custom limit', async () => {
       const response1 = await request(app.getHttpServer())
         .post('/seller')
         .set('Authorization', `Bearer ${companyPlusToken}`)
@@ -333,7 +341,7 @@ describe('Plan Limits E2E Tests (with auto-cleanup)', () => {
       createdIds.sellers.push(response2.body.id);
     });
 
-    it('should block creating 3rd seller for PLUS plan', async () => {
+    it('should block creating 3rd seller when limit is reached', async () => {
       const response = await request(app.getHttpServer())
         .post('/seller')
         .set('Authorization', `Bearer ${companyPlusToken}`)
@@ -366,7 +374,7 @@ describe('Plan Limits E2E Tests (with auto-cleanup)', () => {
   });
 
   describe('Bill To Pay Limits', () => {
-    it('should allow creating 5 bills for BASIC plan', async () => {
+    it('should allow creating bills (unlimited by default)', async () => {
       for (let i = 0; i < 5; i++) {
         const response = await request(app.getHttpServer())
           .post('/bill-to-pay')
@@ -382,19 +390,8 @@ describe('Plan Limits E2E Tests (with auto-cleanup)', () => {
       }
     });
 
-    it('should block creating 6th bill for BASIC plan', async () => {
-      const response = await request(app.getHttpServer())
-        .post('/bill-to-pay')
-        .set('Authorization', `Bearer ${companyBasicToken}`)
-        .send({
-          title: 'Conta Basic 6',
-          amount: 100.0,
-          dueDate: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(),
-        });
-
-      expect(response.status).toBe(400);
-      expect(response.body.message).toContain('Limite de contas a pagar atingido');
-    });
+    // Nota: Contas a pagar agora são ilimitadas por padrão (sem limite por plano)
+    // O limite só existe se configurado customizadamente na empresa
 
     it('should allow creating bills again after marking one as paid', async () => {
       // Pagar uma conta
@@ -411,29 +408,13 @@ describe('Plan Limits E2E Tests (with auto-cleanup)', () => {
         .post('/bill-to-pay')
         .set('Authorization', `Bearer ${companyBasicToken}`)
         .send({
-          title: 'Conta Basic Nova',
+          title: 'Conta Nova',
           amount: 100.0,
           dueDate: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(),
         });
 
       expect(response.status).toBe(201);
       createdIds.billsToPay.push(response.body.id);
-    });
-
-    it('should allow creating 15 bills for PLUS plan', async () => {
-      for (let i = 0; i < 15; i++) {
-        const response = await request(app.getHttpServer())
-          .post('/bill-to-pay')
-          .set('Authorization', `Bearer ${companyPlusToken}`)
-          .send({
-            title: `Conta Plus ${i}`,
-            amount: 100.0,
-            dueDate: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(),
-          });
-
-        expect(response.status).toBe(201);
-        createdIds.billsToPay.push(response.body.id);
-      }
     });
 
     it('should allow unlimited bills for PRO plan', async () => {
