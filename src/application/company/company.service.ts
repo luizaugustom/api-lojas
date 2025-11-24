@@ -10,7 +10,6 @@ import { UpdateFiscalConfigDto } from './dto/update-fiscal-config.dto';
 import { UpdateCatalogPageDto } from './dto/update-catalog-page.dto';
 import { PlanType, DataPeriodFilter } from '@prisma/client';
 import axios from 'axios';
-import * as FormData from 'form-data';
 import * as fs from 'fs';
 import * as path from 'path';
 
@@ -639,17 +638,8 @@ export class CompanyService {
 
       this.logger.log(`Preparando upload do certificado - Arquivo: ${file.originalname}, Tamanho: ${file.size} bytes`);
 
-      // Preparar dados para envio
-      const formData = new FormData();
-      
-      // Anexar o buffer do arquivo corretamente
-      formData.append('certificado', file.buffer, {
-        filename: file.originalname,
-        contentType: 'application/x-pkcs12',
-        knownLength: file.size,
-      });
-      
-      formData.append('senha', certificatePassword);
+      // Converter o buffer do arquivo para base64
+      const certificadoBase64 = file.buffer.toString('base64');
 
       // Determinar URL base
       const baseUrl = company.admin.focusNfeEnvironment === 'production'
@@ -658,21 +648,23 @@ export class CompanyService {
 
       this.logger.log(`Enviando certificado para Focus NFe - CNPJ: ${company.cnpj}, Ambiente: ${company.admin.focusNfeEnvironment}`);
 
-      // Enviar para Focus NFe
-      const response = await axios.post(
-        `${baseUrl}/v2/empresas/${cnpjNumeros}/certificado`,
-        formData,
+      // Atualizar empresa com o certificado através da API de empresas
+      // Segundo a documentação do Focus NFe, o certificado é enviado em base64
+      const response = await axios.put(
+        `${baseUrl}/v2/empresas/${cnpjNumeros}`,
         {
-          headers: {
-            ...formData.getHeaders(),
-          },
+          arquivo_certificado_base64: certificadoBase64,
+          senha_certificado: certificatePassword,
+        },
+        {
           auth: {
             username: company.admin.focusNfeApiKey,
             password: '',
           },
+          headers: {
+            'Content-Type': 'application/json',
+          },
           timeout: 30000, // 30 segundos
-          maxContentLength: Infinity,
-          maxBodyLength: Infinity,
         }
       );
 
