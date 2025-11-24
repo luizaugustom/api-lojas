@@ -278,6 +278,108 @@ export class ReportsService {
     };
   }
 
+  private async calculateNetProfit(
+    companyId: string,
+    salesReport: any,
+    commissions: any,
+    productLosses: any,
+    billsToPay: any,
+    startDate?: string,
+    endDate?: string,
+    sellerId?: string,
+  ) {
+    // 1. Receita Bruta (total das vendas)
+    const grossRevenue = salesReport.summary.totalRevenue || 0;
+
+    // 2. Calcular CMV (Custo das Mercadorias Vendidas)
+    // Buscar vendas com itens e produtos para calcular o custo
+    const where: any = { companyId };
+    if (sellerId) {
+      where.sellerId = sellerId;
+    }
+    if (startDate || endDate) {
+      where.saleDate = {};
+      if (startDate) {
+        where.saleDate.gte = new Date(startDate);
+      }
+      if (endDate) {
+        where.saleDate.lte = new Date(endDate);
+      }
+    }
+
+    const sales = await this.prisma.sale.findMany({
+      where,
+      include: {
+        items: {
+          include: {
+            product: {
+              select: {
+                costPrice: true,
+              },
+            },
+          },
+        },
+      },
+    });
+
+    // Calcular CMV somando (quantidade * custo) de cada item vendido
+    let cmv = 0;
+    sales.forEach((sale) => {
+      sale.items.forEach((item) => {
+        const costPrice = item.product.costPrice ? Number(item.product.costPrice) : 0;
+        cmv += item.quantity * costPrice;
+      });
+    });
+
+    // 3. Comissões
+    const totalCommissions = commissions.summary?.totalCommissions || 0;
+
+    // 4. Perdas de produtos
+    const totalProductLosses = productLosses.summary?.totalCost || 0;
+
+    // 5. Contas a Pagar (apenas as pagas no período)
+    let paidBills = billsToPay.bills?.filter((bill: any) => bill.isPaid) || [];
+    
+    // Se houver período especificado, filtrar apenas contas pagas no período
+    if (startDate || endDate) {
+      paidBills = paidBills.filter((bill: any) => {
+        if (!bill.paidAt) return false;
+        const paidDate = new Date(bill.paidAt);
+        if (startDate && paidDate < new Date(startDate)) return false;
+        if (endDate) {
+          const endDateObj = new Date(endDate);
+          endDateObj.setHours(23, 59, 59, 999); // Incluir o dia inteiro
+          if (paidDate > endDateObj) return false;
+        }
+        return true;
+      });
+    }
+    
+    const totalPaidBills = paidBills.reduce((sum: number, bill: any) => sum + bill.amount, 0);
+
+    // 6. Total de descontos
+    const totalDiscounts = cmv + totalCommissions + totalProductLosses + totalPaidBills;
+
+    // 7. Lucro Líquido = Receita Bruta - Total de Descontos
+    const netProfit = grossRevenue - totalDiscounts;
+
+    // Calcular margem de lucro (%)
+    const profitMargin = grossRevenue > 0 ? (netProfit / grossRevenue) * 100 : 0;
+
+    return {
+      grossRevenue,
+      discounts: {
+        costOfGoodsSold: cmv, // CMV - Custo das Mercadorias Vendidas
+        commissions: totalCommissions,
+        productLosses: totalProductLosses,
+        paidBills: totalPaidBills,
+        total: totalDiscounts,
+      },
+      netProfit,
+      profitMargin: Number(profitMargin.toFixed(2)),
+    };
+  }
+
   private async generateCompleteReport(
     companyId: string,
     startDate?: string,
@@ -295,6 +397,18 @@ export class ReportsService {
         this.getProductLosses(companyId, startDate, endDate),
       ]);
 
+    // Calcular lucro líquido
+    const netProfit = await this.calculateNetProfit(
+      companyId,
+      salesReport,
+      commissions,
+      productLosses,
+      billsToPay,
+      startDate,
+      endDate,
+      sellerId,
+    );
+
     return {
       sales: salesReport,
       products: productsReport,
@@ -303,6 +417,7 @@ export class ReportsService {
       cashClosures,
       commissions,
       productLosses,
+      netProfit,
     };
   }
 
@@ -338,6 +453,7 @@ export class ReportsService {
         dueDate: bill.dueDate,
         amount: Number(bill.amount),
         isPaid: bill.isPaid,
+        paidAt: bill.paidAt,
       })),
     };
   }
@@ -484,6 +600,9 @@ export class ReportsService {
       this.addCashClosuresSheet(workbook, data.data.cashClosures, clientTimeInfo);
       this.addCommissionsSheet(workbook, data.data.commissions);
       this.addProductLossesSheet(workbook, data.data.productLosses, clientTimeInfo);
+      if (data.data.netProfit) {
+        this.addNetProfitSheet(workbook, data.data.netProfit);
+      }
     }
 
     const arrayBuffer = await workbook.xlsx.writeBuffer();
@@ -794,6 +913,110 @@ export class ReportsService {
     // Formatar colunas numéricas como moeda
     sheet.getColumn('unitCost').numFmt = 'R$ #,##0.00';
     sheet.getColumn('totalCost').numFmt = 'R$ #,##0.00';
+  }
+
+  private addNetProfitSheet(workbook: ExcelJS.Workbook, netProfitData: any) {
+    const sheet = workbook.addWorksheet('Lucro Líquido');
+    
+    // Cabeçalho
+    const titleRow = sheet.addRow(['RELATÓRIO DE LUCRO LÍQUIDO']);
+    titleRow.font = { bold: true, size: 14 };
+    titleRow.alignment = { horizontal: 'center' };
+    sheet.mergeCells(1, 1, 1, 2);
+    sheet.addRow([]); // Linha em branco
+
+    // Receita Bruta
+    sheet.addRow(['Receita Bruta', netProfitData.grossRevenue]);
+    const grossRevenueRow = sheet.lastRow;
+    grossRevenueRow.getCell(1).font = { bold: true };
+    grossRevenueRow.getCell(2).numFmt = 'R$ #,##0.00';
+    sheet.addRow([]); // Linha em branco
+
+    // Seção de Descontos
+    const discountTitleRow = sheet.addRow(['DESCONTOS']);
+    discountTitleRow.font = { bold: true, size: 12 };
+    discountTitleRow.fill = {
+      type: 'pattern',
+      pattern: 'solid',
+      fgColor: { argb: 'FFE0E0E0' },
+    };
+    sheet.mergeCells(discountTitleRow.number, 1, discountTitleRow.number, 2);
+
+    // CMV
+    sheet.addRow(['CMV - Custo das Mercadorias Vendidas', netProfitData.discounts.costOfGoodsSold]);
+    const cmvRow = sheet.lastRow;
+    cmvRow.getCell(2).numFmt = 'R$ #,##0.00';
+
+    // Comissões
+    sheet.addRow(['Comissões de Vendedores', netProfitData.discounts.commissions]);
+    const commissionsRow = sheet.lastRow;
+    commissionsRow.getCell(2).numFmt = 'R$ #,##0.00';
+
+    // Perdas de Produtos
+    sheet.addRow(['Perdas de Produtos', netProfitData.discounts.productLosses]);
+    const lossesRow = sheet.lastRow;
+    lossesRow.getCell(2).numFmt = 'R$ #,##0.00';
+
+    // Contas a Pagar (pagas)
+    sheet.addRow(['Contas a Pagar (Pagas)', netProfitData.discounts.paidBills]);
+    const billsRow = sheet.lastRow;
+    billsRow.getCell(2).numFmt = 'R$ #,##0.00';
+
+    // Linha em branco
+    sheet.addRow([]);
+
+    // Total de Descontos
+    const totalDiscountsRow = sheet.addRow(['TOTAL DE DESCONTOS', netProfitData.discounts.total]);
+    totalDiscountsRow.getCell(1).font = { bold: true };
+    totalDiscountsRow.getCell(2).font = { bold: true };
+    totalDiscountsRow.getCell(2).numFmt = 'R$ #,##0.00';
+    totalDiscountsRow.fill = {
+      type: 'pattern',
+      pattern: 'solid',
+      fgColor: { argb: 'FFFFEB3B' },
+    };
+
+    sheet.addRow([]); // Linha em branco
+
+    // Lucro Líquido
+    const netProfitRow = sheet.addRow(['LUCRO LÍQUIDO', netProfitData.netProfit]);
+    netProfitRow.getCell(1).font = { bold: true, size: 12 };
+    netProfitRow.getCell(2).font = { bold: true, size: 12 };
+    netProfitRow.getCell(2).numFmt = 'R$ #,##0.00';
+    netProfitRow.fill = {
+      type: 'pattern',
+      pattern: 'solid',
+      fgColor: { argb: netProfitData.netProfit >= 0 ? 'FFC8E6C9' : 'FFFFCDD2' },
+    };
+
+    // Margem de Lucro
+    sheet.addRow(['Margem de Lucro (%)', `${netProfitData.profitMargin}%`]);
+    const marginRow = sheet.lastRow;
+    marginRow.getCell(1).font = { bold: true };
+    marginRow.getCell(2).font = { bold: true };
+
+    // Ajustar largura das colunas
+    sheet.getColumn(1).width = 45;
+    sheet.getColumn(2).width = 25;
+    sheet.getColumn(2).alignment = { horizontal: 'right' };
+
+    // Adicionar bordas nas células de valores
+    [grossRevenueRow, cmvRow, commissionsRow, lossesRow, billsRow, totalDiscountsRow, netProfitRow, marginRow].forEach((row) => {
+      if (row) {
+        row.getCell(1).border = {
+          top: { style: 'thin' },
+          bottom: { style: 'thin' },
+          left: { style: 'thin' },
+          right: { style: 'thin' },
+        };
+        row.getCell(2).border = {
+          top: { style: 'thin' },
+          bottom: { style: 'thin' },
+          left: { style: 'thin' },
+          right: { style: 'thin' },
+        };
+      }
+    });
   }
 
   private async generateReportFile(
