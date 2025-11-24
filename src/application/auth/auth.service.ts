@@ -79,7 +79,18 @@ export class AuthService {
       // Try to find user in different tables
       const [admin, company, seller] = await Promise.all([
         this.prisma.admin.findUnique({ where: { login } }),
-        this.prisma.company.findUnique({ where: { login } }),
+        this.prisma.company.findUnique({ 
+          where: { login },
+          select: {
+            id: true,
+            login: true,
+            password: true,
+            name: true,
+            isActive: true,
+            plan: true,
+            defaultDataPeriod: true,
+          },
+        }),
         this.prisma.seller.findUnique({ where: { login } }),
       ]);
 
@@ -229,7 +240,17 @@ export class AuthService {
         user = await this.prisma.admin.findUnique({ where: { id: tokenRecord.userId } });
         break;
       case 'company':
-        user = await this.prisma.company.findUnique({ where: { id: tokenRecord.userId } });
+        user = await this.prisma.company.findUnique({ 
+          where: { id: tokenRecord.userId },
+          select: {
+            id: true,
+            login: true,
+            name: true,
+            isActive: true,
+            plan: true,
+            defaultDataPeriod: true,
+          },
+        });
         break;
       case 'seller':
         user = await this.prisma.seller.findUnique({ where: { id: tokenRecord.userId } });
@@ -336,6 +357,14 @@ export class AuthService {
         case 'company':
           user = await this.prisma.company.findUnique({
             where: { id: payload.sub },
+            select: {
+              id: true,
+              login: true,
+              name: true,
+              isActive: true,
+              plan: true,
+              defaultDataPeriod: true,
+            },
           });
           break;
         case 'seller':
@@ -563,6 +592,10 @@ export class AuthService {
         case 'company':
           user = await this.prisma.company.findUnique({
             where: { id: userId },
+            select: {
+              id: true,
+              password: true,
+            },
           });
           break;
         case 'seller':
