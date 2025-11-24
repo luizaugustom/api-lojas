@@ -652,6 +652,7 @@ export class CompanyService {
       this.logger.log(`Buscando ID da empresa no Focus NFe - CNPJ: ${cnpjNumeros}`);
       
       let empresaId: string;
+      let empresaExiste = false;
       
       try {
         const consultaResponse = await axios.get(
@@ -668,50 +669,68 @@ export class CompanyService {
         // A API retorna um array de empresas
         const empresas = consultaResponse.data;
         
-        if (!empresas || empresas.length === 0) {
-          throw new BadRequestException(
-            'Empresa não cadastrada no Focus NFe. Cadastre a empresa primeiro antes de enviar o certificado.'
-          );
+        if (empresas && empresas.length > 0) {
+          empresaId = empresas[0].id;
+          empresaExiste = true;
+          this.logger.log(`ID da empresa encontrado: ${empresaId}`);
         }
-
-        empresaId = empresas[0].id;
-        this.logger.log(`ID da empresa encontrado: ${empresaId}`);
         
       } catch (error: any) {
-        if (error instanceof BadRequestException) {
-          throw error;
-        }
-        
-        this.logger.error('Erro ao buscar empresa no Focus NFe:', {
-          message: error.message,
-          response: error.response?.data,
-          status: error.response?.status,
-        });
-        
-        throw new BadRequestException(
-          'Erro ao consultar empresa no Focus NFe. Verifique se a empresa está cadastrada.'
-        );
+        this.logger.warn('Empresa não encontrada no Focus NFe, será criada automaticamente');
       }
 
-      // Atualizar empresa com o certificado através da API de empresas
-      // Segundo a documentação do Focus NFe, o certificado é enviado em base64
-      const response = await axios.put(
-        `${baseUrl}/v2/empresas/${empresaId}`,
-        {
-          arquivo_certificado_base64: certificadoBase64,
-          senha_certificado: certificatePassword,
-        },
-        {
-          auth: {
-            username: company.admin.focusNfeApiKey,
-            password: '',
+      let response;
+
+      if (!empresaExiste) {
+        // Criar empresa no Focus NFe com o certificado
+        this.logger.log(`Criando empresa no Focus NFe - CNPJ: ${cnpjNumeros}, Nome: ${company.name}`);
+        
+        response = await axios.post(
+          `${baseUrl}/v2/empresas`,
+          {
+            nome: company.name,
+            cnpj: cnpjNumeros,
+            arquivo_certificado_base64: certificadoBase64,
+            senha_certificado: certificatePassword,
           },
-          headers: {
-            'Content-Type': 'application/json',
+          {
+            auth: {
+              username: company.admin.focusNfeApiKey,
+              password: '',
+            },
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            timeout: 30000,
+          }
+        );
+
+        this.logger.log(`Empresa criada com sucesso no Focus NFe - ID: ${response.data.id}`);
+        
+      } else {
+        // Atualizar empresa existente com o certificado
+        this.logger.log(`Atualizando certificado da empresa existente - ID: ${empresaId}`);
+        
+        response = await axios.put(
+          `${baseUrl}/v2/empresas/${empresaId}`,
+          {
+            arquivo_certificado_base64: certificadoBase64,
+            senha_certificado: certificatePassword,
           },
-          timeout: 30000, // 30 segundos
-        }
-      );
+          {
+            auth: {
+              username: company.admin.focusNfeApiKey,
+              password: '',
+            },
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            timeout: 30000,
+          }
+        );
+
+        this.logger.log(`Certificado atualizado com sucesso no Focus NFe`);
+      }
 
       this.logger.log(`Certificado enviado ao Focus NFe para empresa: ${companyId}`);
       
