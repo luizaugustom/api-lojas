@@ -1352,10 +1352,13 @@ export class CompanyService {
       }
 
       // Validar se a empresa tem permissão para usar catálogo digital
-      if (updateCatalogPageDto.catalogPageEnabled === true && !company.catalogPageAllowed) {
-        throw new BadRequestException(
-          'A empresa não tem permissão para usar catálogo digital. Entre em contato com o administrador.'
-        );
+      if (updateCatalogPageDto.catalogPageEnabled === true) {
+        // Verificar se catalogPageAllowed existe e é true
+        if (company.catalogPageAllowed === false || company.catalogPageAllowed === null || company.catalogPageAllowed === undefined) {
+          throw new BadRequestException(
+            'A empresa não tem permissão para usar catálogo digital. Entre em contato com o administrador para autorizar esta funcionalidade.'
+          );
+        }
       }
 
       const updateData: any = {};
@@ -1420,6 +1423,7 @@ export class CompanyService {
           name: true,
           catalogPageUrl: true,
           catalogPageEnabled: true,
+          catalogPageAllowed: true,
         },
       });
 
@@ -1430,6 +1434,7 @@ export class CompanyService {
       return {
         catalogPageUrl: company.catalogPageUrl,
         catalogPageEnabled: company.catalogPageEnabled,
+        catalogPageAllowed: company.catalogPageAllowed ?? true, // Default para true se null/undefined
         pageUrl: company.catalogPageUrl
           ? `/catalog/${company.catalogPageUrl}`
           : null,
