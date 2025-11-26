@@ -6,6 +6,8 @@ import {
   Res,
   HttpStatus,
   Req,
+  Logger,
+  InternalServerErrorException,
 } from '@nestjs/common';
 import {
   ApiTags,
@@ -27,6 +29,8 @@ import { extractClientTimeInfo } from '../../shared/utils/client-time.util';
 @UseGuards(JwtAuthGuard, RolesGuard)
 @ApiBearerAuth()
 export class ReportsController {
+  private readonly logger = new Logger(ReportsController.name);
+
   constructor(private readonly reportsService: ReportsService) {}
 
   @Post('generate')
@@ -54,21 +58,29 @@ export class ReportsController {
     @Req() req: Request,
     @Res() res: Response,
   ) {
-    const clientTimeInfo = extractClientTimeInfo(req);
-    const result = await this.reportsService.generateReport(
-      user.companyId,
-      generateReportDto,
-      clientTimeInfo,
-    );
+    try {
+      const clientTimeInfo = extractClientTimeInfo(req);
+      const result = await this.reportsService.generateReport(
+        user.companyId,
+        generateReportDto,
+        clientTimeInfo,
+      );
 
-    res.setHeader('Content-Type', result.contentType);
-    res.setHeader('Content-Disposition', `attachment; filename="${result.filename}"`);
+      res.setHeader('Content-Type', result.contentType);
+      res.setHeader('Content-Disposition', `attachment; filename="${result.filename}"`);
 
-    if (Buffer.isBuffer(result.data) || typeof result.data === 'string') {
-      res.setHeader('Content-Length', Buffer.byteLength(result.data));
-      return res.status(HttpStatus.OK).send(result.data);
+      if (Buffer.isBuffer(result.data) || typeof result.data === 'string') {
+        res.setHeader('Content-Length', Buffer.byteLength(result.data));
+        return res.status(HttpStatus.OK).send(result.data);
+      }
+
+      return res.status(HttpStatus.OK).json(result.data);
+    } catch (error: any) {
+      this.logger.error('Erro ao gerar relatório:', error);
+      this.logger.error('Stack trace:', error?.stack);
+      throw new InternalServerErrorException(
+        `Erro ao gerar relatório: ${error?.message || 'Erro desconhecido'}`,
+      );
     }
-
-    return res.status(HttpStatus.OK).json(result.data);
   }
 }

@@ -33,102 +33,114 @@ export class ReportsService {
     generateReportDto: GenerateReportDto,
     clientTimeInfo?: ClientTimeInfo,
   ) {
-    this.logger.log(`Generating ${generateReportDto.reportType} report for company: ${companyId}`);
+    try {
+      this.logger.log(`Generating ${generateReportDto.reportType} report for company: ${companyId}`);
 
-    const company = await this.prisma.company.findUnique({
-      where: { id: companyId },
-    });
+      const company = await this.prisma.company.findUnique({
+        where: { id: companyId },
+      });
 
-    if (!company) {
-      throw new NotFoundException('Empresa não encontrada');
-    }
+      if (!company) {
+        throw new NotFoundException('Empresa não encontrada');
+      }
 
-    const { reportType, format, startDate, endDate, sellerId, includeDocuments } =
-      generateReportDto;
+      const { reportType, format, startDate, endDate, sellerId, includeDocuments } =
+        generateReportDto;
 
-    let reportData: any;
+      let reportData: any;
 
-    switch (reportType) {
-      case ReportType.SALES:
-        reportData = await this.generateSalesReport(companyId, startDate, endDate, sellerId);
-        break;
-      case ReportType.PRODUCTS:
-        reportData = await this.generateProductsReport(companyId);
-        break;
-      case ReportType.INVOICES:
-        reportData = await this.generateInvoicesReport(companyId, startDate, endDate);
-        break;
-      case ReportType.COMPLETE:
-        reportData = await this.generateCompleteReport(companyId, startDate, endDate, sellerId);
-        break;
-    }
+      switch (reportType) {
+        case ReportType.SALES:
+          reportData = await this.generateSalesReport(companyId, startDate, endDate, sellerId);
+          break;
+        case ReportType.PRODUCTS:
+          reportData = await this.generateProductsReport(companyId);
+          break;
+        case ReportType.INVOICES:
+          reportData = await this.generateInvoicesReport(companyId, startDate, endDate);
+          break;
+        case ReportType.COMPLETE:
+          reportData = await this.generateCompleteReport(companyId, startDate, endDate, sellerId);
+          break;
+        default:
+          throw new Error(`Tipo de relatório inválido: ${reportType}`);
+      }
 
-    const reportWithCompany = {
-      company: {
-        id: company.id,
-        name: company.name,
-        cnpj: company.cnpj,
-        email: company.email,
-        phone: company.phone,
-        stateRegistration: company.stateRegistration,
-        municipalRegistration: company.municipalRegistration,
-      },
-      reportMetadata: {
-        type: reportType,
-        generatedAt: getClientNow(clientTimeInfo).toISOString(),
-        period: {
-          startDate: startDate || null,
-          endDate: endDate || null,
+      if (!reportData) {
+        throw new Error('Nenhum dado foi gerado para o relatório');
+      }
+
+      const reportWithCompany = {
+        company: {
+          id: company.id,
+          name: company.name,
+          cnpj: company.cnpj,
+          email: company.email,
+          phone: company.phone,
+          stateRegistration: company.stateRegistration,
+          municipalRegistration: company.municipalRegistration,
         },
-        clientTimeInfo: clientTimeInfo
-          ? {
-              timeZone: clientTimeInfo.timeZone,
-              locale: clientTimeInfo.locale,
-              utcOffsetMinutes: clientTimeInfo.utcOffsetMinutes,
-              currentDate: clientTimeInfo.currentDate?.toISOString(),
-            }
-          : undefined,
-      },
-      data: reportData,
-    };
-
-    const timestamp = getClientNow(clientTimeInfo).toISOString().replace(/[:.]/g, '-');
-    const reportBaseName = `relatorio-${reportType}-${timestamp}`;
-
-    const reportFile = await this.generateReportFile(
-      reportWithCompany,
-      reportType,
-      format,
-      clientTimeInfo,
-      reportBaseName,
-    );
-
-    if (!includeDocuments) {
-      return {
-        contentType: reportFile.contentType,
-        data: reportFile.buffer,
-        filename: reportFile.filename,
+        reportMetadata: {
+          type: reportType,
+          generatedAt: getClientNow(clientTimeInfo).toISOString(),
+          period: {
+            startDate: startDate || null,
+            endDate: endDate || null,
+          },
+          clientTimeInfo: clientTimeInfo
+            ? {
+                timeZone: clientTimeInfo.timeZone,
+                locale: clientTimeInfo.locale,
+                utcOffsetMinutes: clientTimeInfo.utcOffsetMinutes,
+                currentDate: clientTimeInfo.currentDate?.toISOString(),
+              }
+            : undefined,
+        },
+        data: reportData,
       };
+
+      const timestamp = getClientNow(clientTimeInfo).toISOString().replace(/[:.]/g, '-');
+      const reportBaseName = `relatorio-${reportType}-${timestamp}`;
+
+      const reportFile = await this.generateReportFile(
+        reportWithCompany,
+        reportType,
+        format,
+        clientTimeInfo,
+        reportBaseName,
+      );
+
+      if (!includeDocuments) {
+        return {
+          contentType: reportFile.contentType,
+          data: reportFile.buffer,
+          filename: reportFile.filename,
+        };
+      }
+
+      let invoicesData: any;
+      if (reportType === ReportType.INVOICES) {
+        invoicesData = reportData;
+      } else if (reportType === ReportType.COMPLETE) {
+        invoicesData = reportData?.invoices;
+      } else {
+        invoicesData = await this.generateInvoicesReport(companyId, startDate, endDate);
+      }
+
+      const invoices = Array.isArray(invoicesData?.invoices) ? invoicesData.invoices : [];
+
+      const zipBuffer = await this.buildZipPackage(reportFile, invoices, timestamp, companyId);
+
+      return {
+        contentType: 'application/zip',
+        data: zipBuffer,
+        filename: `${reportBaseName}.zip`,
+      };
+    } catch (error: any) {
+      this.logger.error('Erro ao gerar relatório:', error);
+      this.logger.error('Stack trace:', error?.stack);
+      throw error;
     }
-
-    let invoicesData: any;
-    if (reportType === ReportType.INVOICES) {
-      invoicesData = reportData;
-    } else if (reportType === ReportType.COMPLETE) {
-      invoicesData = reportData?.invoices;
-    } else {
-      invoicesData = await this.generateInvoicesReport(companyId, startDate, endDate);
-    }
-
-    const invoices = Array.isArray(invoicesData?.invoices) ? invoicesData.invoices : [];
-
-    const zipBuffer = await this.buildZipPackage(reportFile, invoices, timestamp, companyId);
-
-    return {
-      contentType: 'application/zip',
-      data: zipBuffer,
-      filename: `${reportBaseName}.zip`,
-    };
   }
 
   private async generateSalesReport(
@@ -288,8 +300,9 @@ export class ReportsService {
     endDate?: string,
     sellerId?: string,
   ) {
-    // 1. Receita Bruta (total das vendas)
-    const grossRevenue = salesReport.summary.totalRevenue || 0;
+    try {
+      // 1. Receita Bruta (total das vendas)
+      const grossRevenue = salesReport?.summary?.totalRevenue || 0;
 
     // 2. Calcular CMV (Custo das Mercadorias Vendidas)
     // Buscar vendas com itens e produtos para calcular o custo
@@ -325,59 +338,84 @@ export class ReportsService {
     // Calcular CMV somando (quantidade * custo) de cada item vendido
     let cmv = 0;
     sales.forEach((sale) => {
-      sale.items.forEach((item) => {
-        const costPrice = item.product.costPrice ? Number(item.product.costPrice) : 0;
-        cmv += item.quantity * costPrice;
-      });
+      if (sale.items && Array.isArray(sale.items)) {
+        sale.items.forEach((item) => {
+          if (item && item.product) {
+            const costPrice = item.product.costPrice ? Number(item.product.costPrice) : 0;
+            cmv += (item.quantity || 0) * costPrice;
+          }
+        });
+      }
     });
 
-    // 3. Comissões
-    const totalCommissions = commissions.summary?.totalCommissions || 0;
+      // 3. Comissões
+      const totalCommissions = commissions?.summary?.totalCommissions || 0;
 
-    // 4. Perdas de produtos
-    const totalProductLosses = productLosses.summary?.totalCost || 0;
+      // 4. Perdas de produtos
+      const totalProductLosses = productLosses?.summary?.totalCost || 0;
 
-    // 5. Contas a Pagar (apenas as pagas no período)
-    let paidBills = billsToPay.bills?.filter((bill: any) => bill.isPaid) || [];
-    
-    // Se houver período especificado, filtrar apenas contas pagas no período
-    if (startDate || endDate) {
-      paidBills = paidBills.filter((bill: any) => {
-        if (!bill.paidAt) return false;
-        const paidDate = new Date(bill.paidAt);
-        if (startDate && paidDate < new Date(startDate)) return false;
-        if (endDate) {
-          const endDateObj = new Date(endDate);
-          endDateObj.setHours(23, 59, 59, 999); // Incluir o dia inteiro
-          if (paidDate > endDateObj) return false;
-        }
-        return true;
-      });
+      // 5. Contas a Pagar (apenas as pagas no período)
+      let paidBills = billsToPay?.bills?.filter((bill: any) => bill?.isPaid) || [];
+      
+      // Se houver período especificado, filtrar apenas contas pagas no período
+      if (startDate || endDate) {
+        paidBills = paidBills.filter((bill: any) => {
+          if (!bill?.paidAt) return false;
+          try {
+            const paidDate = new Date(bill.paidAt);
+            if (isNaN(paidDate.getTime())) return false;
+            if (startDate && paidDate < new Date(startDate)) return false;
+            if (endDate) {
+              const endDateObj = new Date(endDate);
+              endDateObj.setHours(23, 59, 59, 999); // Incluir o dia inteiro
+              if (paidDate > endDateObj) return false;
+            }
+            return true;
+          } catch {
+            return false;
+          }
+        });
+      }
+      
+      const totalPaidBills = paidBills.reduce((sum: number, bill: any) => sum + (bill?.amount || 0), 0);
+
+      // 6. Total de descontos
+      const totalDiscounts = cmv + totalCommissions + totalProductLosses + totalPaidBills;
+
+      // 7. Lucro Líquido = Receita Bruta - Total de Descontos
+      const netProfit = grossRevenue - totalDiscounts;
+
+      // Calcular margem de lucro (%)
+      const profitMargin = grossRevenue > 0 ? (netProfit / grossRevenue) * 100 : 0;
+
+      return {
+        grossRevenue,
+        discounts: {
+          costOfGoodsSold: cmv, // CMV - Custo das Mercadorias Vendidas
+          commissions: totalCommissions,
+          productLosses: totalProductLosses,
+          paidBills: totalPaidBills,
+          total: totalDiscounts,
+        },
+        netProfit,
+        profitMargin: Number(profitMargin.toFixed(2)),
+      };
+    } catch (error) {
+      this.logger.error('Erro ao calcular lucro líquido:', error);
+      // Retornar valores padrão em caso de erro
+      return {
+        grossRevenue: 0,
+        discounts: {
+          costOfGoodsSold: 0,
+          commissions: 0,
+          productLosses: 0,
+          paidBills: 0,
+          total: 0,
+        },
+        netProfit: 0,
+        profitMargin: 0,
+      };
     }
-    
-    const totalPaidBills = paidBills.reduce((sum: number, bill: any) => sum + bill.amount, 0);
-
-    // 6. Total de descontos
-    const totalDiscounts = cmv + totalCommissions + totalProductLosses + totalPaidBills;
-
-    // 7. Lucro Líquido = Receita Bruta - Total de Descontos
-    const netProfit = grossRevenue - totalDiscounts;
-
-    // Calcular margem de lucro (%)
-    const profitMargin = grossRevenue > 0 ? (netProfit / grossRevenue) * 100 : 0;
-
-    return {
-      grossRevenue,
-      discounts: {
-        costOfGoodsSold: cmv, // CMV - Custo das Mercadorias Vendidas
-        commissions: totalCommissions,
-        productLosses: totalProductLosses,
-        paidBills: totalPaidBills,
-        total: totalDiscounts,
-      },
-      netProfit,
-      profitMargin: Number(profitMargin.toFixed(2)),
-    };
   }
 
   private async generateCompleteReport(
@@ -386,39 +424,61 @@ export class ReportsService {
     endDate?: string,
     sellerId?: string,
   ) {
-    const [salesReport, productsReport, invoicesReport, billsToPay, cashClosures, commissions, productLosses] =
-      await Promise.all([
-        this.generateSalesReport(companyId, startDate, endDate, sellerId),
-        this.generateProductsReport(companyId),
-        this.generateInvoicesReport(companyId, startDate, endDate),
-        this.getBillsToPay(companyId, startDate, endDate),
-        this.getCashClosures(companyId, startDate, endDate),
-        this.getCommissionsReport(companyId, startDate, endDate),
-        this.getProductLosses(companyId, startDate, endDate),
-      ]);
+    try {
+      const [salesReport, productsReport, invoicesReport, billsToPay, cashClosures, commissions, productLosses] =
+        await Promise.all([
+          this.generateSalesReport(companyId, startDate, endDate, sellerId),
+          this.generateProductsReport(companyId),
+          this.generateInvoicesReport(companyId, startDate, endDate),
+          this.getBillsToPay(companyId, startDate, endDate),
+          this.getCashClosures(companyId, startDate, endDate),
+          this.getCommissionsReport(companyId, startDate, endDate),
+          this.getProductLosses(companyId, startDate, endDate),
+        ]);
 
-    // Calcular lucro líquido
-    const netProfit = await this.calculateNetProfit(
-      companyId,
-      salesReport,
-      commissions,
-      productLosses,
-      billsToPay,
-      startDate,
-      endDate,
-      sellerId,
-    );
+      // Calcular lucro líquido (com tratamento de erro interno)
+      let netProfit;
+      try {
+        netProfit = await this.calculateNetProfit(
+          companyId,
+          salesReport,
+          commissions,
+          productLosses,
+          billsToPay,
+          startDate,
+          endDate,
+          sellerId,
+        );
+      } catch (error) {
+        this.logger.warn('Erro ao calcular lucro líquido, usando valores padrão:', error);
+        netProfit = {
+          grossRevenue: 0,
+          discounts: {
+            costOfGoodsSold: 0,
+            commissions: 0,
+            productLosses: 0,
+            paidBills: 0,
+            total: 0,
+          },
+          netProfit: 0,
+          profitMargin: 0,
+        };
+      }
 
-    return {
-      sales: salesReport,
-      products: productsReport,
-      invoices: invoicesReport,
-      billsToPay,
-      cashClosures,
-      commissions,
-      productLosses,
-      netProfit,
-    };
+      return {
+        sales: salesReport,
+        products: productsReport,
+        invoices: invoicesReport,
+        billsToPay,
+        cashClosures,
+        commissions,
+        productLosses,
+        netProfit,
+      };
+    } catch (error) {
+      this.logger.error('Erro ao gerar relatório completo:', error);
+      throw error;
+    }
   }
 
   private async getBillsToPay(companyId: string, startDate?: string, endDate?: string) {
@@ -596,12 +656,37 @@ export class ReportsService {
     }
 
     if (reportType === ReportType.COMPLETE) {
-      this.addBillsSheet(workbook, data.data.billsToPay, clientTimeInfo);
-      this.addCashClosuresSheet(workbook, data.data.cashClosures, clientTimeInfo);
-      this.addCommissionsSheet(workbook, data.data.commissions);
-      this.addProductLossesSheet(workbook, data.data.productLosses, clientTimeInfo);
-      if (data.data.netProfit) {
-        this.addNetProfitSheet(workbook, data.data.netProfit);
+      try {
+        this.addBillsSheet(workbook, data.data.billsToPay, clientTimeInfo);
+      } catch (error) {
+        this.logger.warn('Erro ao adicionar planilha de contas a pagar:', error);
+      }
+      
+      try {
+        this.addCashClosuresSheet(workbook, data.data.cashClosures, clientTimeInfo);
+      } catch (error) {
+        this.logger.warn('Erro ao adicionar planilha de fechamentos:', error);
+      }
+      
+      try {
+        this.addCommissionsSheet(workbook, data.data.commissions);
+      } catch (error) {
+        this.logger.warn('Erro ao adicionar planilha de comissões:', error);
+      }
+      
+      try {
+        this.addProductLossesSheet(workbook, data.data.productLosses, clientTimeInfo);
+      } catch (error) {
+        this.logger.warn('Erro ao adicionar planilha de perdas:', error);
+      }
+      
+      try {
+        if (data.data?.netProfit) {
+          this.addNetProfitSheet(workbook, data.data.netProfit);
+        }
+      } catch (error) {
+        this.logger.warn('Erro ao adicionar planilha de lucro líquido:', error);
+        // Não lançar erro para não quebrar o relatório completo
       }
     }
 
@@ -916,107 +1001,125 @@ export class ReportsService {
   }
 
   private addNetProfitSheet(workbook: ExcelJS.Workbook, netProfitData: any) {
-    const sheet = workbook.addWorksheet('Lucro Líquido');
-    
-    // Cabeçalho
-    const titleRow = sheet.addRow(['RELATÓRIO DE LUCRO LÍQUIDO']);
-    titleRow.font = { bold: true, size: 14 };
-    titleRow.alignment = { horizontal: 'center' };
-    sheet.mergeCells(1, 1, 1, 2);
-    sheet.addRow([]); // Linha em branco
-
-    // Receita Bruta
-    sheet.addRow(['Receita Bruta', netProfitData.grossRevenue]);
-    const grossRevenueRow = sheet.lastRow;
-    grossRevenueRow.getCell(1).font = { bold: true };
-    grossRevenueRow.getCell(2).numFmt = 'R$ #,##0.00';
-    sheet.addRow([]); // Linha em branco
-
-    // Seção de Descontos
-    const discountTitleRow = sheet.addRow(['DESCONTOS']);
-    discountTitleRow.font = { bold: true, size: 12 };
-    discountTitleRow.fill = {
-      type: 'pattern',
-      pattern: 'solid',
-      fgColor: { argb: 'FFE0E0E0' },
-    };
-    sheet.mergeCells(discountTitleRow.number, 1, discountTitleRow.number, 2);
-
-    // CMV
-    sheet.addRow(['CMV - Custo das Mercadorias Vendidas', netProfitData.discounts.costOfGoodsSold]);
-    const cmvRow = sheet.lastRow;
-    cmvRow.getCell(2).numFmt = 'R$ #,##0.00';
-
-    // Comissões
-    sheet.addRow(['Comissões de Vendedores', netProfitData.discounts.commissions]);
-    const commissionsRow = sheet.lastRow;
-    commissionsRow.getCell(2).numFmt = 'R$ #,##0.00';
-
-    // Perdas de Produtos
-    sheet.addRow(['Perdas de Produtos', netProfitData.discounts.productLosses]);
-    const lossesRow = sheet.lastRow;
-    lossesRow.getCell(2).numFmt = 'R$ #,##0.00';
-
-    // Contas a Pagar (pagas)
-    sheet.addRow(['Contas a Pagar (Pagas)', netProfitData.discounts.paidBills]);
-    const billsRow = sheet.lastRow;
-    billsRow.getCell(2).numFmt = 'R$ #,##0.00';
-
-    // Linha em branco
-    sheet.addRow([]);
-
-    // Total de Descontos
-    const totalDiscountsRow = sheet.addRow(['TOTAL DE DESCONTOS', netProfitData.discounts.total]);
-    totalDiscountsRow.getCell(1).font = { bold: true };
-    totalDiscountsRow.getCell(2).font = { bold: true };
-    totalDiscountsRow.getCell(2).numFmt = 'R$ #,##0.00';
-    totalDiscountsRow.fill = {
-      type: 'pattern',
-      pattern: 'solid',
-      fgColor: { argb: 'FFFFEB3B' },
-    };
-
-    sheet.addRow([]); // Linha em branco
-
-    // Lucro Líquido
-    const netProfitRow = sheet.addRow(['LUCRO LÍQUIDO', netProfitData.netProfit]);
-    netProfitRow.getCell(1).font = { bold: true, size: 12 };
-    netProfitRow.getCell(2).font = { bold: true, size: 12 };
-    netProfitRow.getCell(2).numFmt = 'R$ #,##0.00';
-    netProfitRow.fill = {
-      type: 'pattern',
-      pattern: 'solid',
-      fgColor: { argb: netProfitData.netProfit >= 0 ? 'FFC8E6C9' : 'FFFFCDD2' },
-    };
-
-    // Margem de Lucro
-    sheet.addRow(['Margem de Lucro (%)', `${netProfitData.profitMargin}%`]);
-    const marginRow = sheet.lastRow;
-    marginRow.getCell(1).font = { bold: true };
-    marginRow.getCell(2).font = { bold: true };
-
-    // Ajustar largura das colunas
-    sheet.getColumn(1).width = 45;
-    sheet.getColumn(2).width = 25;
-    sheet.getColumn(2).alignment = { horizontal: 'right' };
-
-    // Adicionar bordas nas células de valores
-    [grossRevenueRow, cmvRow, commissionsRow, lossesRow, billsRow, totalDiscountsRow, netProfitRow, marginRow].forEach((row) => {
-      if (row) {
-        row.getCell(1).border = {
-          top: { style: 'thin' },
-          bottom: { style: 'thin' },
-          left: { style: 'thin' },
-          right: { style: 'thin' },
-        };
-        row.getCell(2).border = {
-          top: { style: 'thin' },
-          bottom: { style: 'thin' },
-          left: { style: 'thin' },
-          right: { style: 'thin' },
-        };
+    try {
+      if (!netProfitData) {
+        this.logger.warn('Dados de lucro líquido não disponíveis');
+        return;
       }
-    });
+
+      const sheet = workbook.addWorksheet('Lucro Líquido');
+      
+      // Cabeçalho
+      const titleRow = sheet.addRow(['RELATÓRIO DE LUCRO LÍQUIDO']);
+      titleRow.font = { bold: true, size: 14 };
+      titleRow.alignment = { horizontal: 'center' };
+      sheet.mergeCells(1, 1, 1, 2);
+      sheet.addRow([]); // Linha em branco
+
+      // Receita Bruta
+      const grossRevenue = netProfitData.grossRevenue || 0;
+      sheet.addRow(['Receita Bruta', grossRevenue]);
+      const grossRevenueRow = sheet.lastRow;
+      grossRevenueRow.getCell(1).font = { bold: true };
+      grossRevenueRow.getCell(2).numFmt = 'R$ #,##0.00';
+      sheet.addRow([]); // Linha em branco
+
+      // Seção de Descontos
+      const discountTitleRow = sheet.addRow(['DESCONTOS']);
+      discountTitleRow.font = { bold: true, size: 12 };
+      discountTitleRow.fill = {
+        type: 'pattern',
+        pattern: 'solid',
+        fgColor: { argb: 'FFE0E0E0' },
+      };
+      sheet.mergeCells(discountTitleRow.number, 1, discountTitleRow.number, 2);
+
+      // CMV
+      const costOfGoodsSold = netProfitData.discounts?.costOfGoodsSold || 0;
+      sheet.addRow(['CMV - Custo das Mercadorias Vendidas', costOfGoodsSold]);
+      const cmvRow = sheet.lastRow;
+      cmvRow.getCell(2).numFmt = 'R$ #,##0.00';
+
+      // Comissões
+      const commissions = netProfitData.discounts?.commissions || 0;
+      sheet.addRow(['Comissões de Vendedores', commissions]);
+      const commissionsRow = sheet.lastRow;
+      commissionsRow.getCell(2).numFmt = 'R$ #,##0.00';
+
+      // Perdas de Produtos
+      const productLosses = netProfitData.discounts?.productLosses || 0;
+      sheet.addRow(['Perdas de Produtos', productLosses]);
+      const lossesRow = sheet.lastRow;
+      lossesRow.getCell(2).numFmt = 'R$ #,##0.00';
+
+      // Contas a Pagar (pagas)
+      const paidBills = netProfitData.discounts?.paidBills || 0;
+      sheet.addRow(['Contas a Pagar (Pagas)', paidBills]);
+      const billsRow = sheet.lastRow;
+      billsRow.getCell(2).numFmt = 'R$ #,##0.00';
+
+      // Linha em branco
+      sheet.addRow([]);
+
+      // Total de Descontos
+      const totalDiscounts = netProfitData.discounts?.total || 0;
+      const totalDiscountsRow = sheet.addRow(['TOTAL DE DESCONTOS', totalDiscounts]);
+      totalDiscountsRow.getCell(1).font = { bold: true };
+      totalDiscountsRow.getCell(2).font = { bold: true };
+      totalDiscountsRow.getCell(2).numFmt = 'R$ #,##0.00';
+      totalDiscountsRow.fill = {
+        type: 'pattern',
+        pattern: 'solid',
+        fgColor: { argb: 'FFFFEB3B' },
+      };
+
+      sheet.addRow([]); // Linha em branco
+
+      // Lucro Líquido
+      const netProfit = netProfitData.netProfit || 0;
+      const netProfitRow = sheet.addRow(['LUCRO LÍQUIDO', netProfit]);
+      netProfitRow.getCell(1).font = { bold: true, size: 12 };
+      netProfitRow.getCell(2).font = { bold: true, size: 12 };
+      netProfitRow.getCell(2).numFmt = 'R$ #,##0.00';
+      netProfitRow.fill = {
+        type: 'pattern',
+        pattern: 'solid',
+        fgColor: { argb: netProfit >= 0 ? 'FFC8E6C9' : 'FFFFCDD2' },
+      };
+
+      // Margem de Lucro
+      const profitMargin = netProfitData.profitMargin || 0;
+      sheet.addRow(['Margem de Lucro (%)', `${profitMargin}%`]);
+      const marginRow = sheet.lastRow;
+      marginRow.getCell(1).font = { bold: true };
+      marginRow.getCell(2).font = { bold: true };
+
+      // Ajustar largura das colunas
+      sheet.getColumn(1).width = 45;
+      sheet.getColumn(2).width = 25;
+      sheet.getColumn(2).alignment = { horizontal: 'right' };
+
+      // Adicionar bordas nas células de valores
+      [grossRevenueRow, cmvRow, commissionsRow, lossesRow, billsRow, totalDiscountsRow, netProfitRow, marginRow].forEach((row) => {
+        if (row) {
+          row.getCell(1).border = {
+            top: { style: 'thin' },
+            bottom: { style: 'thin' },
+            left: { style: 'thin' },
+            right: { style: 'thin' },
+          };
+          row.getCell(2).border = {
+            top: { style: 'thin' },
+            bottom: { style: 'thin' },
+            left: { style: 'thin' },
+            right: { style: 'thin' },
+          };
+        }
+      });
+    } catch (error) {
+      this.logger.error('Erro ao adicionar planilha de lucro líquido:', error);
+      // Não lançar erro para não quebrar o relatório completo
+    }
   }
 
   private async generateReportFile(
