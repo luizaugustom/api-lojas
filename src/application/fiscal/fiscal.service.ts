@@ -855,7 +855,7 @@ export class FiscalService {
     }
   }
 
-  async downloadFiscalDocument(id: string, format: 'xml' | 'pdf', companyId?: string) {
+  async downloadFiscalDocument(id: string, format: 'xml' | 'pdf', companyId?: string, skipGeneration = false) {
     const document = await this.getFiscalDocument(id, companyId);
 
     if (format === 'xml') {
@@ -875,7 +875,17 @@ export class FiscalService {
 
     if (format === 'pdf') {
       if (!document.pdfUrl) {
-        // Gerar PDF dinamicamente se não existir
+        // Verificar se é uma nota de entrada (tem xmlContent mas não pdfUrl)
+        // Para notas de entrada, não gerar PDF - usar apenas o arquivo original enviado pelo usuário
+        const isInboundInvoice = 
+          document.documentType === 'NFe_INBOUND' ||
+          (document.documentType === 'NFe' && document.xmlContent !== null);
+
+        if (isInboundInvoice || skipGeneration) {
+          throw new BadRequestException('Arquivo PDF não disponível para este documento. Use o arquivo original enviado.');
+        }
+
+        // Gerar PDF dinamicamente apenas para documentos gerados pelo sistema
         const generatedPdf = await this.generatePdfFromDocument(document);
         return {
           content: generatedPdf,

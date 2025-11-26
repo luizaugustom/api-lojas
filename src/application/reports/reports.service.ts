@@ -1215,6 +1215,7 @@ export class ReportsService {
     for (const invoice of invoices) {
       const folder = this.resolveInvoiceFolder(invoice.documentType);
 
+      // Incluir XML original se disponível (arquivo enviado pelo usuário)
       if (invoice?.xmlContent) {
         folderUsage[folder] = true;
         const xmlFileName = this.buildInvoiceFilename(invoice, timestamp, 'xml');
@@ -1223,6 +1224,8 @@ export class ReportsService {
         });
       }
 
+      // Incluir PDF apenas se foi enviado pelo usuário (tem pdfUrl)
+      // Não gerar PDF para notas de entrada que só têm XML
       const pdfFile = await this.tryGetInvoicePdf(invoice, timestamp, companyId);
       if (pdfFile) {
         folderUsage[folder] = true;
@@ -1317,6 +1320,7 @@ export class ReportsService {
       documentNumber?: string | null;
       accessKey?: string | null;
       pdfUrl?: string | null;
+      xmlContent?: string | null;
     },
     timestamp: string,
     companyId: string,
@@ -1325,11 +1329,28 @@ export class ReportsService {
       return null;
     }
 
+    // Para notas de entrada, só incluir PDF se foi enviado pelo usuário (tem pdfUrl)
+    // Não gerar PDF para notas de entrada que só têm XML
+    const isInboundInvoice = 
+      invoice.documentType === 'NFe_INBOUND' ||
+      (invoice.documentType === 'NFe' && invoice.xmlContent !== null);
+
+    if (isInboundInvoice && !invoice.pdfUrl) {
+      // Nota de entrada sem PDF enviado pelo usuário - não incluir PDF gerado
+      return null;
+    }
+
+    // Só tentar obter PDF se existe pdfUrl (arquivo original enviado pelo usuário ou gerado pelo sistema)
+    if (!invoice.pdfUrl) {
+      return null;
+    }
+
     try {
       const result = await this.fiscalService.downloadFiscalDocument(
         invoice.id,
         'pdf',
         companyId,
+        true, // skipGeneration - não gerar PDF se não existir
       );
 
       if (result.content !== undefined) {
