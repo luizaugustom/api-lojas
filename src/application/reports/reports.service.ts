@@ -38,6 +38,15 @@ export class ReportsService {
 
       const company = await this.prisma.company.findUnique({
         where: { id: companyId },
+        select: {
+          id: true,
+          name: true,
+          cnpj: true,
+          email: true,
+          phone: true,
+          stateRegistration: true,
+          municipalRegistration: true,
+        },
       });
 
       if (!company) {
