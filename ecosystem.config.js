@@ -17,6 +17,9 @@ module.exports = {
       autorestart: true,
       max_memory_restart: '1G',
       watch: false,
+      // Iniciar automaticamente
+      min_uptime: '10s',
+      max_restarts: 10,
     },
     // Evolution API (WhatsApp)
     {
@@ -38,6 +41,11 @@ module.exports = {
       // Aguardar um pouco mais para iniciar (Evolution API pode demorar)
       wait_ready: true,
       listen_timeout: 10000,
+      // Iniciar automaticamente
+      min_uptime: '10s',
+      max_restarts: 10,
+      // Delay para iniciar após a API do MontShop (opcional)
+      // exec_delay: 5000,
     },
   ],
 };

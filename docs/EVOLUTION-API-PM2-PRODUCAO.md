@@ -13,6 +13,62 @@ Este guia explica como instalar e configurar a Evolution API para rodar junto co
 
 ## 🔧 Instalação
 
+### ⚡ Opção Rápida: Setup Automático Completo
+
+Para configurar tudo automaticamente (recomendado):
+
+```bash
+# No servidor, na pasta do projeto
+cd /caminho/para/api-lojas
+
+# Dar permissão e executar
+chmod +x scripts/setup-production.sh
+./scripts/setup-production.sh
+```
+
+Este script faz tudo automaticamente:
+- ✅ Instala PM2
+- ✅ Instala Evolution API
+- ✅ Configura tudo
+- ✅ Inicia serviços
+- ✅ Configura para iniciar no boot
+
+**📖 Para mais detalhes, consulte: [SETUP-AUTOMATICO-PRODUCAO.md](./SETUP-AUTOMATICO-PRODUCAO.md)**
+
+---
+
+### 📝 Opção Manual: Passo a Passo
+
+### Passo 0: Instalar PM2 (Se ainda não tiver)
+
+Se você receber o erro "pm2 command not found", instale o PM2 primeiro:
+
+#### Opção A: Via Script (Recomendado)
+
+```bash
+# Na pasta do projeto api-lojas
+cd /caminho/para/api-lojas
+
+# Dar permissão de execução
+chmod +x scripts/install-pm2.sh
+
+# Executar instalação
+./scripts/install-pm2.sh
+```
+
+#### Opção B: Manualmente
+
+```bash
+# Instalar PM2 globalmente
+sudo npm install -g pm2
+
+# Verificar instalação
+pm2 --version
+
+# Configurar para iniciar no boot
+sudo pm2 startup
+```
+
 ### Passo 1: Instalar Evolution API
 
 Execute o script de instalação:

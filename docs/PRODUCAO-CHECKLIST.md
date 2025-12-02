@@ -127,7 +127,14 @@ sudo apt install postgresql postgresql-contrib -y
 sudo apt install git -y
 
 # Instalar PM2 globalmente
+# Opção 1: Via script (recomendado)
+cd /caminho/para/api-lojas
+chmod +x scripts/install-pm2.sh
+./scripts/install-pm2.sh
+
+# Opção 2: Manualmente
 sudo npm install -g pm2
+sudo pm2 startup
 ```
 
 ### 2. Configurar Banco de Dados
@@ -187,14 +194,28 @@ npm run build
 
 ### 5. Configurar PM2 (Process Manager)
 
+#### Opção A: Setup Automático (Recomendado)
+
 ```bash
-# Instalar PM2
-npm install -g pm2
+# Na pasta do projeto
+cd /caminho/para/api-lojas
+
+# Executar setup completo automático
+chmod +x scripts/setup-production.sh
+./scripts/setup-production.sh
+```
+
+Este script configura tudo automaticamente e inicia os serviços.
+
+#### Opção B: Manual
+
+```bash
+# Instalar PM2 (se ainda não tiver)
+chmod +x scripts/install-pm2.sh
+./scripts/install-pm2.sh
 
 # O arquivo ecosystem.config.js já está no repositório
 # Ele configura tanto a API do MontShop quanto a Evolution API
-# Verifique se o caminho da Evolution API está correto no arquivo
-# Se necessário, ajuste a variável EVOLUTION_API_DIR no ecosystem.config.js
 
 # Criar diretório de logs
 mkdir -p logs
@@ -210,8 +231,13 @@ pm2 logs
 
 # Salvar configuração
 pm2 save
-pm2 startup
+
+# Configurar para iniciar no boot (IMPORTANTE!)
+sudo pm2 startup
+# Execute o comando que aparecer
 ```
+
+**📖 Para mais detalhes sobre setup automático, consulte: [SETUP-AUTOMATICO-PRODUCAO.md](./SETUP-AUTOMATICO-PRODUCAO.md)**
 
 ### 6. Configurar Nginx (Reverso Proxy)
 
