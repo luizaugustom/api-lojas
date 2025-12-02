@@ -10,18 +10,20 @@ services:
       - NODE_ENV=production
       - DATABASE_URL=postgresql://postgres:password@db:5432/api_lojas?schema=public
       - JWT_SECRET=your-super-secret-jwt-key
-      # Evolution API - URL interna do Docker
+      # Evolution API - URL interna do Docker (usando nome do serviço)
       - EVOLUTION_API_URL=http://evolution-api:8080
-      - EVOLUTION_API_KEY=${EVOLUTION_API_KEY:-evolution-api-key-change-in-production}
+      # Evolution API - API Key (deve ser igual ao AUTHENTICATION_API_KEY do serviço evolution-api)
+      - EVOLUTION_API_KEY=${EVOLUTION_API_KEY:-evolution-api-key-change-me}
+      # Evolution API - Nome da instância do WhatsApp
       - EVOLUTION_INSTANCE=${EVOLUTION_INSTANCE:-montshop}
     depends_on:
       - db
       - evolution-api
     volumes:
       - ./uploads:/app/uploads
-    restart: unless-stopped
     networks:
       - montshop-network
+    restart: unless-stopped
 
   db:
     image: postgres:15-alpine
@@ -34,14 +36,13 @@ services:
       - ./init.sql:/docker-entrypoint-initdb.d/init.sql
     ports:
       - "5432:5432"
-    restart: unless-stopped
     networks:
       - montshop-network
+    restart: unless-stopped
 
   evolution-api:
     container_name: evolution-api
     image: atendai/evolution-api:latest
-    restart: unless-stopped
     ports:
       - "8080:8080"
     environment:
@@ -49,13 +50,14 @@ services:
       SERVER_URL: http://localhost:8080
       PORT: 8080
       
-      # Banco de dados (SQLite por padrão - mais simples)
+      # Banco de dados (SQLite por padrão - mais simples para produção)
       DATABASE_ENABLED: true
       DATABASE_PROVIDER: sqlite
       DATABASE_NAME: evolution
       
-      # Configurações de segurança - IMPORTANTE: Use a mesma chave do .env
-      AUTHENTICATION_API_KEY: ${EVOLUTION_API_KEY:-evolution-api-key-change-in-production}
+      # 🔑 API Key - IMPORTANTE: Deve ser igual ao EVOLUTION_API_KEY do serviço app
+      # Altere para uma chave forte e segura em produção!
+      AUTHENTICATION_API_KEY: ${EVOLUTION_API_KEY:-evolution-api-key-change-me}
       AUTHENTICATION_EXPOSE_IN_FETCH_INSTANCES: true
       
       # Configurações de QR Code
@@ -66,7 +68,7 @@ services:
       WEBHOOK_GLOBAL_URL: ""
       WEBHOOK_GLOBAL_ENABLED: false
       
-      # Configurações de Redis (opcional - para produção)
+      # Configurações de Redis (opcional - para produção com alta carga)
       REDIS_ENABLED: false
       
       # Logs
@@ -78,6 +80,7 @@ services:
       - evolution_store:/evolution/store
     networks:
       - montshop-network
+    restart: unless-stopped
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8080"]
       interval: 30s
@@ -95,15 +98,18 @@ services:
       - ./ssl:/etc/nginx/ssl:ro
     depends_on:
       - app
-    restart: unless-stopped
+      - evolution-api
     networks:
       - montshop-network
-
-volumes:
-  postgres_data:
-  evolution_instances:
-  evolution_store:
+    restart: unless-stopped
 
 networks:
   montshop-network:
     driver: bridge
+
+volumes:
+  postgres_data:
+  evolution_instances:
+    driver: local
+  evolution_store:
+    driver: local

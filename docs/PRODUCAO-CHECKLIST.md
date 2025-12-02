@@ -123,9 +123,11 @@ sudo apt-get install -y nodejs
 # Instalar PostgreSQL
 sudo apt install postgresql postgresql-contrib -y
 
-# Instalar Docker (para Evolution API)
-curl -fsSL https://get.docker.com -o get-docker.sh
-sudo sh get-docker.sh
+# Instalar Git (para clonar Evolution API)
+sudo apt install git -y
+
+# Instalar PM2 globalmente
+sudo npm install -g pm2
 ```
 
 ### 2. Configurar Banco de Dados
@@ -139,16 +141,23 @@ GRANT ALL PRIVILEGES ON DATABASE api_lojas TO api_user;
 \q
 ```
 
-### 3. Configurar Evolution API
+### 3. Configurar Evolution API (Sem Docker - PM2)
 
 ```bash
-# Criar diretório
-mkdir -p ~/evolution-api
-cd ~/evolution-api
+# Na pasta do projeto api-lojas
+cd /caminho/para/api-lojas
 
-# Criar docker-compose.yml (veja EVOLUTION-API-SETUP.md)
-# Iniciar
-docker-compose up -d
+# Dar permissão de execução ao script
+chmod +x scripts/install-evolution-api.sh
+
+# Executar instalação
+./scripts/install-evolution-api.sh
+
+# Configurar API Key no arquivo .env da Evolution API
+nano ~/evolution-api/.env
+# Altere AUTHENTICATION_API_KEY para uma chave forte e segura
+
+# A Evolution API será iniciada junto com a API via PM2 (veja Passo 5)
 ```
 
 ### 4. Configurar Aplicação
@@ -182,33 +191,22 @@ npm run build
 # Instalar PM2
 npm install -g pm2
 
-# Criar arquivo ecosystem.config.js
-cat > ecosystem.config.js << EOF
-module.exports = {
-  apps: [{
-    name: 'api-lojas',
-    script: 'dist/src/main.js',
-    instances: 2,
-    exec_mode: 'cluster',
-    env: {
-      NODE_ENV: 'production',
-      PORT: 3000
-    },
-    error_file: './logs/err.log',
-    out_file: './logs/out.log',
-    log_date_format: 'YYYY-MM-DD HH:mm:ss Z',
-    merge_logs: true,
-    autorestart: true,
-    max_memory_restart: '1G'
-  }]
-}
-EOF
+# O arquivo ecosystem.config.js já está no repositório
+# Ele configura tanto a API do MontShop quanto a Evolution API
+# Verifique se o caminho da Evolution API está correto no arquivo
+# Se necessário, ajuste a variável EVOLUTION_API_DIR no ecosystem.config.js
 
 # Criar diretório de logs
 mkdir -p logs
 
-# Iniciar aplicação
+# Iniciar ambas as aplicações (API do MontShop + Evolution API)
 pm2 start ecosystem.config.js
+
+# Verificar status
+pm2 status
+
+# Ver logs
+pm2 logs
 
 # Salvar configuração
 pm2 save
