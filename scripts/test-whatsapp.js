@@ -9,12 +9,30 @@
  */
 
 const axios = require('axios');
+const path = require('path');
+const fs = require('fs');
 
 // Tentar carregar dotenv se estiver disponível (opcional)
 try {
-  require('dotenv').config();
+  // Tentar carregar .env do diretório raiz do projeto (api-lojas)
+  const projectRoot = path.resolve(__dirname, '..');
+  const envPath = path.join(projectRoot, '.env');
+  
+  // Verificar se dotenv está instalado
+  try {
+    if (fs.existsSync(envPath)) {
+      require('dotenv').config({ path: envPath });
+    } else {
+      // Tentar carregar do diretório atual
+      require('dotenv').config();
+    }
+  } catch (dotenvError) {
+    // dotenv não instalado, usar variáveis de ambiente do sistema
+    // Isso é normal, não é um erro
+  }
 } catch (e) {
-  // dotenv não instalado, usar variáveis de ambiente do sistema
+  // Erro ao tentar carregar .env, continuar sem ele
+  // As variáveis de ambiente do sistema ainda funcionarão
 }
 
 // Configurações
@@ -130,28 +148,39 @@ async function formatPhone(token, phone) {
           Authorization: `Bearer ${token}`,
           'Content-Type': 'application/json',
         },
+        timeout: 10000, // 10 segundos de timeout
       }
     );
 
-    if (response.data && response.data.success) {
+    if (response.data && response.data.success && response.data.formattedPhone) {
       logSuccess(`Número formatado: ${response.data.formattedPhone}`);
       return response.data.formattedPhone;
     }
 
-    throw new Error('Erro ao formatar número');
+    logWarning('Formatação retornou sem sucesso, usando número original');
+    return phone;
   } catch (error) {
     if (error.response) {
-      logError(`Erro ao formatar telefone: ${error.response.status} - ${JSON.stringify(error.response.data)}`);
+      logWarning(`Erro ao formatar telefone: ${error.response.status} - ${JSON.stringify(error.response.data)}`);
+      logWarning('Continuando com número original...');
     } else {
-      logError(`Erro ao formatar telefone: ${error.message}`);
+      logWarning(`Erro ao formatar telefone: ${error.message}`);
+      logWarning('Continuando com número original...');
     }
-    return phone; // Retorna o número original em caso de erro
+    // Retorna o número original em caso de erro, mas tenta formatar manualmente
+    const digits = phone.replace(/\D/g, '');
+    if (digits.length === 11) {
+      const formatted = `55${digits}`;
+      logInfo(`Formatando manualmente: ${formatted}`);
+      return formatted;
+    }
+    return phone;
   }
 }
 
 async function sendMessage(token, phone, message) {
   logInfo(`Enviando mensagem para ${phone}...`);
-  log(`📤 Mensagem: "${message}"`, 'blue');
+  log(`📤 Mensagem: "${message.replace(/\n/g, ' ')}"`, 'blue');
   
   try {
     const response = await axios.post(
@@ -165,6 +194,7 @@ async function sendMessage(token, phone, message) {
           Authorization: `Bearer ${token}`,
           'Content-Type': 'application/json',
         },
+        timeout: 30000, // 30 segundos de timeout
       }
     );
 
@@ -174,6 +204,9 @@ async function sendMessage(token, phone, message) {
       return true;
     } else {
       logError(`Falha ao enviar mensagem: ${response.data.message || 'Erro desconhecido'}`);
+      if (response.data) {
+        logError(`Resposta completa: ${JSON.stringify(response.data, null, 2)}`);
+      }
       return false;
     }
   } catch (error) {
@@ -181,13 +214,31 @@ async function sendMessage(token, phone, message) {
       logError(`Erro ao enviar mensagem: ${error.response.status}`);
       if (error.response.data) {
         logError(`Detalhes: ${JSON.stringify(error.response.data, null, 2)}`);
+        
+        // Mensagens de erro mais amigáveis
+        if (error.response.status === 401) {
+          logError('🔐 Erro de autenticação. Verifique se o token JWT é válido.');
+        } else if (error.response.status === 403) {
+          logError('🚫 Acesso negado. Verifique se o usuário tem permissão para enviar mensagens.');
+        } else if (error.response.status === 404) {
+          logError('🔍 Endpoint não encontrado. Verifique se a API está rodando corretamente.');
+        } else if (error.response.status === 500) {
+          logError('⚠️ Erro interno do servidor. Verifique os logs da aplicação.');
+        }
       }
     } else if (error.request) {
       logError(`Erro de conexão: Não foi possível conectar à API em ${API_URL}`);
       logError('Verifique se a API está rodando');
+      logError(`Tente: curl ${API_URL}/health`);
     } else {
       logError(`Erro: ${error.message}`);
     }
+    
+    // Se for erro de timeout
+    if (error.code === 'ECONNABORTED') {
+      logError('⏱️ Timeout ao enviar mensagem. A API pode estar lenta ou sobrecarregada.');
+    }
+    
     return false;
   }
 }
@@ -200,15 +251,19 @@ async function checkZApiConfig() {
   
   if (!instanceId || !token) {
     logError('Z-API não configurada!');
-    logWarning('Configure as variáveis no .env:');
+    logWarning('Configure as variáveis no arquivo .env:');
     log('  Z_API_INSTANCE_ID=seu-instance-id', 'yellow');
     log('  Z_API_TOKEN=seu-token', 'yellow');
+    log('', 'reset');
+    logWarning('Ou exporte as variáveis antes de executar:');
+    log('  export Z_API_INSTANCE_ID=seu-instance-id', 'yellow');
+    log('  export Z_API_TOKEN=seu-token', 'yellow');
     return false;
   }
   
   logSuccess('Z-API configurada');
-  log(`  Instance ID: ${instanceId.substring(0, 8)}...`, 'cyan');
-  log(`  Token: ${token.substring(0, 8)}...`, 'cyan');
+  log(`  Instance ID: ${instanceId.substring(0, 8)}...${instanceId.substring(instanceId.length - 4)}`, 'cyan');
+  log(`  Token: ${token.substring(0, 8)}...${token.substring(token.length - 4)}`, 'cyan');
   return true;
 }
 
@@ -223,8 +278,20 @@ async function main() {
   
   log(`\n📋 Configurações:`, 'bright');
   log(`  API URL: ${API_URL}`, 'cyan');
-  log(`  Telefone: ${TEST_PHONE}`, 'cyan');
+  log(`  Telefone de teste: ${TEST_PHONE}`, 'cyan');
   log(`  Login: ${LOGIN}`, 'cyan');
+  log(`  Senha: ${'*'.repeat(PASSWORD.length)}`, 'cyan');
+  log('', 'reset');
+  
+  // Verificar se a API está acessível
+  logInfo('Verificando se a API está acessível...');
+  try {
+    await axios.get(`${API_URL}/health`, { timeout: 5000 });
+    logSuccess('API está acessível');
+  } catch (error) {
+    logWarning('Não foi possível verificar o health da API (pode estar normal)');
+    logWarning('Continuando mesmo assim...');
+  }
   log('', 'reset');
   
   try {
@@ -237,29 +304,47 @@ async function main() {
     
     await sleep(500);
     
-    // 2. Validar telefone
+    // 2. Validar telefone (opcional, mas recomendado)
     const isValid = await validatePhone(token, TEST_PHONE);
     if (!isValid) {
-      logWarning('Continuando mesmo com número inválido...');
+      logWarning('Número pode ser inválido, mas continuando...');
+      logWarning('O sistema tentará formatar automaticamente');
     }
     
     await sleep(500);
     
-    // 3. Formatar telefone
-    const formattedPhone = await formatPhone(token, TEST_PHONE);
+    // 3. Formatar telefone (importante para garantir formato correto)
+    let formattedPhone = await formatPhone(token, TEST_PHONE);
+    
+    // Se não conseguiu formatar, tenta formatar manualmente
+    if (!formattedPhone || formattedPhone === TEST_PHONE) {
+      const digits = TEST_PHONE.replace(/\D/g, '');
+      if (digits.length === 11) {
+        formattedPhone = `55${digits}`;
+        logInfo(`Número formatado manualmente: ${formattedPhone}`);
+      } else {
+        formattedPhone = TEST_PHONE;
+        logWarning('Usando número original (formato pode estar incorreto)');
+      }
+    }
     
     await sleep(500);
     
-    // 4. Enviar mensagem
+    // 4. Enviar mensagem (usar número formatado)
     log('\n📨 Enviando mensagem de teste...\n', 'bright');
-    const success = await sendMessage(token, TEST_PHONE, TEST_MESSAGE);
+    const success = await sendMessage(token, formattedPhone || TEST_PHONE, TEST_MESSAGE);
     
     if (success) {
       log('\n✅ Teste concluído com sucesso!', 'green');
-      log(`📱 Verifique o WhatsApp do número ${formattedPhone}`, 'cyan');
+      log(`📱 Verifique o WhatsApp do número ${formattedPhone || TEST_PHONE}`, 'cyan');
       process.exit(0);
     } else {
       log('\n❌ Teste falhou!', 'red');
+      logWarning('Verifique:');
+      log('  1. Se a Z-API está configurada corretamente', 'yellow');
+      log('  2. Se o WhatsApp está conectado na plataforma Z-API', 'yellow');
+      log('  3. Se o número tem WhatsApp ativo', 'yellow');
+      log('  4. Os logs da aplicação para mais detalhes', 'yellow');
       process.exit(1);
     }
   } catch (error) {
