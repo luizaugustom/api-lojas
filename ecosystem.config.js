@@ -1,9 +1,10 @@
 module.exports = {
   apps: [
-    // API do MontShop
+    // API MontShop
     {
       name: 'api-lojas',
       script: 'dist/src/main.js',
+      cwd: process.cwd(),
       instances: 2,
       exec_mode: 'cluster',
       env: {
@@ -17,35 +18,43 @@ module.exports = {
       autorestart: true,
       max_memory_restart: '1G',
       watch: false,
-      // Iniciar automaticamente
+      ignore_watch: ['node_modules', 'logs', 'dist'],
+      // Aguardar 5 segundos antes de considerar que falhou
+      listen_timeout: 10000,
+      // Reiniciar se usar mais de 1GB de memória
+      max_memory_restart: '1G',
+      // Reiniciar após 3 falhas consecutivas
       min_uptime: '10s',
       max_restarts: 10,
     },
-    // Evolution API (WhatsApp)
+    // Evolution API
     {
       name: 'evolution-api',
       script: 'npm',
       args: 'start',
-      cwd: process.env.EVOLUTION_API_DIR || `${process.env.HOME}/evolution-api`,
+      cwd: process.env.EVOLUTION_API_DIR || require('os').homedir() + '/evolution-api',
       env: {
         NODE_ENV: 'production',
         PORT: 8080,
       },
-      error_file: './logs/evolution-err.log',
-      out_file: './logs/evolution-out.log',
+      error_file: (process.env.EVOLUTION_API_DIR || require('os').homedir() + '/evolution-api') + '/logs/evolution-err.log',
+      out_file: (process.env.EVOLUTION_API_DIR || require('os').homedir() + '/evolution-api') + '/logs/evolution-out.log',
       log_date_format: 'YYYY-MM-DD HH:mm:ss Z',
       merge_logs: true,
       autorestart: true,
       max_memory_restart: '512M',
       watch: false,
-      // Aguardar um pouco mais para iniciar (Evolution API pode demorar)
-      wait_ready: true,
-      listen_timeout: 10000,
-      // Iniciar automaticamente
-      min_uptime: '10s',
+      ignore_watch: ['node_modules', 'logs', 'instances', 'store'],
+      // Aguardar mais tempo para a Evolution API iniciar
+      listen_timeout: 30000,
+      // Reiniciar se usar mais de 512MB de memória
+      max_memory_restart: '512M',
+      // Reiniciar após 3 falhas consecutivas
+      min_uptime: '30s',
       max_restarts: 10,
-      // Delay para iniciar após a API do MontShop (opcional)
-      // exec_delay: 5000,
+      // Aguardar a Evolution API iniciar antes de considerar sucesso
+      wait_ready: true,
+      kill_timeout: 5000,
     },
   ],
 };

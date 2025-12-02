@@ -1,152 +1,156 @@
 #!/bin/bash
 
-# Script completo de setup para produção
-# Instala e configura tudo automaticamente para iniciar no boot
+# Script de setup completo para produção na Digital Ocean
+# Configura API MontShop + Evolution API com PM2
 
 set -e
 
-echo "🚀 Configurando produção completa..."
-echo ""
+echo "🚀 Configurando produção na Digital Ocean..."
 
 # Cores para output
+RED='\033[0;31m'
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
-RED='\033[0;31m'
 NC='\033[0m' # No Color
 
-# Função para imprimir mensagens
-print_success() {
-    echo -e "${GREEN}✅ $1${NC}"
-}
-
-print_warning() {
-    echo -e "${YELLOW}⚠️  $1${NC}"
-}
-
-print_error() {
-    echo -e "${RED}❌ $1${NC}"
-}
-
-# Verificar se está rodando como root (não recomendado)
+# Verificar se está rodando como root (não recomendado, mas verificar)
 if [ "$EUID" -eq 0 ]; then 
-    print_warning "Não é recomendado rodar este script como root"
-    print_warning "Use um usuário com permissões sudo"
+   echo -e "${RED}❌ Não execute este script como root. Use um usuário normal.${NC}"
+   exit 1
 fi
 
-# 1. Instalar PM2
-echo "📦 Passo 1/5: Instalando PM2..."
-if command -v pm2 &> /dev/null; then
-    print_success "PM2 já está instalado"
+# Diretório atual (onde está a API)
+API_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+cd "$API_DIR"
+
+echo -e "${GREEN}📁 Diretório da API: $API_DIR${NC}"
+
+# 1. Verificar Node.js
+echo -e "\n${YELLOW}1. Verificando Node.js...${NC}"
+if ! command -v node &> /dev/null; then
+    echo -e "${RED}❌ Node.js não encontrado. Instalando...${NC}"
+    curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash -
+    sudo apt-get install -y nodejs
+fi
+echo -e "${GREEN}✅ Node.js $(node -v) instalado${NC}"
+
+# 2. Verificar PM2
+echo -e "\n${YELLOW}2. Verificando PM2...${NC}"
+if ! command -v pm2 &> /dev/null; then
+    echo -e "${YELLOW}📦 Instalando PM2...${NC}"
+    sudo npm install -g pm2
+    echo -e "${GREEN}✅ PM2 instalado${NC}"
 else
-    if [ -f "scripts/install-pm2.sh" ]; then
-        chmod +x scripts/install-pm2.sh
-        ./scripts/install-pm2.sh
-    else
-        print_warning "Script install-pm2.sh não encontrado, instalando manualmente..."
-        sudo npm install -g pm2
-        sudo pm2 startup
-    fi
-    print_success "PM2 instalado"
+    echo -e "${GREEN}✅ PM2 já instalado${NC}"
 fi
 
-# 2. Instalar Evolution API
-echo ""
-echo "📦 Passo 2/5: Instalando Evolution API..."
+# 3. Instalar Evolution API
+echo -e "\n${YELLOW}3. Instalando Evolution API...${NC}"
+if [ -f "scripts/install-evolution-api.sh" ]; then
+    chmod +x scripts/install-evolution-api.sh
+    ./scripts/install-evolution-api.sh
+else
+    echo -e "${RED}❌ Script de instalação da Evolution API não encontrado${NC}"
+    exit 1
+fi
+
+# 4. Ler API Key da Evolution API
 EVOLUTION_DIR="$HOME/evolution-api"
-
-if [ -d "$EVOLUTION_DIR" ] && [ -f "$EVOLUTION_DIR/package.json" ]; then
-    print_success "Evolution API já está instalada"
+if [ -f "$EVOLUTION_DIR/.env" ]; then
+    EVOLUTION_API_KEY=$(grep "^AUTHENTICATION_API_KEY=" "$EVOLUTION_DIR/.env" | cut -d'=' -f2)
+    echo -e "${GREEN}✅ API Key da Evolution API: $EVOLUTION_API_KEY${NC}"
 else
-    if [ -f "scripts/install-evolution-api.sh" ]; then
-        chmod +x scripts/install-evolution-api.sh
-        echo "y" | ./scripts/install-evolution-api.sh || true
-    else
-        print_error "Script install-evolution-api.sh não encontrado"
-        exit 1
-    fi
-    print_success "Evolution API instalada"
+    echo -e "${RED}❌ Arquivo .env da Evolution API não encontrado${NC}"
+    exit 1
 fi
 
-# 3. Verificar configurações
-echo ""
-echo "📋 Passo 3/5: Verificando configurações..."
-
-# Verificar se .env existe
+# 5. Configurar .env da API
+echo -e "\n${YELLOW}4. Configurando .env da API...${NC}"
 if [ ! -f ".env" ]; then
-    print_warning "Arquivo .env não encontrado. Criando a partir do env.example..."
     if [ -f "env.example" ]; then
         cp env.example .env
-        print_warning "Arquivo .env criado. POR FAVOR, EDITE COM SUAS CONFIGURAÇÕES!"
+        echo -e "${GREEN}✅ Arquivo .env criado a partir de env.example${NC}"
     else
-        print_error "env.example não encontrado"
+        echo -e "${RED}❌ Arquivo env.example não encontrado${NC}"
         exit 1
     fi
 fi
 
-# Verificar se Evolution API .env existe
-if [ ! -f "$EVOLUTION_DIR/.env" ]; then
-    print_warning "Arquivo .env da Evolution API não encontrado"
-    print_warning "Execute: nano $EVOLUTION_DIR/.env e configure AUTHENTICATION_API_KEY"
+# Atualizar variáveis da Evolution API no .env
+if grep -q "^EVOLUTION_API_KEY=" .env; then
+    sed -i "s|^EVOLUTION_API_KEY=.*|EVOLUTION_API_KEY=$EVOLUTION_API_KEY|" .env
+else
+    echo "" >> .env
+    echo "# Evolution API" >> .env
+    echo "EVOLUTION_API_KEY=$EVOLUTION_API_KEY" >> .env
 fi
 
-# 4. Criar diretório de logs
-echo ""
-echo "📁 Passo 4/5: Criando diretórios necessários..."
+if grep -q "^EVOLUTION_API_URL=" .env; then
+    sed -i "s|^EVOLUTION_API_URL=.*|EVOLUTION_API_URL=http://localhost:8080|" .env
+else
+    echo "EVOLUTION_API_URL=http://localhost:8080" >> .env
+fi
+
+if ! grep -q "^EVOLUTION_INSTANCE=" .env; then
+    echo "EVOLUTION_INSTANCE=montshop" >> .env
+    echo -e "${YELLOW}⚠️  Configure EVOLUTION_INSTANCE no .env com o nome da sua instância${NC}"
+fi
+
+echo -e "${GREEN}✅ Variáveis da Evolution API configuradas no .env${NC}"
+
+# 6. Instalar dependências da API
+echo -e "\n${YELLOW}5. Instalando dependências da API...${NC}"
+npm install
+
+# 7. Executar migrações
+echo -e "\n${YELLOW}6. Executando migrações do banco de dados...${NC}"
+npm run db:migrate:deploy || echo -e "${YELLOW}⚠️  Erro ao executar migrações. Verifique a conexão com o banco de dados.${NC}"
+
+# 8. Build da aplicação
+echo -e "\n${YELLOW}7. Fazendo build da aplicação...${NC}"
+npm run build
+
+# 9. Criar diretório de logs
+echo -e "\n${YELLOW}8. Criando diretório de logs...${NC}"
 mkdir -p logs
-print_success "Diretório de logs criado"
 
-# 5. Configurar PM2 para iniciar no boot
-echo ""
-echo "⚙️  Passo 5/5: Configurando PM2 para iniciar automaticamente..."
+# 10. Configurar PM2
+echo -e "\n${YELLOW}9. Configurando PM2...${NC}"
 
-# Parar processos existentes (se houver)
+# Definir variável de ambiente para o PM2
+export EVOLUTION_API_DIR="$EVOLUTION_DIR"
+
+# Parar processos existentes se houver
 pm2 delete all 2>/dev/null || true
 
 # Iniciar aplicações
-print_success "Iniciando aplicações com PM2..."
+echo -e "${GREEN}🚀 Iniciando aplicações com PM2...${NC}"
 pm2 start ecosystem.config.js
 
-# Salvar configuração
-print_success "Salvando configuração do PM2..."
+# Salvar configuração do PM2
 pm2 save
 
-# Configurar startup
-print_success "Configurando PM2 para iniciar no boot..."
-STARTUP_CMD=$(pm2 startup | grep -v "PM2" | grep -v "To setup" | grep -v "copy/paste" | tail -1)
-if [ ! -z "$STARTUP_CMD" ]; then
-    print_warning "Execute este comando para configurar o startup:"
-    echo "$STARTUP_CMD"
-    echo ""
-    read -p "Deseja executar agora? (y/n) " -n 1 -r
-    echo
-    if [[ $REPLY =~ ^[Yy]$ ]]; then
-        eval $STARTUP_CMD
-        print_success "PM2 configurado para iniciar no boot!"
-    else
-        print_warning "Execute manualmente depois:"
-        echo "$STARTUP_CMD"
-    fi
-else
-    print_success "PM2 startup já configurado"
-fi
+# Configurar PM2 para iniciar no boot
+echo -e "\n${YELLOW}10. Configurando PM2 para iniciar no boot...${NC}"
+pm2 startup | tail -1 | sudo bash || echo -e "${YELLOW}⚠️  Execute o comando acima manualmente para configurar o startup${NC}"
 
-# Mostrar status
-echo ""
-echo "📊 Status dos serviços:"
+# 11. Mostrar status
+echo -e "\n${GREEN}✅ Setup concluído!${NC}"
+echo -e "\n${YELLOW}📊 Status das aplicações:${NC}"
 pm2 status
 
-echo ""
-print_success "✅ Setup completo!"
-echo ""
-echo "📝 Próximos passos:"
-echo "1. Configure o arquivo .env com suas variáveis de ambiente"
-echo "2. Configure o arquivo $EVOLUTION_DIR/.env com AUTHENTICATION_API_KEY"
-echo "3. Certifique-se de que EVOLUTION_API_KEY no .env é igual ao AUTHENTICATION_API_KEY"
-echo "4. Crie a instância do WhatsApp: curl -X POST http://localhost:8080/instance/create -H 'apikey: sua-key' -H 'Content-Type: application/json' -d '{\"instanceName\":\"montshop\",\"qrcode\":true}'"
-echo ""
-echo "🔍 Comandos úteis:"
-echo "  - Ver status: pm2 status"
-echo "  - Ver logs: pm2 logs"
-echo "  - Reiniciar: pm2 restart all"
-echo ""
+echo -e "\n${YELLOW}📋 Próximos passos:${NC}"
+echo -e "   1. Configure EVOLUTION_INSTANCE no .env com o nome da sua instância"
+echo -e "   2. Crie uma instância do WhatsApp na Evolution API:"
+echo -e "      - Acesse: http://localhost:8080"
+echo -e "      - Crie uma nova instância"
+echo -e "      - Escaneie o QR Code com seu WhatsApp"
+echo -e "   3. Verifique os logs:"
+echo -e "      - API: pm2 logs api-lojas"
+echo -e "      - Evolution API: pm2 logs evolution-api"
+echo -e "   4. Verifique o status:"
+echo -e "      - pm2 status"
+echo -e "      - pm2 monit"
+
+echo -e "\n${GREEN}🎉 Tudo configurado!${NC}"
 
