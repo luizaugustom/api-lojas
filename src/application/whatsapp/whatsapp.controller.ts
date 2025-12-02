@@ -1,6 +1,7 @@
 import {
   Controller,
   Post,
+  Get,
   Body,
   UseGuards,
   BadRequestException,
@@ -102,6 +103,21 @@ export class WhatsappController {
         message: error.message,
       };
     }
+  }
+
+  @Get('status')
+  @Roles(UserRole.ADMIN, UserRole.COMPANY)
+  @ApiOperation({ summary: 'Verificar status da instância WhatsApp' })
+  @ApiResponse({ status: 200, description: 'Status da instância' })
+  async getStatus() {
+    const status = await this.whatsappService.checkInstanceStatus();
+    return {
+      connected: status.connected,
+      status: status.status,
+      message: status.connected
+        ? 'Instância WhatsApp conectada e pronta para enviar mensagens'
+        : `Instância WhatsApp não está conectada. Status: ${status.status || 'desconhecido'}`,
+    };
   }
 
   @Post('send-installment-billing')

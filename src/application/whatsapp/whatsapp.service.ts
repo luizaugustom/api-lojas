@@ -63,22 +63,45 @@ export class WhatsappService {
   async checkInstanceStatus(): Promise<{ connected: boolean; status?: string }> {
     try {
       if (!this.evolutionApiUrl || !this.evolutionApiKey) {
+        this.logger.warn('Evolution API não configurada. Configure EVOLUTION_API_URL e EVOLUTION_API_KEY no .env');
         return { connected: false, status: 'not_configured' };
       }
 
+      if (!this.evolutionInstance) {
+        this.logger.warn('Instância Evolution API não configurada. Configure EVOLUTION_INSTANCE no .env');
+        return { connected: false, status: 'instance_not_configured' };
+      }
+
       const url = `${this.evolutionApiUrl}/instance/connectionState/${this.evolutionInstance}`;
-      const response = await this.httpClient.get(url);
+      const response = await this.httpClient.get(url, { timeout: 10000 });
 
       if (response.status === 200 && response.data) {
         const state = response.data.state || response.data.status;
         const connected = state === 'open' || state === 'connected';
+        
+        if (!connected) {
+          this.logger.warn(`Instância ${this.evolutionInstance} não está conectada. Status: ${state}`);
+        }
+        
         return { connected, status: state };
       }
 
+      this.logger.warn(`Resposta inesperada ao verificar status da instância: ${response.status}`);
       return { connected: false, status: 'unknown' };
     } catch (error) {
-      this.logger.warn(`Erro ao verificar status da instância: ${error.message}`);
-      return { connected: false, status: 'error' };
+      if (error.response) {
+        // Erro da API (4xx, 5xx)
+        this.logger.error(`Erro ao verificar status da instância: ${error.response.status} - ${JSON.stringify(error.response.data)}`);
+        return { connected: false, status: `api_error_${error.response.status}` };
+      } else if (error.request) {
+        // Erro de conexão
+        this.logger.error(`Não foi possível conectar à Evolution API em ${this.evolutionApiUrl}. Verifique se a Evolution API está rodando.`);
+        return { connected: false, status: 'connection_error' };
+      } else {
+        // Outro erro
+        this.logger.error(`Erro ao verificar status da instância: ${error.message}`);
+        return { connected: false, status: 'error' };
+      }
     }
   }
 
@@ -96,8 +119,8 @@ export class WhatsappService {
       if (retries === 2) {
         const instanceStatus = await this.checkInstanceStatus();
         if (!instanceStatus.connected) {
-          this.logger.warn(`Instância ${this.evolutionInstance} não está conectada. Status: ${instanceStatus.status}`);
-          // Não falhar imediatamente, tentar enviar mesmo assim (pode ser cache)
+          this.logger.error(`❌ Instância ${this.evolutionInstance} não está conectada. Status: ${instanceStatus.status}. Não será possível enviar mensagem.`);
+          return false;
         }
       }
 
