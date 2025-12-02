@@ -15,6 +15,12 @@ Este guia mostra como instalar automaticamente a API do MontShop junto com a Evo
 
 ## 🚀 Instalação Rápida (1 Comando)
 
+**Como root:**
+```bash
+bash scripts/setup-production.sh
+```
+
+**Ou se tiver sudo:**
 ```bash
 sudo bash scripts/setup-production.sh
 ```
@@ -46,13 +52,18 @@ cd api-lojas
 ### Passo 3: Executar Script de Setup
 
 ```bash
+# Fazer login como root (se necessário)
+su -
+
 # Dar permissão de execução
 chmod +x scripts/setup-production.sh
 chmod +x scripts/install-evolution-api.sh
 
-# Executar setup
-sudo bash scripts/setup-production.sh
+# Executar setup (como root)
+bash scripts/setup-production.sh
 ```
+
+**Nota:** O script precisa ser executado como root. Se você não tiver sudo instalado, faça login como root diretamente.
 
 O script irá:
 1. ✅ Atualizar o sistema

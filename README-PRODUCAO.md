@@ -2,6 +2,12 @@
 
 ## ⚡ Instalação Rápida (1 Comando)
 
+**Como root:**
+```bash
+bash scripts/setup-production.sh
+```
+
+**Ou se tiver sudo:**
 ```bash
 sudo bash scripts/setup-production.sh
 ```
@@ -40,7 +46,12 @@ cd api-lojas
 
 ```bash
 chmod +x scripts/*.sh
-sudo bash scripts/setup-production.sh
+bash scripts/setup-production.sh
+```
+
+**Nota:** Execute como root. Se não estiver como root, faça login:
+```bash
+su -
 ```
 
 ### 4. Configurar .env

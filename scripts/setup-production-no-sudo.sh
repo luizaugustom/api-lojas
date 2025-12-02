@@ -2,6 +2,7 @@
 
 # ============================================
 # Script de Setup Completo para Produção
+# Versão sem sudo (executar como root)
 # Digital Ocean - Instala tudo automaticamente
 # ============================================
 
@@ -22,8 +23,8 @@ echo ""
 # Verificar se está rodando como root
 if [ "$EUID" -ne 0 ]; then 
     echo -e "${RED}❌ Este script precisa ser executado como root${NC}"
-    echo -e "${YELLOW}   Execute como root: bash scripts/setup-production.sh${NC}"
-    echo -e "${YELLOW}   Ou se tiver sudo: sudo bash scripts/setup-production.sh${NC}"
+    echo -e "${YELLOW}   Execute como root: bash scripts/setup-production-no-sudo.sh${NC}"
+    echo -e "${YELLOW}   Ou faça login como root: su -${NC}"
     exit 1
 fi
 
@@ -48,7 +49,6 @@ echo -e "${YELLOW}📦 Verificando Node.js...${NC}"
 if ! command -v node &> /dev/null; then
     echo -e "${YELLOW}   Instalando Node.js 20...${NC}"
     curl -fsSL https://deb.nodesource.com/setup_20.x | bash -
-    apt update
     apt install -y nodejs
 else
     NODE_VERSION=$(node -v)

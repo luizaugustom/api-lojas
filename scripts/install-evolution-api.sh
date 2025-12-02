@@ -19,9 +19,10 @@ NC='\033[0m' # No Color
 BASE_DIR="/opt/evolution-api"
 EVOLUTION_DIR="$BASE_DIR/evolution-api"
 
-# Verificar se está rodando como root ou com sudo
+# Verificar se está rodando como root
 if [ "$EUID" -ne 0 ]; then 
-    echo -e "${RED}❌ Este script precisa ser executado com sudo${NC}"
+    echo -e "${RED}❌ Este script precisa ser executado como root${NC}"
+    echo -e "${YELLOW}   Execute como root: bash scripts/install-evolution-api.sh${NC}"
     exit 1
 fi
 
@@ -29,7 +30,8 @@ fi
 if ! command -v node &> /dev/null; then
     echo -e "${RED}❌ Node.js não está instalado. Instalando Node.js 20...${NC}"
     curl -fsSL https://deb.nodesource.com/setup_20.x | bash -
-    apt-get install -y nodejs
+    apt update
+    apt install -y nodejs
 fi
 
 NODE_VERSION=$(node -v)
