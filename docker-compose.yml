@@ -10,41 +10,11 @@ services:
       - NODE_ENV=production
       - DATABASE_URL=postgresql://postgres:password@db:5432/api_lojas?schema=public
       - JWT_SECRET=your-super-secret-jwt-key
-      # Evolution API - configure estas variáveis
-      - EVOLUTION_API_URL=http://evolution-api:8080
-      - EVOLUTION_API_KEY=sua-chave-secreta-aqui
-      - EVOLUTION_INSTANCE=minha-loja
     depends_on:
       - db
-      - evolution-api
     volumes:
       - ./uploads:/app/uploads
     restart: unless-stopped
-
-  evolution-api:
-    image: atendai/evolution-api:latest
-    container_name: evolution-api
-    ports:
-      - "8080:8080"
-    environment:
-      - SERVER_URL=http://localhost:8080
-      - PORT=8080
-      - DATABASE_ENABLED=true
-      - DATABASE_PROVIDER=sqlite
-      - DATABASE_NAME=evolution
-      - AUTHENTICATION_API_KEY=sua-chave-secreta-aqui
-      - AUTHENTICATION_EXPOSE_IN_FETCH_INSTANCES=true
-      - QRCODE_LIMIT=30
-      - QRCODE_COLOR=#198754
-      - LOG_LEVEL=ERROR
-      - LOG_COLOR=true
-      - LOG_BAILEYS=error
-    volumes:
-      - evolution_instances:/evolution/instances
-      - evolution_store:/evolution/store
-    restart: unless-stopped
-    networks:
-      - default
 
   db:
     image: postgres:15-alpine
@@ -73,5 +43,3 @@ services:
 
 volumes:
   postgres_data:
-  evolution_instances:
-  evolution_store:

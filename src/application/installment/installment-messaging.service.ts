@@ -9,8 +9,6 @@ export class InstallmentMessagingService {
   private readonly logger = new Logger(InstallmentMessagingService.name);
   private readonly maxMessagesPerCompanyPerHour: number = 50; // Rate limiting por empresa
   private readonly companyMessageCounts: Map<string, { count: number; resetAt: Date }> = new Map();
-  private instanceStatusCache: { connected: boolean; status?: string; checkedAt: Date } | null = null;
-  private readonly instanceStatusCacheTTL: number = 5 * 60 * 1000; // 5 minutos
 
   constructor(
     private readonly prisma: PrismaService,
@@ -29,11 +27,10 @@ export class InstallmentMessagingService {
     const startTime = Date.now();
     this.logger.log('🚀 Iniciando verificação de parcelas para envio de mensagens automáticas...');
 
-    // Verificar se a instância está conectada antes de processar (com cache)
-    const instanceStatus = await this.getCachedInstanceStatus();
+    // Verificar se a instância está conectada antes de processar
+    const instanceStatus = await this.whatsappService.checkInstanceStatus();
     if (!instanceStatus.connected) {
-      this.logger.error(`❌ Instância WhatsApp não está conectada. Status: ${instanceStatus.status || 'desconhecido'}. Abortando envio automático.`);
-      this.logger.error(`💡 Verifique se a Evolution API está rodando e se a instância está conectada. Use GET /whatsapp/status para verificar.`);
+      this.logger.error(`❌ Instância WhatsApp não está conectada. Status: ${instanceStatus.status}. Abortando envio automático.`);
       return;
     }
 
@@ -118,15 +115,6 @@ export class InstallmentMessagingService {
           if (!this.canSendMessageForCompany(companyId)) {
             this.logger.warn(`⏸️ Rate limit atingido para empresa ${companyName}. Parando envio de mensagens.`);
             break;
-          }
-
-          // Verificar status da instância periodicamente (a cada 10 mensagens ou se cache expirou)
-          if (sent % 10 === 0 || !this.isInstanceStatusCacheValid()) {
-            const instanceStatus = await this.getCachedInstanceStatus();
-            if (!instanceStatus.connected) {
-              this.logger.error(`❌ Instância WhatsApp desconectada durante o processamento. Status: ${instanceStatus.status}. Parando envio de mensagens.`);
-              break;
-            }
           }
 
           const success = await this.sendPaymentMessage(installment, companyName);
@@ -405,44 +393,6 @@ Contamos com você! 🙏
       this.logger.error('Erro ao enviar mensagem de teste:', error);
       return { success: false, message: 'Erro ao enviar mensagem', error: error.message };
     }
-  }
-
-  /**
-   * Obtém o status da instância com cache para melhor performance
-   */
-  private async getCachedInstanceStatus(): Promise<{ connected: boolean; status?: string }> {
-    const now = new Date();
-    
-    // Se o cache é válido, retornar do cache
-    if (this.instanceStatusCache && this.isInstanceStatusCacheValid()) {
-      return {
-        connected: this.instanceStatusCache.connected,
-        status: this.instanceStatusCache.status,
-      };
-    }
-
-    // Atualizar cache
-    const status = await this.whatsappService.checkInstanceStatus();
-    this.instanceStatusCache = {
-      connected: status.connected,
-      status: status.status,
-      checkedAt: now,
-    };
-
-    return status;
-  }
-
-  /**
-   * Verifica se o cache de status da instância ainda é válido
-   */
-  private isInstanceStatusCacheValid(): boolean {
-    if (!this.instanceStatusCache) {
-      return false;
-    }
-
-    const now = new Date();
-    const cacheAge = now.getTime() - this.instanceStatusCache.checkedAt.getTime();
-    return cacheAge < this.instanceStatusCacheTTL;
   }
 }
 
