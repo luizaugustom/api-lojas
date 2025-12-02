@@ -144,12 +144,15 @@ Contamos com você! 🙏
 
 ### Requisitos
 
-1. **WhatsApp Business API** configurado
+1. **Z-API** configurada
 2. **Variáveis de ambiente** (`.env`):
 ```env
-WHATSAPP_API_URL=https://api.whatsapp.com
-WHATSAPP_TOKEN=seu_token_aqui
+Z_API_URL=https://api.z-api.io
+Z_API_INSTANCE_ID=seu-instance-id
+Z_API_TOKEN=seu-token
 ```
+
+Para mais detalhes, consulte: [WHATSAPP-PRODUCAO.md](./WHATSAPP-PRODUCAO.md)
 
 ### Ativação
 
@@ -172,7 +175,7 @@ WHATSAPP_TOKEN=seu_token_aqui
 
 ## Próximos Passos
 
-- [ ] Integrar com WhatsApp Business API real
+- [x] Integrar com Z-API (WhatsApp Business API)
 - [ ] Adicionar templates personalizáveis de mensagens
 - [ ] Criar dashboard de análise de envios
 - [ ] Permitir configurar horário de envio
@@ -183,5 +186,6 @@ WHATSAPP_TOKEN=seu_token_aqui
 
 Para dúvidas ou problemas, consulte:
 - Documentação do NestJS Schedule: https://docs.nestjs.com/techniques/task-scheduling
-- Documentação do WhatsApp Business API: https://developers.facebook.com/docs/whatsapp
+- Documentação da Z-API: https://developer.z-api.io/
+- [WHATSAPP-PRODUCAO.md](./WHATSAPP-PRODUCAO.md) - Guia completo de configuração
 

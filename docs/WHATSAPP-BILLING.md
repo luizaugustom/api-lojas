@@ -2,18 +2,19 @@
 
 ## Visão Geral
 
-Este documento descreve a integração com a **Evolution API** para envio automático de mensagens de cobrança de parcelas via WhatsApp.
+Este documento descreve a integração com a **Z-API** para envio automático de mensagens de cobrança de parcelas via WhatsApp.
 
 ## ⚠️ Pré-requisitos
 
 Antes de usar os endpoints de cobrança, você precisa:
 
-1. **Ter a Evolution API instalada e rodando**
-   - Siga o guia completo: [EVOLUTION-API-SETUP.md](./EVOLUTION-API-SETUP.md)
+1. **Ter uma conta na Z-API**
+   - Crie uma conta em: https://developer.z-api.io/
+   - Obtenha suas credenciais (Instance ID e Token)
 
 2. **Ter uma instância do WhatsApp conectada**
-   - Crie uma instância na Evolution API
-   - Conecte seu WhatsApp escaneando o QR Code
+   - Crie uma instância na plataforma Z-API
+   - Conecte seu WhatsApp seguindo as instruções da Z-API
 
 ## Configuração
 
@@ -22,18 +23,18 @@ Antes de usar os endpoints de cobrança, você precisa:
 Adicione as seguintes variáveis no arquivo `.env` do projeto `api-lojas`:
 
 ```env
-# Evolution API
-EVOLUTION_API_URL=http://localhost:8080
-EVOLUTION_API_KEY=sua-chave-secreta-aqui
-EVOLUTION_INSTANCE=minha-loja
+# Z-API
+Z_API_URL=https://api.z-api.io
+Z_API_INSTANCE_ID=seu-instance-id-aqui
+Z_API_TOKEN=seu-token-aqui
 ```
 
 **Onde obter essas informações:**
-- `EVOLUTION_API_URL`: URL onde a Evolution API está rodando (sem barra no final)
-- `EVOLUTION_API_KEY`: A chave configurada no `AUTHENTICATION_API_KEY` do docker-compose da Evolution API
-- `EVOLUTION_INSTANCE`: Nome da instância que você criou na Evolution API
+- `Z_API_URL`: URL da API Z-API (geralmente não precisa alterar)
+- `Z_API_INSTANCE_ID`: ID da instância obtido ao criar instância na Z-API
+- `Z_API_TOKEN`: Token de autenticação obtido ao criar instância na Z-API
 
-**📖 Para mais detalhes sobre como configurar a Evolution API, consulte: [EVOLUTION-API-SETUP.md](./EVOLUTION-API-SETUP.md)**
+**📖 Para mais detalhes sobre como configurar a Z-API, consulte: [WHATSAPP-PRODUCAO.md](./WHATSAPP-PRODUCAO.md)**
 
 ## Endpoints
 
@@ -181,44 +182,36 @@ curl -X POST http://localhost:3000/whatsapp/send-customer-billing \
 
 ### Mensagem não é enviada
 
-1. **Verifique se a Evolution API está rodando:**
-   ```bash
-   docker-compose ps
-   # ou
-   curl http://localhost:8080
-   ```
+1. **Verifique se a Z-API está configurada:**
+   - Verifique se `Z_API_INSTANCE_ID` e `Z_API_TOKEN` estão configurados no `.env`
+   - Acesse o painel da Z-API para verificar se a instância está ativa
 
 2. **Verifique as variáveis de ambiente no `.env`:**
-   - `EVOLUTION_API_URL` está correto?
-   - `EVOLUTION_API_KEY` está correto?
-   - `EVOLUTION_INSTANCE` existe e está conectada?
+   - `Z_API_INSTANCE_ID` está correto?
+   - `Z_API_TOKEN` está correto?
+   - `Z_API_URL` está correto? (geralmente `https://api.z-api.io`)
 
 3. **Verifique os logs do MontShop:**
    - Procure por mensagens de erro relacionadas ao WhatsApp
-   - Verifique se aparece: `Evolution API configurada: ...`
+   - Verifique se aparece: `Z-API configurada: ...`
 
-4. **Verifique os logs da Evolution API:**
-   ```bash
-   docker-compose logs -f evolution-api
-   ```
+4. **Verifique o status da instância na Z-API:**
+   - Acesse o painel da Z-API
+   - Verifique se a instância está conectada e ativa
 
 5. **Certifique-se de que o número de telefone do cliente está cadastrado**
 
 ### Erro de autenticação (401 Unauthorized)
 
-- Verifique se `EVOLUTION_API_KEY` no `.env` do MontShop é igual ao `AUTHENTICATION_API_KEY` do docker-compose da Evolution API
-- Certifique-se de que não há espaços extras na chave
+- Verifique se `Z_API_TOKEN` no `.env` está correto
+- Certifique-se de que não há espaços extras no token
+- Verifique se o token não expirou na plataforma Z-API
 
 ### Instância não encontrada
 
-1. Liste as instâncias disponíveis:
-   ```bash
-   curl -X GET http://localhost:8080/instance/fetchInstances \
-     -H "apikey: sua-chave-secreta-aqui"
-   ```
-
-2. Verifique se o nome em `EVOLUTION_INSTANCE` corresponde exatamente ao nome criado
-3. Verifique se a instância está conectada (status: `open`)
+1. Verifique no painel da Z-API se a instância existe
+2. Verifique se o `Z_API_INSTANCE_ID` corresponde exatamente ao ID da instância
+3. Verifique se a instância está conectada e ativa
 
 ### Número de telefone inválido
 
@@ -228,11 +221,11 @@ curl -X POST http://localhost:3000/whatsapp/send-customer-billing \
 
 ### Erro de conexão
 
-- Verifique se a URL da Evolution API está acessível do servidor do MontShop
-- Se estiver em servidores diferentes, verifique firewall e rede
-- Certifique-se de que a URL não tem barra no final: `http://localhost:8080` (não `http://localhost:8080/`)
+- Verifique se a URL da Z-API está acessível (`https://api.z-api.io`)
+- Verifique sua conexão com a internet
+- Verifique se há bloqueios de firewall
 
-**📖 Para mais soluções de problemas, consulte: [EVOLUTION-API-SETUP.md](./EVOLUTION-API-SETUP.md#troubleshooting)**
+**📖 Para mais soluções de problemas, consulte: [WHATSAPP-PRODUCAO.md](./WHATSAPP-PRODUCAO.md)**
 
 ## Próximos Passos
 
@@ -245,6 +238,6 @@ curl -X POST http://localhost:3000/whatsapp/send-customer-billing \
 
 ## 📚 Documentação Relacionada
 
-- **[EVOLUTION-API-SETUP.md](./EVOLUTION-API-SETUP.md)** - Guia completo de instalação e configuração da Evolution API
+- **[WHATSAPP-PRODUCAO.md](./WHATSAPP-PRODUCAO.md)** - Guia completo de configuração para produção
 - **[MENSAGENS-AUTOMATICAS.md](./MENSAGENS-AUTOMATICAS.md)** - Documentação sobre mensagens automáticas (se existir)
 

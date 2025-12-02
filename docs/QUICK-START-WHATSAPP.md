@@ -1,64 +1,28 @@
-# 🚀 Início Rápido - WhatsApp Evolution API
+# 🚀 Início Rápido - WhatsApp Z-API
 
 ## Configuração em 3 Passos
 
-### 1️⃣ Instalar Evolution API (Docker)
+### 1️⃣ Criar Conta na Z-API
 
-Crie um arquivo `docker-compose.yml`:
+1. Acesse: https://developer.z-api.io/
+2. Crie uma conta
+3. Crie uma nova instância
+4. Anote o `INSTANCE_ID` e o `TOKEN`
 
-```yaml
-version: '3.8'
-services:
-  evolution-api:
-    container_name: evolution-api
-    image: atendai/evolution-api:latest
-    restart: always
-    ports:
-      - "8080:8080"
-    environment:
-      SERVER_URL: http://localhost:8080
-      PORT: 8080
-      AUTHENTICATION_API_KEY: minha-chave-secreta-123
-      DATABASE_ENABLED: true
-      DATABASE_PROVIDER: sqlite
-    volumes:
-      - evolution_instances:/evolution/instances
-      - evolution_store:/evolution/store
+### 2️⃣ Conectar WhatsApp
 
-volumes:
-  evolution_instances:
-  evolution_store:
-```
-
-Inicie:
-```bash
-docker-compose up -d
-```
-
-### 2️⃣ Criar Instância e Conectar WhatsApp
-
-```bash
-# Criar instância
-curl -X POST http://localhost:8080/instance/create \
-  -H "apikey: minha-chave-secreta-123" \
-  -H "Content-Type: application/json" \
-  -d '{"instanceName": "minha-loja", "qrcode": true}'
-
-# Obter QR Code
-curl -X GET http://localhost:8080/instance/connect/minha-loja \
-  -H "apikey: minha-chave-secreta-123"
-```
-
-Escaneie o QR Code com seu WhatsApp.
+1. Siga as instruções da Z-API para conectar seu número de WhatsApp
+2. Geralmente envolve escanear um QR Code no painel da Z-API
 
 ### 3️⃣ Configurar MontShop
 
 Adicione no arquivo `.env` do `api-lojas`:
 
 ```env
-EVOLUTION_API_URL=http://localhost:8080
-EVOLUTION_API_KEY=minha-chave-secreta-123
-EVOLUTION_INSTANCE=minha-loja
+# Z-API
+Z_API_URL=https://api.z-api.io
+Z_API_INSTANCE_ID=seu-instance-id-aqui
+Z_API_TOKEN=seu-token-aqui
 ```
 
 Reinicie a API do MontShop.
@@ -74,6 +38,5 @@ POST /whatsapp/send-customer-billing
 
 ## 📖 Documentação Completa
 
-- **[EVOLUTION-API-SETUP.md](./EVOLUTION-API-SETUP.md)** - Guia completo passo a passo
+- **[WHATSAPP-PRODUCAO.md](./WHATSAPP-PRODUCAO.md)** - Guia completo de configuração
 - **[WHATSAPP-BILLING.md](./WHATSAPP-BILLING.md)** - Documentação dos endpoints
-
