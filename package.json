@@ -36,7 +36,8 @@
     "build:desktop": "nest build",
     "fix:exchanged": "node scripts/fix-exchanged-quantity.js",
     "db:register-migrations": "node scripts/register-migrations.js",
-    "db:register-migrations:dry": "node scripts/register-migrations.js --dry-run"
+    "db:register-migrations:dry": "node scripts/register-migrations.js --dry-run",
+    "test:whatsapp": "node scripts/test-whatsapp.js"
   },
   "dependencies": {
     "@nestjs/common": "^10.0.0",
