@@ -119,6 +119,7 @@ export class ZApiProvider implements IWhatsAppProvider {
       };
 
       this.logger.debug(`📤 Enviando para Z-API | URL: ${url} | Telefone: ${formattedPhone} | Tamanho: ${message.length} chars`);
+      this.logger.debug(`🔑 Headers: Client-Token presente: ${!!this.token} | Comprimento: ${this.token?.length || 0}`);
 
       const response = await this.httpClient.post(url, payload, { headers });
 
