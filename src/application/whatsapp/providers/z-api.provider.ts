@@ -22,48 +22,59 @@ export class ZApiProvider implements IWhatsAppProvider {
     this.token = this.configService.get('Z_API_TOKEN', '');
 
     this.httpClient = axios.create({
-      timeout: 30000,
+      timeout: 15000, // Timeout otimizado para 15s
       headers: {
         'Content-Type': 'application/json',
-        'Client-Token': this.token,
       },
     });
 
     if (!this.instanceId || !this.token) {
-      this.logger.warn('Z-API não configurada. Configure Z_API_INSTANCE_ID e Z_API_TOKEN no .env');
+      this.logger.warn('⚠️ Z-API não configurada. Configure Z_API_INSTANCE_ID e Z_API_TOKEN no .env');
+      this.logger.warn('📖 Documentação: https://developer.z-api.io/');
     } else {
-      this.logger.log(`Z-API configurada: ${this.apiUrl} (Instance: ${this.instanceId})`);
+      this.logger.log(`✅ Z-API configurada: ${this.apiUrl} (Instance: ${this.instanceId.substring(0, 8)}...)`);
     }
   }
 
   async checkConnection(): Promise<{ connected: boolean; status?: string }> {
     try {
       if (!this.instanceId || !this.token) {
+        this.logger.warn('🔴 Z-API não configurada');
         return { connected: false, status: 'not_configured' };
       }
 
-      // Verificar status da instância
-      // Z-API pode usar diferentes endpoints, tentamos o mais comum
-      const url = `${this.apiUrl}/instances/${this.instanceId}/status`;
+      // Endpoint correto da Z-API para verificar status
+      const url = `${this.apiUrl}/instances/${this.instanceId}/token/${this.token}/status`;
       
       try {
-        const response = await this.httpClient.get(url);
+        const response = await this.httpClient.get(url, {
+          timeout: 10000, // Timeout menor para verificação de status
+        });
 
         if (response.status === 200 && response.data) {
           const status = response.data.status || response.data.connected || response.data.state;
           const connected = status === 'connected' || status === 'open' || response.data.connected === true;
+          
+          if (connected) {
+            this.logger.log(`🟢 Z-API conectada | Status: ${status}`);
+          } else {
+            this.logger.warn(`🟡 Z-API não conectada | Status: ${status}`);
+          }
+          
           return { connected, status: status || 'unknown' };
         }
       } catch (error) {
-        // Se o endpoint de status não existir, tentamos verificar via envio de teste
-        // ou assumimos que está conectado se as credenciais estão configuradas
-        this.logger.debug(`Endpoint de status não disponível, assumindo conectado se credenciais válidas`);
-        return { connected: true, status: 'assumed_connected' };
+        // Se o endpoint de status falhar, não bloqueamos o envio
+        if (error.response?.status === 404) {
+          this.logger.debug('⚠️ Endpoint de status não disponível, assumindo conectado');
+          return { connected: true, status: 'assumed_connected' };
+        }
+        throw error;
       }
 
       return { connected: false, status: 'unknown' };
     } catch (error) {
-      this.logger.warn(`Erro ao verificar status da Z-API: ${error.message}`);
+      this.logger.warn(`⚠️ Erro ao verificar status da Z-API: ${error.message}`);
       // Em caso de erro, assumimos que pode estar conectado (não bloqueamos envio)
       return { connected: true, status: 'check_failed' };
     }
@@ -72,58 +83,65 @@ export class ZApiProvider implements IWhatsAppProvider {
   async sendMessage(phone: string, message: string): Promise<boolean> {
     try {
       if (!this.instanceId || !this.token) {
-        this.logger.warn('Z-API não configurada. Verifique Z_API_INSTANCE_ID e Z_API_TOKEN no .env');
+        this.logger.error('🔴 Z-API não configurada. Verifique Z_API_INSTANCE_ID e Z_API_TOKEN no .env');
         return false;
       }
 
-      // Formatar telefone
+      // Validar e formatar telefone
+      const isValid = await this.validatePhoneNumber(phone);
+      if (!isValid) {
+        this.logger.error(`📵 Número de telefone inválido: ${phone}`);
+        return false;
+      }
+
       const formattedPhone = await this.formatPhoneNumber(phone);
 
-      // Z-API pode usar diferentes formatos de URL
-      // Tentamos o formato mais comum primeiro
-      let url = `${this.apiUrl}/instances/${this.instanceId}/token/${this.token}/send-text`;
-      let payload: any = {
+      // Endpoint correto da Z-API para envio de mensagens
+      const url = `${this.apiUrl}/instances/${this.instanceId}/token/${this.token}/send-text`;
+      const payload = {
         phone: formattedPhone,
         message: message,
       };
 
-      // Algumas versões da Z-API usam formato diferente
-      let response;
-      try {
-        response = await this.httpClient.post(url, payload);
-      } catch (error) {
-        // Tentar formato alternativo
-        if (error.response?.status === 404) {
-          // Tentar sem o token na URL (usando header)
-          url = `${this.apiUrl}/instances/${this.instanceId}/send-text`;
-          response = await this.httpClient.post(url, payload);
-        } else {
-          throw error;
-        }
-      }
+      this.logger.debug(`📤 Enviando para Z-API | URL: ${url} | Telefone: ${formattedPhone} | Tamanho: ${message.length} chars`);
 
+      const response = await this.httpClient.post(url, payload);
+
+      // Verificar resposta bem-sucedida
       if (response.status === 200 || response.status === 201) {
-        this.logger.log(`✅ Mensagem Z-API enviada com sucesso | Destino: ${formattedPhone} | Status: ${response.status}`);
+        const messageId = response.data?.messageId || response.data?.id;
+        this.logger.log(`✅ Mensagem Z-API enviada | Destino: ${formattedPhone} | Status: ${response.status}${messageId ? ` | ID: ${messageId}` : ''}`);
         return true;
       }
 
-      this.logger.warn(`⚠️ Resposta inesperada da Z-API | Status: ${response.status} | Destino: ${formattedPhone}`);
+      this.logger.warn(`⚠️ Resposta inesperada da Z-API | Status: ${response.status} | Data: ${JSON.stringify(response.data)}`);
       return false;
     } catch (error) {
-      this.logger.error(`❌ Erro ao enviar mensagem via Z-API | Destino: ${phone}`, error.message);
+      this.logger.error(`❌ Erro ao enviar mensagem via Z-API | Destino: ${phone}`);
       
       if (error.response) {
-        this.logger.error(`📊 Detalhes do erro | Status: ${error.response.status} | Resposta: ${JSON.stringify(error.response.data)}`);
+        const status = error.response.status;
+        const data = error.response.data;
         
-        // Se for erro 401, credenciais inválidas
-        if (error.response.status === 401) {
-          this.logger.error(`🔐 Erro de autenticação. Verifique Z_API_TOKEN`);
-        }
+        this.logger.error(`📊 Status HTTP: ${status}`);
+        this.logger.error(`📋 Resposta: ${JSON.stringify(data)}`);
         
-        // Se for erro 404, endpoint pode estar errado
-        if (error.response.status === 404) {
-          this.logger.error(`🔍 Endpoint não encontrado. Verifique Z_API_INSTANCE_ID e formato da URL`);
+        // Mensagens de erro específicas
+        if (status === 401 || status === 403) {
+          this.logger.error('🔐 Erro de autenticação. Verifique se o Z_API_TOKEN está correto');
+        } else if (status === 404) {
+          this.logger.error('🔍 Endpoint não encontrado. Verifique se o Z_API_INSTANCE_ID está correto');
+        } else if (status === 400) {
+          this.logger.error('📝 Dados inválidos. Verifique o formato do telefone e mensagem');
+        } else if (status === 500) {
+          this.logger.error('⚙️ Erro no servidor da Z-API. Tente novamente em alguns minutos');
         }
+      } else if (error.code === 'ECONNABORTED') {
+        this.logger.error('⏱️ Timeout ao conectar com Z-API. Verifique sua conexão');
+      } else if (error.code === 'ENOTFOUND' || error.code === 'ECONNREFUSED') {
+        this.logger.error('🌐 Não foi possível conectar à Z-API. Verifique a URL configurada');
+      } else {
+        this.logger.error(`⚠️ Erro: ${error.message}`);
       }
       
       return false;
@@ -131,9 +149,34 @@ export class ZApiProvider implements IWhatsAppProvider {
   }
 
   async validatePhoneNumber(phone: string): Promise<boolean> {
-    // Validação básica de telefone brasileiro
-    const phoneRegex = /^(\+55)?[\s]?[1-9]{2}[\s]?[9]?[\d]{4}[\s]?[\d]{4}$/;
-    return phoneRegex.test(phone.replace(/\D/g, ''));
+    // Remove caracteres não numéricos
+    const digits = phone.replace(/\D/g, '');
+    
+    // Validação para telefones brasileiros
+    // Aceita: 11 dígitos (DDD + 9 + número) ou 13 dígitos (55 + DDD + 9 + número)
+    if (digits.length === 11) {
+      // Formato: 11987654321 (DDD + 9 dígitos)
+      const ddd = parseInt(digits.substring(0, 2));
+      const firstDigit = digits[2];
+      // DDD válido (11-99) e primeiro dígito do número deve ser 9 para celular
+      return ddd >= 11 && ddd <= 99 && (firstDigit === '9' || firstDigit === '8' || firstDigit === '7');
+    } else if (digits.length === 13 && digits.startsWith('55')) {
+      // Formato: 5511987654321 (55 + DDD + 9 dígitos)
+      const ddd = parseInt(digits.substring(2, 4));
+      const firstDigit = digits[4];
+      return ddd >= 11 && ddd <= 99 && (firstDigit === '9' || firstDigit === '8' || firstDigit === '7');
+    } else if (digits.length === 10) {
+      // Formato antigo sem o 9: 1187654321 (DDD + 8 dígitos)
+      const ddd = parseInt(digits.substring(0, 2));
+      return ddd >= 11 && ddd <= 99;
+    } else if (digits.length === 12 && digits.startsWith('55')) {
+      // Formato antigo sem o 9: 551187654321 (55 + DDD + 8 dígitos)
+      const ddd = parseInt(digits.substring(2, 4));
+      return ddd >= 11 && ddd <= 99;
+    }
+    
+    this.logger.warn(`📵 Número com formato inválido: ${digits} (${digits.length} dígitos)`);
+    return false;
   }
 
   async formatPhoneNumber(phone: string): Promise<string> {
@@ -142,12 +185,20 @@ export class ZApiProvider implements IWhatsAppProvider {
     
     // Adiciona código do país se não estiver presente
     if (digits.length === 11) {
+      // 11987654321 -> 5511987654321
       return `55${digits}`;
     } else if (digits.length === 13 && digits.startsWith('55')) {
+      // Já está no formato correto
+      return digits;
+    } else if (digits.length === 10) {
+      // Formato antigo sem o 9: 1187654321 -> 551187654321
+      return `55${digits}`;
+    } else if (digits.length === 12 && digits.startsWith('55')) {
+      // Formato antigo com 55: 551187654321 -> mantém
       return digits;
     }
     
-    throw new Error('Número de telefone inválido');
+    throw new Error(`Não foi possível formatar o número: ${phone} (${digits.length} dígitos)`);
   }
 }
 

@@ -65,6 +65,23 @@ export class WhatsappService {
     const startTime = Date.now();
     
     try {
+      // Validações de segurança
+      if (!message.to || message.to.trim() === '') {
+        this.logger.error('🚨 Número de telefone não fornecido');
+        return false;
+      }
+
+      if (!message.message || message.message.trim() === '') {
+        this.logger.error('🚨 Mensagem vazia não pode ser enviada');
+        return false;
+      }
+
+      // Limitar tamanho da mensagem (WhatsApp limita a 65536 caracteres)
+      if (message.message.length > 65536) {
+        this.logger.error(`🚨 Mensagem muito longa: ${message.message.length} caracteres (máximo: 65536)`);
+        return false;
+      }
+
       // Verificar se a instância está conectada (apenas no primeiro envio)
       if (retries === 2) {
         const instanceStatus = await this.checkInstanceStatus();
@@ -77,7 +94,7 @@ export class WhatsappService {
       // Validar número de telefone
       const isValid = await this.provider.validatePhoneNumber(message.to);
       if (!isValid) {
-        this.logger.warn(`⚠️ Número de telefone inválido: ${message.to}`);
+        this.logger.error(`📵 Número de telefone inválido: ${message.to}`);
         return false;
       }
 
@@ -109,8 +126,8 @@ export class WhatsappService {
       const duration = Date.now() - startTime;
       this.logger.error(`❌ Erro ao enviar mensagem WhatsApp via ${this.providerName} | Destino: ${message.to} | Tentativa: ${3 - retries}/3 | Tempo: ${duration}ms`);
       
-      if (error.stack) {
-        this.logger.debug(`Stack trace: ${error.stack}`);
+      if (error.message) {
+        this.logger.error(`💬 Mensagem de erro: ${error.message}`);
       }
 
       // Retry logic para erros temporários
@@ -120,12 +137,10 @@ export class WhatsappService {
         await new Promise(resolve => setTimeout(resolve, delay));
         return this.sendMessage(message, retries - 1);
       }
-      
+
       return false;
     }
-  }
-
-  async sendSaleNotification(phone: string, saleData: any): Promise<boolean> {
+  }  async sendSaleNotification(phone: string, saleData: any): Promise<boolean> {
     const message = `
 🛍️ *Nova Venda Realizada!*
 
@@ -193,6 +208,22 @@ Por favor, efetue o pagamento até a data de vencimento.
    */
   async sendInstallmentBilling(billingData: InstallmentBillingData, phone: string): Promise<boolean> {
     try {
+      // Validações
+      if (!billingData || !phone) {
+        this.logger.error('🚨 Dados de cobrança ou telefone inválidos');
+        return false;
+      }
+
+      if (!billingData.customerName) {
+        this.logger.error('🚨 Nome do cliente não fornecido');
+        return false;
+      }
+
+      if (!billingData.dueDate) {
+        this.logger.error('🚨 Data de vencimento não fornecida');
+        return false;
+      }
+
       const dueDateFormatted = new Date(billingData.dueDate).toLocaleDateString('pt-BR', {
         day: '2-digit',
         month: '2-digit',
@@ -245,12 +276,14 @@ Obrigado pela atenção! 🙏
       });
 
       if (success) {
-        this.logger.log(`Mensagem de cobrança enviada para ${billingData.customerName} (${phone})`);
+        this.logger.log(`💰 Mensagem de cobrança enviada para ${billingData.customerName} (${phone})`);
+      } else {
+        this.logger.error(`🚨 Falha ao enviar mensagem de cobrança para ${billingData.customerName} (${phone})`);
       }
 
       return success;
     } catch (error) {
-      this.logger.error(`Erro ao enviar mensagem de cobrança para ${phone}:`, error);
+      this.logger.error(`❌ Erro ao enviar mensagem de cobrança para ${phone}:`, error.message);
       return false;
     }
   }
