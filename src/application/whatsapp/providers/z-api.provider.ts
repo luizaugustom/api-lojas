@@ -14,12 +14,14 @@ export class ZApiProvider implements IWhatsAppProvider {
   private readonly apiUrl: string;
   private readonly instanceId: string;
   private readonly token: string;
+  private readonly clientToken: string;
   private readonly httpClient: AxiosInstance;
 
   constructor(private readonly configService: ConfigService) {
     this.apiUrl = this.configService.get('Z_API_URL', 'https://api.z-api.io').replace(/\/$/, '');
     this.instanceId = this.configService.get('Z_API_INSTANCE_ID', '');
     this.token = this.configService.get('Z_API_TOKEN', '');
+    this.clientToken = this.configService.get('Z_API_CLIENT_TOKEN', '');
 
     this.httpClient = axios.create({
       timeout: 15000, // Timeout otimizado para 15s
@@ -113,10 +115,20 @@ export class ZApiProvider implements IWhatsAppProvider {
 
       this.logger.debug(`📤 Enviando para Z-API | URL: ${url} | Telefone: ${formattedPhone} | Tamanho: ${message.length} chars`);
       this.logger.debug(`🔑 Token na URL: ${this.token?.substring(0, 8)}... | Comprimento: ${this.token?.length || 0}`);
+      this.logger.debug(`🔐 Client-Token configurado: ${!!this.clientToken}`);
       this.logger.debug(`📦 Payload: ${JSON.stringify(payload)}`);
 
-      // Tentar SEM o header Client-Token primeiro (token já está na URL)
-      const response = await this.httpClient.post(url, payload);
+      // Configurar headers com Client-Token se disponível
+      const headers: any = {
+        'Content-Type': 'application/json',
+      };
+
+      if (this.clientToken) {
+        headers['Client-Token'] = this.clientToken;
+        this.logger.debug(`✅ Adicionando Client-Token ao header`);
+      }
+
+      const response = await this.httpClient.post(url, payload, { headers });
 
       // Verificar resposta bem-sucedida
       if (response.status === 200 || response.status === 201) {
