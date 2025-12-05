@@ -103,8 +103,7 @@ export class ZApiProvider implements IWhatsAppProvider {
 
       const formattedPhone = await this.formatPhoneNumber(phone);
 
-      // Endpoint da Z-API - existem dois formatos possíveis
-      // Formato 1: URL com token (mais comum)
+      // Endpoint da Z-API - o token já está na URL
       const url = `${this.apiUrl}/instances/${this.instanceId}/token/${this.token}/send-text`;
       
       const payload = {
@@ -112,18 +111,12 @@ export class ZApiProvider implements IWhatsAppProvider {
         message: message,
       };
 
-      // Headers adicionais para garantir compatibilidade
-      // Z-API pode aceitar diferentes formatos de header
-      const headers = {
-        'client-token': this.token,  // Formato em minúsculo
-        'Client-Token': this.token,  // Formato capitalizado
-        'Content-Type': 'application/json',
-      };
-
       this.logger.debug(`📤 Enviando para Z-API | URL: ${url} | Telefone: ${formattedPhone} | Tamanho: ${message.length} chars`);
-      this.logger.debug(`🔑 Headers: Client-Token presente: ${!!this.token} | Comprimento: ${this.token?.length || 0}`);
+      this.logger.debug(`🔑 Token na URL: ${this.token?.substring(0, 8)}... | Comprimento: ${this.token?.length || 0}`);
+      this.logger.debug(`📦 Payload: ${JSON.stringify(payload)}`);
 
-      const response = await this.httpClient.post(url, payload, { headers });
+      // Tentar SEM o header Client-Token primeiro (token já está na URL)
+      const response = await this.httpClient.post(url, payload);
 
       // Verificar resposta bem-sucedida
       if (response.status === 200 || response.status === 201) {
