@@ -20,6 +20,15 @@ export class UpdateFiscalConfigDto {
   taxRegime?: TaxRegime;
 
   @ApiProperty({
+    description: 'Inscrição Estadual',
+    example: '123.456.789',
+    required: false,
+  })
+  @IsOptional()
+  @IsString()
+  stateRegistration?: string;
+
+  @ApiProperty({
     description: 'CNAE - Classificação Nacional de Atividades Econômicas (7 dígitos)',
     example: '4761001',
     required: false,

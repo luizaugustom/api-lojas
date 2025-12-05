@@ -428,6 +428,10 @@ export class CompanyService {
         updateData.taxRegime = updateFiscalConfigDto.taxRegime;
       }
 
+      if (updateFiscalConfigDto.stateRegistration !== undefined) {
+        updateData.stateRegistration = updateFiscalConfigDto.stateRegistration;
+      }
+
       if (updateFiscalConfigDto.cnae !== undefined) {
         updateData.cnae = updateFiscalConfigDto.cnae;
       }
@@ -547,6 +551,7 @@ export class CompanyService {
         idTokenCsc: company.idTokenCsc,
         // Informações sobre configuração do Focus NFe (empresa ou admin como fallback)
         hasFocusNfeApiKey: !!(company.focusNfeApiKey || company.admin.focusNfeApiKey),
+        adminHasFocusNfeApiKey: !!company.admin.focusNfeApiKey,
         focusNfeEnvironment: company.focusNfeEnvironment || company.admin.focusNfeEnvironment || 'sandbox',
       };
     } catch (error) {

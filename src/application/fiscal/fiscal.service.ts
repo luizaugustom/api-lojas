@@ -394,6 +394,7 @@ export class FiscalService {
       const company = await this.prisma.company.findUnique({
         where: { id: companyId },
         select: {
+          name: true,
           cnpj: true,
           stateRegistration: true,
           certificatePassword: true,
@@ -413,26 +414,41 @@ export class FiscalService {
       });
 
       if (!company) {
+        this.logger.error(`❌ Empresa ${companyId} não encontrada`);
         return false;
       }
 
-      // Verificar campos obrigatórios para emissão de NFCe
-      const hasRequiredFields = !!(
-        company.cnpj &&
-        company.stateRegistration &&
-        company.certificatePassword &&
-        company.nfceSerie &&
-        company.municipioIbge &&
-        company.csc &&
-        company.idTokenCsc &&
-        company.state &&
-        company.city
-      );
+      // Verificar campos obrigatórios e listar os que estão faltando
+      const missingFields: string[] = [];
+      
+      if (!company.cnpj) missingFields.push('CNPJ');
+      if (!company.stateRegistration) missingFields.push('Inscrição Estadual');
+      if (!company.certificatePassword) missingFields.push('Senha do Certificado');
+      if (!company.nfceSerie) missingFields.push('Série NFCe');
+      if (!company.municipioIbge) missingFields.push('Código IBGE do Município');
+      if (!company.csc) missingFields.push('CSC (Código de Segurança do Contribuinte)');
+      if (!company.idTokenCsc) missingFields.push('ID Token CSC');
+      if (!company.state) missingFields.push('Estado (UF)');
+      if (!company.city) missingFields.push('Cidade');
 
       // Verificar se a API Key do Focus NFe está configurada (empresa ou admin como fallback)
       const hasFocusNfeApiKey = !!(company.focusNfeApiKey || company.admin?.focusNfeApiKey);
+      if (!hasFocusNfeApiKey) {
+        missingFields.push('API Key do Focus NFe (configurar pelo Admin)');
+      }
 
-      return hasRequiredFields && hasFocusNfeApiKey;
+      const hasRequiredFields = missingFields.length === 0;
+
+      if (!hasRequiredFields) {
+        this.logger.warn(`❌ Empresa "${company.name}" (${companyId}) - Campos fiscais faltando para emissão de NFC-e:`);
+        missingFields.forEach((field, index) => {
+          this.logger.warn(`   ${index + 1}. ${field}`);
+        });
+      } else {
+        this.logger.log(`✅ Empresa "${company.name}" (${companyId}) - Configuração fiscal completa para emissão de NFC-e`);
+      }
+
+      return hasRequiredFields;
     } catch (error) {
       this.logger.error('Error checking fiscal config:', error);
       return false;
@@ -504,7 +520,9 @@ export class FiscalService {
       const hasValidConfig = await this.hasValidFiscalConfig(nfceData.companyId);
 
       if (!hasValidConfig) {
-        this.logger.warn(`Empresa ${nfceData.companyId} não tem configuração fiscal válida. Gerando NFCe mockado.`);
+        this.logger.warn(`⚠️ ATENÇÃO: Empresa ${nfceData.companyId} não tem configuração fiscal válida. Gerando NFCe MOCKADO (não fiscal).`);
+        this.logger.warn(`Campos obrigatórios faltando: Verifique se a empresa tem CNPJ, Inscrição Estadual, Senha do Certificado, Série NFCe, Código IBGE, CSC, ID Token CSC, Estado e Cidade configurados.`);
+        this.logger.warn(`Também verifique se a API Key do Focus NFe está configurada (empresa ou admin).`);
         return await this.generateMockNFCe(nfceData);
       }
 
