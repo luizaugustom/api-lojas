@@ -47,9 +47,15 @@ export class ZApiProvider implements IWhatsAppProvider {
       // Endpoint correto da Z-API para verificar status
       const url = `${this.apiUrl}/instances/${this.instanceId}/token/${this.token}/status`;
       
+      const headers = {
+        'Client-Token': this.token,
+        'Content-Type': 'application/json',
+      };
+      
       try {
         const response = await this.httpClient.get(url, {
           timeout: 10000, // Timeout menor para verificação de status
+          headers,
         });
 
         if (response.status === 200 && response.data) {
@@ -97,16 +103,24 @@ export class ZApiProvider implements IWhatsAppProvider {
 
       const formattedPhone = await this.formatPhoneNumber(phone);
 
-      // Endpoint correto da Z-API para envio de mensagens
+      // Endpoint da Z-API - existem dois formatos possíveis
+      // Formato 1: URL com token (mais comum)
       const url = `${this.apiUrl}/instances/${this.instanceId}/token/${this.token}/send-text`;
+      
       const payload = {
         phone: formattedPhone,
         message: message,
       };
 
+      // Headers adicionais para garantir compatibilidade
+      const headers = {
+        'Client-Token': this.token,
+        'Content-Type': 'application/json',
+      };
+
       this.logger.debug(`📤 Enviando para Z-API | URL: ${url} | Telefone: ${formattedPhone} | Tamanho: ${message.length} chars`);
 
-      const response = await this.httpClient.post(url, payload);
+      const response = await this.httpClient.post(url, payload, { headers });
 
       // Verificar resposta bem-sucedida
       if (response.status === 200 || response.status === 201) {
