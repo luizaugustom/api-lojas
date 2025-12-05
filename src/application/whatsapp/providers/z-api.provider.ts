@@ -25,6 +25,7 @@ export class ZApiProvider implements IWhatsAppProvider {
       timeout: 15000, // Timeout otimizado para 15s
       headers: {
         'Content-Type': 'application/json',
+        'Client-Token': this.token, // Header obrigatório da Z-API
       },
     });
 
