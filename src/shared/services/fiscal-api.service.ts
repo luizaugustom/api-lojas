@@ -1075,4 +1075,162 @@ export class FiscalApiService {
       };
     }
   }
+
+  /**
+   * Cancela uma NFe ou NFCe no Focus NFe
+   */
+  async cancelFiscalDocument(
+    companyId: string,
+    accessKey: string,
+    reason: string,
+    documentType: 'NFe' | 'NFCe'
+  ): Promise<{ success: boolean; error?: string }> {
+    try {
+      this.logger.log(`Cancelling ${documentType} ${accessKey} for company: ${companyId}`);
+
+      const company = await this.prisma.company.findUnique({
+        where: { id: companyId },
+        select: {
+          focusNfeApiKey: true,
+          focusNfeEnvironment: true,
+          admin: {
+            select: {
+              focusNfeApiKey: true,
+              focusNfeEnvironment: true,
+            },
+          },
+        },
+      });
+
+      if (!company) {
+        throw new BadRequestException('Empresa não encontrada');
+      }
+
+      const apiKey = company.focusNfeApiKey || company.admin?.focusNfeApiKey;
+      const environment = company.focusNfeEnvironment || company.admin?.focusNfeEnvironment || 'sandbox';
+
+      if (!apiKey) {
+        throw new BadRequestException('API Key do Focus NFe não configurada');
+      }
+
+      const baseUrl = environment === 'production'
+        ? 'https://api.focusnfe.com.br'
+        : 'https://homologacao.focusnfe.com.br';
+
+      const httpClient = axios.create({
+        baseURL: baseUrl,
+        headers: {
+          'Content-Type': 'application/json',
+          'User-Agent': 'API-Lojas-SaaS/1.0',
+        },
+        auth: {
+          username: apiKey,
+          password: '',
+        },
+      });
+
+      // Endpoint de cancelamento: /v2/{tipo}/{chave_acesso}
+      const tipo = documentType === 'NFCe' ? 'nfce' : 'nfe';
+      const endpoint = `/v2/${tipo}/${accessKey}`;
+
+      const payload = {
+        justificativa: reason,
+      };
+
+      this.logger.log(`Sending cancel request to Focus NFe: ${endpoint}`);
+      const response = await httpClient.delete(endpoint, { data: payload });
+
+      this.logger.log(`Document ${accessKey} cancelled successfully`);
+      return { success: true };
+    } catch (error: any) {
+      this.logger.error(`Error cancelling document ${accessKey}:`, error);
+      
+      const errorMessage = error?.response?.data?.mensagem 
+        || error?.response?.data?.message 
+        || error?.message 
+        || 'Erro ao cancelar documento fiscal';
+
+      return {
+        success: false,
+        error: errorMessage,
+      };
+    }
+  }
+
+  /**
+   * Consulta o status de uma NFe ou NFCe na SEFAZ via Focus NFe
+   */
+  async getFiscalDocumentStatus(
+    companyId: string,
+    accessKey: string,
+    documentType: 'NFe' | 'NFCe'
+  ): Promise<{ status: string; error?: string }> {
+    try {
+      this.logger.log(`Checking status of ${documentType} ${accessKey} for company: ${companyId}`);
+
+      const company = await this.prisma.company.findUnique({
+        where: { id: companyId },
+        select: {
+          focusNfeApiKey: true,
+          focusNfeEnvironment: true,
+          admin: {
+            select: {
+              focusNfeApiKey: true,
+              focusNfeEnvironment: true,
+            },
+          },
+        },
+      });
+
+      if (!company) {
+        throw new BadRequestException('Empresa não encontrada');
+      }
+
+      const apiKey = company.focusNfeApiKey || company.admin?.focusNfeApiKey;
+      const environment = company.focusNfeEnvironment || company.admin?.focusNfeEnvironment || 'sandbox';
+
+      if (!apiKey) {
+        throw new BadRequestException('API Key do Focus NFe não configurada');
+      }
+
+      const baseUrl = environment === 'production'
+        ? 'https://api.focusnfe.com.br'
+        : 'https://homologacao.focusnfe.com.br';
+
+      const httpClient = axios.create({
+        baseURL: baseUrl,
+        headers: {
+          'Content-Type': 'application/json',
+          'User-Agent': 'API-Lojas-SaaS/1.0',
+        },
+        auth: {
+          username: apiKey,
+          password: '',
+        },
+      });
+
+      // Endpoint de consulta: /v2/{tipo}/{chave_acesso}
+      const tipo = documentType === 'NFCe' ? 'nfce' : 'nfe';
+      const endpoint = `/v2/${tipo}/${accessKey}`;
+
+      const response = await httpClient.get(endpoint);
+
+      const status = response.data?.status || 'Desconhecido';
+      this.logger.log(`Document ${accessKey} status: ${status}`);
+
+      return { status };
+    } catch (error: any) {
+      this.logger.error(`Error checking status of document ${accessKey}:`, error);
+      
+      const errorMessage = error?.response?.data?.mensagem 
+        || error?.response?.data?.message 
+        || error?.message 
+        || 'Erro ao consultar status do documento';
+
+      return {
+        status: 'Erro',
+        error: errorMessage,
+      };
+    }
+  }
 }

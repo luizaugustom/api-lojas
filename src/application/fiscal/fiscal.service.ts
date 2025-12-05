@@ -832,6 +832,51 @@ export class FiscalService {
     return document;
   }
 
+  async getFiscalDocumentStatus(id: string, companyId?: string) {
+    try {
+      const document = await this.getFiscalDocument(id, companyId);
+
+      if (!document.accessKey) {
+        throw new BadRequestException('Documento não possui chave de acesso');
+      }
+
+      // Determinar tipo do documento
+      const documentType = document.documentType === 'NFCe' ? 'NFCe' : 'NFe';
+
+      // Consultar status na SEFAZ via Focus NFe
+      const statusResult = await this.fiscalApiService.getFiscalDocumentStatus(
+        document.companyId,
+        document.accessKey,
+        documentType
+      );
+
+      // Atualizar status no banco se diferente
+      if (statusResult.status && statusResult.status !== document.status) {
+        await this.prisma.fiscalDocument.update({
+          where: { id },
+          data: {
+            status: statusResult.status,
+          },
+        });
+      }
+
+      return {
+        id: document.id,
+        accessKey: document.accessKey,
+        documentType: document.documentType,
+        currentStatus: document.status,
+        sefazStatus: statusResult.status,
+        error: statusResult.error,
+      };
+    } catch (error: any) {
+      this.logger.error('Error getting fiscal document status:', error);
+      if (error instanceof BadRequestException || error instanceof NotFoundException) {
+        throw error;
+      }
+      throw new BadRequestException(error?.message || 'Erro ao consultar status do documento');
+    }
+  }
+
   async cancelFiscalDocument(id: string, reason: string, companyId?: string) {
     try {
       const where: any = { id };
@@ -851,25 +896,51 @@ export class FiscalService {
         throw new BadRequestException('Documento já está cancelado');
       }
 
-      // Call fiscal API to cancel (not implemented yet)
-      const response = {
-        status: 'Cancelada',
-        motivo: reason,
-      };
+      if (!document.accessKey) {
+        throw new BadRequestException('Documento não possui chave de acesso. Não é possível cancelar.');
+      }
 
-      // Update document status
+      // Validar motivo do cancelamento (obrigatório pela SEFAZ - mínimo 15 caracteres)
+      if (!reason || reason.trim().length < 15) {
+        throw new BadRequestException('O motivo do cancelamento deve ter pelo menos 15 caracteres');
+      }
+
+      // Determinar tipo do documento
+      const documentType = document.documentType === 'NFCe' ? 'NFCe' : 'NFe';
+
+      // Chamar API do Focus NFe para cancelar
+      const cancelResult = await this.fiscalApiService.cancelFiscalDocument(
+        document.companyId,
+        document.accessKey,
+        reason.trim(),
+        documentType
+      );
+
+      if (!cancelResult.success) {
+        throw new BadRequestException(cancelResult.error || 'Erro ao cancelar documento na SEFAZ');
+      }
+
+      // Atualizar status no banco de dados
       const updatedDocument = await this.prisma.fiscalDocument.update({
         where: { id },
         data: {
           status: 'Cancelada',
+          metadata: {
+            ...(document.metadata as any || {}),
+            cancellationReason: reason.trim(),
+            cancelledAt: new Date().toISOString(),
+          },
         },
       });
 
-      this.logger.log(`Fiscal document cancelled: ${id}`);
+      this.logger.log(`✅ Documento fiscal ${id} (${document.accessKey}) cancelado com sucesso na SEFAZ`);
       return updatedDocument;
-    } catch (error) {
-      this.logger.error('Error cancelling fiscal document:', error);
-      throw new BadRequestException('Erro ao cancelar documento fiscal');
+    } catch (error: any) {
+      this.logger.error('❌ Erro ao cancelar documento fiscal:', error);
+      if (error instanceof BadRequestException || error instanceof NotFoundException) {
+        throw error;
+      }
+      throw new BadRequestException(error?.message || 'Erro ao cancelar documento fiscal');
     }
   }
 

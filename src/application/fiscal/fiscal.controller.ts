@@ -519,6 +519,18 @@ export class FiscalController {
     return this.fiscalService.cancelFiscalDocument(id, cancelDto.reason, user.companyId);
   }
 
+  @Get(':id/status')
+  @Roles(UserRole.ADMIN, UserRole.COMPANY)
+  @ApiOperation({ summary: 'Consultar status do documento fiscal na SEFAZ' })
+  @ApiResponse({ status: 200, description: 'Status do documento obtido com sucesso' })
+  @ApiResponse({ status: 404, description: 'Documento fiscal não encontrado' })
+  async getFiscalDocumentStatus(
+    @Param('id', UuidValidationPipe) id: string,
+    @CurrentUser() user: any,
+  ) {
+    return this.fiscalService.getFiscalDocumentStatus(id, user.companyId);
+  }
+
   @Delete('inbound-invoice/:id')
   @Roles(UserRole.ADMIN, UserRole.COMPANY)
   @ApiOperation({ 
