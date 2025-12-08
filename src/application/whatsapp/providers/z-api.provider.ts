@@ -27,15 +27,19 @@ export class ZApiProvider implements IWhatsAppProvider {
       timeout: 15000, // Timeout otimizado para 15s
       headers: {
         'Content-Type': 'application/json',
-        // O Client-Token será enviado em cada requisição individualmente
       },
     });
 
     if (!this.instanceId || !this.token) {
       this.logger.warn('⚠️ Z-API não configurada. Configure Z_API_INSTANCE_ID e Z_API_TOKEN no .env');
       this.logger.warn('📖 Documentação: https://developer.z-api.io/');
+    } else if (!this.clientToken) {
+      this.logger.error('❌ Z-API: Client-Token OBRIGATÓRIO não configurado!');
+      this.logger.error('🔑 Configure Z_API_CLIENT_TOKEN no .env');
+      this.logger.error('📖 Veja: https://developer.z-api.io/security/client-token');
     } else {
       this.logger.log(`✅ Z-API configurada: ${this.apiUrl} (Instance: ${this.instanceId.substring(0, 8)}...)`);
+      this.logger.log(`🔐 Client-Token configurado (${this.clientToken.substring(0, 8)}...)`);
     }
   }
 
@@ -49,10 +53,13 @@ export class ZApiProvider implements IWhatsAppProvider {
       // Endpoint correto da Z-API para verificar status
       const url = `${this.apiUrl}/instances/${this.instanceId}/token/${this.token}/status`;
       
-      const headers = {
-        'Client-Token': this.token,
+      const headers: any = {
         'Content-Type': 'application/json',
       };
+      
+      if (this.clientToken) {
+        headers['Client-Token'] = this.clientToken;
+      }
       
       try {
         const response = await this.httpClient.get(url, {
@@ -95,6 +102,12 @@ export class ZApiProvider implements IWhatsAppProvider {
         this.logger.error('🔴 Z-API não configurada. Verifique Z_API_INSTANCE_ID e Z_API_TOKEN no .env');
         return false;
       }
+      
+      if (!this.clientToken) {
+        this.logger.error('🔴 Z-API: Client-Token OBRIGATÓRIO não configurado!');
+        this.logger.error('🔑 Configure Z_API_CLIENT_TOKEN no .env');
+        return false;
+      }
 
       // Validar e formatar telefone
       const isValid = await this.validatePhoneNumber(phone);
@@ -114,19 +127,17 @@ export class ZApiProvider implements IWhatsAppProvider {
       };
 
       this.logger.debug(`📤 Enviando para Z-API | URL: ${url} | Telefone: ${formattedPhone} | Tamanho: ${message.length} chars`);
-      this.logger.debug(`🔑 Token na URL: ${this.token?.substring(0, 8)}... | Comprimento: ${this.token?.length || 0}`);
-      this.logger.debug(`🔐 Client-Token configurado: ${!!this.clientToken}`);
+      this.logger.debug(`🔑 Token na URL: ${this.token?.substring(0, 8)}...`);
+      this.logger.debug(`🔐 Client-Token: ${this.clientToken?.substring(0, 8)}...`);
       this.logger.debug(`📦 Payload: ${JSON.stringify(payload)}`);
 
-      // Configurar headers com Client-Token se disponível
+      // Configurar headers com Client-Token (OBRIGATÓRIO segundo documentação Z-API)
       const headers: any = {
         'Content-Type': 'application/json',
+        'Client-Token': this.clientToken,
       };
-
-      if (this.clientToken) {
-        headers['Client-Token'] = this.clientToken;
-        this.logger.debug(`✅ Adicionando Client-Token ao header`);
-      }
+      
+      this.logger.debug(`✅ Header Client-Token configurado`);
 
       const response = await this.httpClient.post(url, payload, { headers });
 
