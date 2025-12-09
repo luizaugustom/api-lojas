@@ -513,8 +513,20 @@ export class FiscalService {
     try {
       this.logger.log(`Generating NFCe for sale: ${nfceData.saleId}`);
 
-      // Validar se emissão de NFCe está habilitada
-      await this.planLimitsService.validateNfceEmissionEnabled(nfceData.companyId);
+      // Get company data
+      const company = await this.prisma.company.findUnique({
+        where: { id: nfceData.companyId },
+      });
+
+      if (!company) {
+        throw new NotFoundException('Empresa não encontrada');
+      }
+
+      // Se NFCe está desabilitada, gerar mock
+      if (!company.nfceEmissionEnabled) {
+        this.logger.warn(`⚠️ ATENÇÃO: Emissão de NFCe está DESABILITADA para empresa ${nfceData.companyId}. Gerando NFCe MOCKADO (não fiscal).`);
+        return await this.generateMockNFCe(nfceData);
+      }
 
       // Verificar se a empresa tem configuração fiscal válida
       const hasValidConfig = await this.hasValidFiscalConfig(nfceData.companyId);
@@ -524,15 +536,6 @@ export class FiscalService {
         this.logger.warn(`Campos obrigatórios faltando: Verifique se a empresa tem CNPJ, Inscrição Estadual, Senha do Certificado, Série NFCe, Código IBGE, CSC, ID Token CSC, Estado e Cidade configurados.`);
         this.logger.warn(`Também verifique se a API Key do Focus NFe está configurada (empresa ou admin).`);
         return await this.generateMockNFCe(nfceData);
-      }
-
-      // Get company data
-      const company = await this.prisma.company.findUnique({
-        where: { id: nfceData.companyId },
-      });
-
-      if (!company) {
-        throw new NotFoundException('Empresa não encontrada');
       }
 
       // Validar CPF/CNPJ do cliente se fornecido

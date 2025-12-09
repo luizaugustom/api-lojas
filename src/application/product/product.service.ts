@@ -538,8 +538,16 @@ export class ProductService {
       throw new NotFoundException('Produto não encontrado');
     }
 
+    // Validar limites de fotos
+    const currentPhotos = this.normalizePhotos((existingProduct as any).photos);
+    await this.photoValidationService.validatePhotoLimit(
+      existingProduct.companyId,
+      currentPhotos.length,
+      1 // Adicionando 1 foto
+    );
+
     // Add the new photo to the existing photos array
-    const updatedPhotos = [...this.normalizePhotos((existingProduct as any).photos), photoUrl];
+    const updatedPhotos = [...currentPhotos, photoUrl];
 
     const product = await this.prisma.product.update({
       where: { id },
@@ -572,8 +580,16 @@ export class ProductService {
       throw new NotFoundException('Produto não encontrado');
     }
 
+    // Validar limites de fotos
+    const currentPhotos = this.normalizePhotos((existingProduct as any).photos);
+    await this.photoValidationService.validatePhotoLimit(
+      existingProduct.companyId,
+      currentPhotos.length,
+      photoUrls.length // Adicionando múltiplas fotos
+    );
+
     // Add the new photos to the existing photos array
-    const updatedPhotos = [...this.normalizePhotos((existingProduct as any).photos), ...photoUrls];
+    const updatedPhotos = [...currentPhotos, ...photoUrls];
 
     const product = await this.prisma.product.update({
       where: { id },
