@@ -8,28 +8,27 @@
 ## 🔍 Causa
 A Z-API exige que o header `Client-Token` seja enviado em **cada requisição**, além do token na URL.
 
-## ✅ Solução Aplicada
+**IMPORTANTE**: O `Client-Token` deve usar a variável `Z_API_CLIENT_TOKEN` (não o `Z_API_TOKEN`)!
 
-### 1. Header no Cliente HTTP
-O header `Client-Token` foi adicionado ao criar o cliente axios:
+## ✅ Solução Aplicada (Corrigida)
 
-```typescript
-this.httpClient = axios.create({
-  timeout: 15000,
-  headers: {
-    'Content-Type': 'application/json',
-    'Client-Token': this.token, // Header global
-  },
-});
+### 1. Configuração das Variáveis de Ambiente
+São necessárias **3 variáveis** no arquivo `.env`:
+
+```bash
+Z_API_URL=https://api.z-api.io
+Z_API_INSTANCE_ID=sua_instancia_aqui
+Z_API_TOKEN=seu_token_aqui
+Z_API_CLIENT_TOKEN=seu_client_token_aqui  # ⚠️ OBRIGATÓRIO
 ```
 
-### 2. Header Explícito nas Requisições
-Adicionado também explicitamente em cada requisição para garantir:
+### 2. Header Correto nas Requisições
+O header `Client-Token` agora usa o valor correto (`clientToken`):
 
 ```typescript
 const headers = {
-  'Client-Token': this.token,
   'Content-Type': 'application/json',
+  'Client-Token': this.clientToken,  // ✅ Correto: usa Z_API_CLIENT_TOKEN
 };
 
 const response = await this.httpClient.post(url, payload, { headers });
@@ -61,10 +60,11 @@ pm2 restart api-lojas
 
 ## 📋 Checklist de Verificação
 
-- [x] Header `Client-Token` adicionado ao construtor do httpClient
-- [x] Header `Client-Token` adicionado explicitamente nas requisições POST
-- [x] Header `Client-Token` adicionado nas requisições GET (status)
-- [ ] **Aplicação reiniciada** ← IMPORTANTE!
+- [x] ✅ Variável `Z_API_CLIENT_TOKEN` configurada no `.env`
+- [x] ✅ Header `Client-Token` usando `this.clientToken` (não `this.token`)
+- [x] ✅ Header `Client-Token` adicionado em todas as requisições
+- [x] ✅ Validação obrigatória do Client-Token implementada
+- [ ] ⚠️ **Aplicação reiniciada** ← IMPORTANTE!
 
 ## 🧪 Como Testar Após Reiniciar
 

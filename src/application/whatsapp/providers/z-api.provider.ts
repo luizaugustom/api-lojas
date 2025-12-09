@@ -19,9 +19,9 @@ export class ZApiProvider implements IWhatsAppProvider {
 
   constructor(private readonly configService: ConfigService) {
     this.apiUrl = this.configService.get('Z_API_URL', 'https://api.z-api.io').replace(/\/$/, '');
-    this.instanceId = this.configService.get('Z_API_INSTANCE_ID', '');
-    this.token = this.configService.get('Z_API_TOKEN', '');
-    this.clientToken = this.configService.get('Z_API_CLIENT_TOKEN', '');
+    this.instanceId = (this.configService.get('Z_API_INSTANCE_ID', '') || '').trim();
+    this.token = (this.configService.get('Z_API_TOKEN', '') || '').trim();
+    this.clientToken = (this.configService.get('Z_API_CLIENT_TOKEN', '') || '').trim();
 
     this.httpClient = axios.create({
       timeout: 15000, // Timeout otimizado para 15s
