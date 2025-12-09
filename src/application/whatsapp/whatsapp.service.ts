@@ -112,25 +112,30 @@ export class WhatsappService {
         return true;
       }
 
-      // Retry logic para erros temporários
-      if (retries > 0) {
-        const delay = Math.pow(2, 3 - retries) * 1000; // Backoff exponencial: 1s, 2s, 4s
-        this.logger.warn(`⚠️ Falha ao enviar, tentando novamente em ${delay}ms... (tentativas restantes: ${retries})`);
-        await new Promise(resolve => setTimeout(resolve, delay));
-        return this.sendMessage(message, retries - 1);
-      }
-
+      // NÃO fazer retry - falha significa que a mensagem não foi enviada
       this.logger.error(`❌ Erro ao enviar mensagem WhatsApp via ${this.providerName} | Destino: ${formattedPhone} | Tempo: ${duration}ms`);
       return false;
     } catch (error) {
       const duration = Date.now() - startTime;
+      
+      // Verificar se é um erro permanente (não deve fazer retry)
+      const isPermanentError = error.response && [400, 401, 403, 404].includes(error.response.status);
+      
+      if (isPermanentError) {
+        this.logger.error(`❌ Erro permanente ao enviar mensagem WhatsApp via ${this.providerName} | Destino: ${message.to} | Status: ${error.response.status} | Tempo: ${duration}ms`);
+        if (error.message) {
+          this.logger.error(`💬 Mensagem de erro: ${error.message}`);
+        }
+        return false;
+      }
+
       this.logger.error(`❌ Erro ao enviar mensagem WhatsApp via ${this.providerName} | Destino: ${message.to} | Tentativa: ${3 - retries}/3 | Tempo: ${duration}ms`);
       
       if (error.message) {
         this.logger.error(`💬 Mensagem de erro: ${error.message}`);
       }
 
-      // Retry logic para erros temporários
+      // Retry logic apenas para erros temporários (timeout, 500, etc)
       if (retries > 0) {
         const delay = Math.pow(2, 3 - retries) * 1000;
         this.logger.warn(`⚠️ Erro temporário, tentando novamente em ${delay}ms... (tentativas restantes: ${retries})`);
