@@ -517,6 +517,12 @@ export class FiscalApiService {
           this.logger.error(`Detalhes: ${JSON.stringify(error.response?.data || error.message)}`);
           throw new BadRequestException('Erro de autenticação no Focus NFe. Verifique a configuração da API Key.');
         }
+        if (error.response?.status === 422) {
+          const errorMsg = `Erro de validação no Focus NFe. Verifique os dados enviados.`;
+          this.logger.error(errorMsg);
+          this.logger.error(`Detalhes: ${JSON.stringify(error.response?.data || error.message)}`);
+          throw new BadRequestException(`Erro de validação: ${JSON.stringify(error.response?.data || error.message)}`);
+        }
         return Promise.reject(error);
       }
     );
@@ -527,49 +533,63 @@ export class FiscalApiService {
       natureza_operacao: request.operationNature || 'Venda',
       data_emissao: new Date().toISOString(),
       data_saida_entrada: new Date().toISOString(),
-      tipo_documento: 65, // NFCe
+      tipo_documento: 1, // 1 = Saída (não usar 65, esse é o modelo)
       local_destino: 1, // Operação interna
-      finalidade_emissao: request.emissionPurpose ?? 1, // Normal
-      consumidor_final: 1, // Sim
-      presenca_comprador: 1, // Presencial
-      modalidade_frete: 9, // Sem frete
-      itens: request.items.map(item => ({
-        codigo: item.productId,
+      finalidade_emissao: String(request.emissionPurpose ?? 1), // Focus NFe exige string
+      consumidor_final: '1', // Focus NFe exige string: '1' = Sim
+      presenca_comprador: '1', // Focus NFe exige string: '1' = Presencial
+      modalidade_frete: '9', // Focus NFe exige string: '9' = Sem frete
+      itens: request.items.map((item, index) => ({
+        numero_item: String(index + 1), // Número sequencial do item
+        codigo_produto: item.productId,
         descricao: item.productName,
         ncm: item.ncm || '99999999',
         cfop: item.cfop || '5102',
         unidade_comercial: item.unitOfMeasure || 'UN',
         quantidade_comercial: item.quantity,
         valor_unitario_comercial: item.unitPrice,
-        valor_total_bruto: item.totalPrice,
+        valor_bruto: item.totalPrice,
         codigo_barras_comercial: item.barcode,
+        unidade_tributavel: item.unitOfMeasure || 'UN',
+        quantidade_tributavel: item.quantity,
+        valor_unitario_tributavel: item.unitPrice,
+        // Informações tributárias (simplificado para Simples Nacional)
+        icms_situacao_tributaria: '102', // 102 = Tributada sem permissão de crédito
+        icms_origem: '0', // 0 = Nacional
+        pis_situacao_tributaria: '07', // 07 = Operação isenta
+        cofins_situacao_tributaria: '07', // 07 = Operação isenta
         // Adicionar informações de tributos se disponíveis
-        ...(item.taxValue && { valor_total_tributos_item: item.taxValue }),
+        ...(item.taxValue && { valor_total_tributos: Number(item.taxValue.toFixed(2)) }),
       })),
-      valor_total: request.totalValue,
+      valor_produtos: Number(request.totalValue.toFixed(2)),
+      valor_total: Number(request.totalValue.toFixed(2)),
       valor_frete: 0,
       valor_seguro: 0,
       valor_desconto: 0,
       valor_outras_despesas: 0,
       valor_total_tributos: Number((request.totalTaxValue ?? request.items.reduce((sum, item) => sum + (item.taxValue || 0), 0)).toFixed(2)),
-      valor_total_produtos: request.totalValue,
-      valor_total_servicos: 0,
-      valor_total_nota: request.totalValue,
     };
 
-    payload.pagamentos = this.mapPaymentMethods(request.payments);
+    payload.formas_pagamento = this.mapPaymentMethods(request.payments);
 
     if (request.referenceAccessKey) {
       payload.notas_referenciadas = [
         {
-          chave: request.referenceAccessKey,
+          chave_nfe: request.referenceAccessKey,
         },
       ];
     }
 
     if (request.additionalInfo) {
-      payload.informacoes_complementares = request.additionalInfo;
+      payload.informacoes_adicionais_contribuinte = request.additionalInfo;
     }
+
+    // Log do payload para debug (sem dados sensíveis)
+    this.logger.debug(`Payload NFC-e para Focus NFe: ${JSON.stringify({
+      ...payload,
+      itens: `${payload.itens.length} itens`,
+      formas_pagamento: `${payload.formas_pagamento?.length || 0} formas`,
+    })}`);
 
     const response: AxiosResponse = await httpClient.post(endpoint, payload);
 
