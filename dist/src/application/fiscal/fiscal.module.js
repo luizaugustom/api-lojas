@@ -17,6 +17,7 @@ const validation_module_1 = require("../../shared/services/validation.module");
 const plan_limits_module_1 = require("../../shared/services/plan-limits.module");
 const ibpt_service_1 = require("../../shared/services/ibpt.service");
 const platform_express_1 = require("@nestjs/platform-express");
+const upload_module_1 = require("../upload/upload.module");
 let FiscalModule = class FiscalModule {
 };
 exports.FiscalModule = FiscalModule;
@@ -31,7 +32,8 @@ exports.FiscalModule = FiscalModule = __decorate([
                 limits: {
                     fileSize: 10 * 1024 * 1024,
                 },
-            })
+            }),
+            upload_module_1.UploadModule,
         ],
         providers: [fiscal_service_1.FiscalService, fiscal_api_service_1.FiscalApiService, ibpt_service_1.IBPTService],
         controllers: [fiscal_controller_1.FiscalController],

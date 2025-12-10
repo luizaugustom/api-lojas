@@ -8,6 +8,7 @@ import { ValidationModule } from '../../shared/services/validation.module';
 import { PlanLimitsModule } from '../../shared/services/plan-limits.module';
 import { IBPTService } from '../../shared/services/ibpt.service';
 import { MulterModule } from '@nestjs/platform-express';
+import { UploadModule } from '../upload/upload.module';
 
 @Module({
   imports: [
@@ -19,7 +20,8 @@ import { MulterModule } from '@nestjs/platform-express';
       limits: {
         fileSize: 10 * 1024 * 1024, // 10MB
       },
-    })
+    }),
+    UploadModule,
   ],
   providers: [FiscalService, FiscalApiService, IBPTService],
   controllers: [FiscalController],

@@ -4,6 +4,7 @@ import { ValidationService } from '../../shared/services/validation.service';
 import { IBPTService } from '../../shared/services/ibpt.service';
 import { PlanLimitsService } from '../../shared/services/plan-limits.service';
 import { FiscalApiService } from '../../shared/services/fiscal-api.service';
+import { UploadService } from '../upload/upload.service';
 export interface NFeData {
     companyId: string;
     saleId?: string;
@@ -84,8 +85,9 @@ export declare class FiscalService {
     private readonly validationService;
     private readonly ibptService;
     private readonly planLimitsService;
+    private readonly uploadService;
     private readonly logger;
-    constructor(configService: ConfigService, prisma: PrismaService, fiscalApiService: FiscalApiService, validationService: ValidationService, ibptService: IBPTService, planLimitsService: PlanLimitsService);
+    constructor(configService: ConfigService, prisma: PrismaService, fiscalApiService: FiscalApiService, validationService: ValidationService, ibptService: IBPTService, planLimitsService: PlanLimitsService, uploadService: UploadService);
     generateNFe(nfeData: NFeData): Promise<any>;
     hasValidFiscalConfig(companyId: string): Promise<boolean>;
     generateMockNFCe(nfceData: NFCeData): Promise<any>;
@@ -185,17 +187,17 @@ export declare class FiscalService {
         productExchangeId: string | null;
     }>;
     downloadFiscalDocument(id: string, format: 'xml' | 'pdf', companyId?: string, skipGeneration?: boolean): Promise<{
+        content: Buffer<any>;
+        filename: any;
+        mimetype: any;
+        contentType: any;
+        size: number;
+        downloadUrl: string;
+    } | {
         content: string;
         filename: string;
         mimetype: string;
         contentType: string;
-        size: number;
-        downloadUrl: string;
-    } | {
-        content: Buffer<any>;
-        filename: string;
-        mimetype: any;
-        contentType: any;
         size: number;
         downloadUrl: string;
     }>;
@@ -250,15 +252,17 @@ export declare class FiscalService {
         status: string;
         totalValue: import("@prisma/client/runtime/library").Decimal;
         message: string;
+        inboundFileUrl: any;
     }>;
     private extractDocumentInfo;
+    private uploadInboundAttachment;
     createInboundInvoice(companyId: string, data: {
         accessKey?: string;
         supplierName: string;
         totalValue: number;
         documentNumber?: string;
         pdfUrl?: string;
-    }): Promise<{
+    }, file?: Express.Multer.File): Promise<{
         id: string;
         documentNumber: string;
         documentType: string;
@@ -267,6 +271,8 @@ export declare class FiscalService {
         totalValue: import("@prisma/client/runtime/library").Decimal;
         supplierName: string;
         emissionDate: Date;
+        pdfUrl: string;
+        inboundFileUrl: any;
         message: string;
     }>;
     updateInboundInvoice(id: string, companyId: string, data: {

@@ -72,10 +72,12 @@ let UploadService = UploadService_1 = class UploadService {
             'image/gif',
             'image/webp',
             'application/pdf',
+            'application/xml',
+            'text/xml',
             'application/x-pkcs12',
         ];
         if (!allowedMimeTypes.includes(file.mimetype)) {
-            throw new common_1.BadRequestException('Tipo de arquivo não permitido. Apenas imagens (JPEG, PNG, GIF, WebP), PDFs e certificados digitais são aceitos.');
+            throw new common_1.BadRequestException('Tipo de arquivo não permitido. Aceitamos imagens (JPEG, PNG, GIF, WebP), PDFs, XML e certificados digitais.');
         }
     }
     async getFileInfo(fileUrl) {

@@ -18,6 +18,7 @@ const ExcelJS = require("exceljs");
 const xml2js_1 = require("xml2js");
 const archiver_1 = require("archiver");
 const stream_1 = require("stream");
+const axios_1 = require("axios");
 const client_time_util_1 = require("../../shared/utils/client-time.util");
 const fiscal_service_1 = require("../fiscal/fiscal.service");
 let ReportsService = ReportsService_1 = class ReportsService {
@@ -252,8 +253,16 @@ let ReportsService = ReportsService_1 = class ReportsService {
                 emissionDate: invoice.emissionDate,
                 xmlContent: invoice.xmlContent,
                 pdfUrl: invoice.pdfUrl,
+                metadata: invoice.metadata,
             })),
         };
+    }
+    isInboundDocument(documentType) {
+        const normalized = (documentType || '').toLowerCase();
+        return (normalized.includes('entrada') ||
+            normalized.includes('inbound') ||
+            normalized.includes('compra') ||
+            normalized === 'nfe_inbound');
     }
     async calculateNetProfit(companyId, salesReport, commissions, productLosses, billsToPay, startDate, endDate, sellerId) {
         try {
@@ -989,6 +998,8 @@ let ReportsService = ReportsService_1 = class ReportsService {
         };
         for (const invoice of invoices) {
             const folder = this.resolveInvoiceFolder(invoice.documentType);
+            const inboundFile = invoice?.metadata?.inboundFile;
+            const isInbound = this.isInboundDocument(invoice.documentType);
             if (invoice?.xmlContent) {
                 folderUsage[folder] = true;
                 const xmlFileName = this.buildInvoiceFilename(invoice, timestamp, 'xml');
@@ -1002,7 +1013,23 @@ let ReportsService = ReportsService_1 = class ReportsService {
                     this.logger.warn(`Failed to include XML for invoice ${invoice.id}: ${error?.message || error}`);
                 }
             }
-            const pdfFile = await this.tryGetInvoicePdf(invoice, timestamp, companyId);
+            else if (isInbound && inboundFile?.url && this.isXmlMime(inboundFile?.mimeType)) {
+                const xmlFileName = this.buildInvoiceFilename(invoice, timestamp, 'xml');
+                try {
+                    const fetched = await this.fetchExternalFile(inboundFile.url);
+                    if (fetched) {
+                        folderUsage[folder] = true;
+                        archive.append(fetched.buffer, {
+                            name: `${folder}/${xmlFileName}`,
+                        });
+                        this.logger.log(`Fetched and included uploaded XML for inbound invoice ${invoice.id} in ${folder}/${xmlFileName}`);
+                    }
+                }
+                catch (error) {
+                    this.logger.warn(`Failed to fetch inbound XML for invoice ${invoice.id}: ${error?.message || error}`);
+                }
+            }
+            const pdfFile = await this.tryGetInvoicePdf(invoice, timestamp, companyId, inboundFile, isInbound);
             if (pdfFile) {
                 folderUsage[folder] = true;
                 try {
@@ -1059,15 +1086,47 @@ let ReportsService = ReportsService_1 = class ReportsService {
         const baseName = parts.filter(Boolean).join('-') || `documento-${timestamp}`;
         return `${baseName}.${extension}`;
     }
+    isXmlMime(mime) {
+        if (!mime)
+            return false;
+        const normalized = mime.toLowerCase();
+        return normalized.includes('xml');
+    }
+    async fetchExternalFile(url) {
+        try {
+            const response = await axios_1.default.get(url, { responseType: 'arraybuffer' });
+            const buffer = Buffer.from(response.data);
+            const contentType = response.headers['content-type'];
+            return { buffer, contentType };
+        }
+        catch (error) {
+            this.logger.warn(`Failed to fetch external file from ${url}: ${error?.message || error}`);
+            return null;
+        }
+    }
     sanitizeFileName(value) {
         return value
             .normalize('NFD')
             .replace(/[\u0300-\u036f]/g, '')
             .replace(/[^a-zA-Z0-9-_]/g, '_');
     }
-    async tryGetInvoicePdf(invoice, timestamp, companyId) {
+    async tryGetInvoicePdf(invoice, timestamp, companyId, inboundFile, isInbound) {
         if (!invoice?.id) {
             return null;
+        }
+        if (isInbound && inboundFile?.url) {
+            try {
+                const fetched = await this.fetchExternalFile(inboundFile.url);
+                if (fetched) {
+                    const filename = inboundFile.fileName
+                        ? this.sanitizeFileName(inboundFile.fileName)
+                        : this.buildInvoiceFilename(invoice, timestamp, 'pdf');
+                    return { buffer: fetched.buffer, filename };
+                }
+            }
+            catch (error) {
+                this.logger.warn(`Unable to include inbound uploaded file as PDF for invoice ${invoice.id}: ${error?.message || error}`);
+            }
         }
         if (!invoice.pdfUrl) {
             this.logger.debug(`No PDF URL available for invoice ${invoice.id}, skipping PDF inclusion`);

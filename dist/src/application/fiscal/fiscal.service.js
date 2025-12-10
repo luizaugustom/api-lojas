@@ -19,15 +19,17 @@ const validation_service_1 = require("../../shared/services/validation.service")
 const ibpt_service_1 = require("../../shared/services/ibpt.service");
 const plan_limits_service_1 = require("../../shared/services/plan-limits.service");
 const fiscal_api_service_1 = require("../../shared/services/fiscal-api.service");
+const upload_service_1 = require("../upload/upload.service");
 const xml2js = require("xml2js");
 let FiscalService = FiscalService_1 = class FiscalService {
-    constructor(configService, prisma, fiscalApiService, validationService, ibptService, planLimitsService) {
+    constructor(configService, prisma, fiscalApiService, validationService, ibptService, planLimitsService, uploadService) {
         this.configService = configService;
         this.prisma = prisma;
         this.fiscalApiService = fiscalApiService;
         this.validationService = validationService;
         this.ibptService = ibptService;
         this.planLimitsService = planLimitsService;
+        this.uploadService = uploadService;
         this.logger = new common_1.Logger(FiscalService_1.name);
     }
     async generateNFe(nfeData) {
@@ -689,8 +691,30 @@ let FiscalService = FiscalService_1 = class FiscalService {
     }
     async downloadFiscalDocument(id, format, companyId, skipGeneration = false) {
         const document = await this.getFiscalDocument(id, companyId);
+        const metadata = document.metadata || {};
+        const inboundFile = metadata.inboundFile;
+        const isInboundInvoice = document.documentType === 'NFe_INBOUND' ||
+            (document.documentType === 'NFe' && document.xmlContent !== null);
         if (format === 'xml') {
             if (!document.xmlContent) {
+                if (isInboundInvoice && inboundFile?.url) {
+                    try {
+                        const response = await axios_1.default.get(inboundFile.url, { responseType: 'arraybuffer' });
+                        const buffer = Buffer.from(response.data);
+                        const contentType = inboundFile.mimeType || response.headers['content-type'] || 'application/xml';
+                        return {
+                            content: buffer,
+                            filename: inboundFile.fileName || `${document.documentType}_${document.documentNumber}.xml`,
+                            mimetype: contentType,
+                            contentType,
+                            size: buffer.length,
+                            downloadUrl: `/api/fiscal/${id}/download?format=xml`,
+                        };
+                    }
+                    catch (error) {
+                        this.logger.error(`Error downloading inbound XML for fiscal document ${id}: ${error instanceof Error ? error.message : error}`);
+                    }
+                }
                 throw new common_1.BadRequestException('Conteúdo XML não disponível para este documento');
             }
             return {
@@ -703,9 +727,26 @@ let FiscalService = FiscalService_1 = class FiscalService {
             };
         }
         if (format === 'pdf') {
+            if (isInboundInvoice && inboundFile?.url) {
+                try {
+                    const response = await axios_1.default.get(inboundFile.url, { responseType: 'arraybuffer' });
+                    const buffer = Buffer.from(response.data);
+                    const contentType = inboundFile.mimeType || response.headers['content-type'] || 'application/pdf';
+                    const fileName = inboundFile.fileName || `${document.documentType}_${document.documentNumber}.pdf`;
+                    return {
+                        content: buffer,
+                        filename: fileName,
+                        mimetype: contentType,
+                        contentType,
+                        size: buffer.length,
+                        downloadUrl: `/api/fiscal/${id}/download?format=pdf`,
+                    };
+                }
+                catch (error) {
+                    this.logger.error(`Error downloading inbound file for fiscal document ${id}: ${error instanceof Error ? error.message : error}`);
+                }
+            }
             if (!document.pdfUrl) {
-                const isInboundInvoice = document.documentType === 'NFe_INBOUND' ||
-                    (document.documentType === 'NFe' && document.xmlContent !== null);
                 if (isInboundInvoice || skipGeneration) {
                     throw new common_1.BadRequestException('Arquivo PDF não disponível para este documento. Use o arquivo original enviado.');
                 }
@@ -892,6 +933,7 @@ startxref
             });
             const result = await parser.parseStringPromise(xmlContent);
             const documentInfo = this.extractDocumentInfo(result);
+            const isInboundDocument = documentInfo.documentType === 'NFe_INBOUND';
             const existingDocument = await this.prisma.fiscalDocument.findFirst({
                 where: {
                     accessKey: documentInfo.accessKey,
@@ -899,15 +941,25 @@ startxref
                 }
             });
             if (existingDocument) {
+                const attachmentResult = isInboundDocument
+                    ? await this.uploadInboundAttachment(file, companyId, existingDocument.id, existingDocument.metadata, existingDocument.pdfUrl || undefined)
+                    : null;
+                const updateData = {
+                    xmlContent: attachmentResult?.xmlContent ?? xmlContent,
+                    status: documentInfo.status,
+                    totalValue: documentInfo.totalValue,
+                    supplierName: documentInfo.supplierName || existingDocument.supplierName,
+                    updatedAt: new Date(),
+                };
+                if (attachmentResult?.metadata) {
+                    updateData.metadata = attachmentResult.metadata;
+                }
+                if (attachmentResult && !attachmentResult.isXml) {
+                    updateData.pdfUrl = attachmentResult.uploadedUrl;
+                }
                 const updatedDocument = await this.prisma.fiscalDocument.update({
                     where: { id: existingDocument.id },
-                    data: {
-                        xmlContent: xmlContent,
-                        status: documentInfo.status,
-                        totalValue: documentInfo.totalValue,
-                        supplierName: documentInfo.supplierName || existingDocument.supplierName,
-                        updatedAt: new Date()
-                    }
+                    data: updateData
                 });
                 this.logger.log(`Updated existing fiscal document: ${updatedDocument.id}`);
                 return {
@@ -918,7 +970,8 @@ startxref
                     emissionDate: updatedDocument.emissionDate,
                     status: updatedDocument.status,
                     totalValue: updatedDocument.totalValue,
-                    message: 'XML atualizado com sucesso'
+                    message: 'XML atualizado com sucesso',
+                    inboundFileUrl: attachmentResult?.uploadedUrl,
                 };
             }
             else {
@@ -937,15 +990,30 @@ startxref
                     }
                 });
                 this.logger.log(`Created new fiscal document: ${newDocument.id}`);
+                let updatedDocument = newDocument;
+                if (isInboundDocument) {
+                    const attachmentResult = await this.uploadInboundAttachment(file, companyId, newDocument.id, newDocument.metadata, newDocument.pdfUrl || undefined);
+                    if (attachmentResult) {
+                        updatedDocument = await this.prisma.fiscalDocument.update({
+                            where: { id: newDocument.id },
+                            data: {
+                                xmlContent: attachmentResult.xmlContent ?? xmlContent,
+                                metadata: attachmentResult.metadata,
+                                pdfUrl: attachmentResult.isXml ? newDocument.pdfUrl : attachmentResult.uploadedUrl,
+                            },
+                        });
+                    }
+                }
                 return {
-                    id: newDocument.id,
-                    documentNumber: newDocument.documentNumber,
-                    documentType: newDocument.documentType,
-                    accessKey: newDocument.accessKey,
-                    emissionDate: newDocument.emissionDate,
-                    status: newDocument.status,
-                    totalValue: newDocument.totalValue,
-                    message: 'XML processado com sucesso'
+                    id: updatedDocument.id,
+                    documentNumber: updatedDocument.documentNumber,
+                    documentType: updatedDocument.documentType,
+                    accessKey: updatedDocument.accessKey,
+                    emissionDate: updatedDocument.emissionDate,
+                    status: updatedDocument.status,
+                    totalValue: updatedDocument.totalValue,
+                    message: 'XML processado com sucesso',
+                    inboundFileUrl: isInboundDocument ? updatedDocument.metadata?.['inboundFile']?.['url'] : undefined,
                 };
             }
         }
@@ -1016,7 +1084,43 @@ startxref
             throw new common_1.BadRequestException('Erro ao extrair informações do XML: ' + error.message);
         }
     }
-    async createInboundInvoice(companyId, data) {
+    async uploadInboundAttachment(file, companyId, documentId, currentMetadata, previousFileUrl) {
+        if (!file) {
+            return null;
+        }
+        const allowedMimeTypes = ['application/pdf', 'application/xml', 'text/xml'];
+        if (!allowedMimeTypes.includes(file.mimetype)) {
+            throw new common_1.BadRequestException('Arquivo inválido. Envie um PDF ou XML.');
+        }
+        const subfolder = `companies/${companyId}/fiscal/inbound/${documentId}`;
+        if (previousFileUrl) {
+            try {
+                await this.uploadService.deleteFile(previousFileUrl);
+            }
+            catch (error) {
+                this.logger.warn(`Não foi possível remover o arquivo anterior da nota ${documentId}: ${error.message}`);
+            }
+        }
+        const uploadedUrl = await this.uploadService.uploadFile(file, subfolder);
+        const inboundFile = {
+            url: uploadedUrl,
+            fileName: file.originalname,
+            mimeType: file.mimetype,
+            size: file.size,
+            uploadedAt: new Date().toISOString(),
+        };
+        const normalizedMetadata = currentMetadata && typeof currentMetadata === 'object' && !Array.isArray(currentMetadata)
+            ? { ...currentMetadata }
+            : {};
+        const metadata = {
+            ...normalizedMetadata,
+            inboundFile,
+        };
+        const isXml = file.mimetype === 'application/xml' || file.mimetype === 'text/xml';
+        const xmlContent = isXml && file.buffer ? file.buffer.toString('utf8') : undefined;
+        return { uploadedUrl, metadata, isXml, xmlContent };
+    }
+    async createInboundInvoice(companyId, data, file) {
         try {
             this.logger.log(`Creating inbound invoice for company: ${companyId}`);
             if (data.accessKey) {
@@ -1043,16 +1147,37 @@ startxref
                     pdfUrl: data.pdfUrl ?? null,
                 }
             });
-            this.logger.log(`Inbound invoice created successfully: ${fiscalDocument.id}`);
+            let updatedDocument = fiscalDocument;
+            if (file) {
+                const attachmentResult = await this.uploadInboundAttachment(file, companyId, fiscalDocument.id, fiscalDocument.metadata, fiscalDocument.pdfUrl || undefined);
+                if (attachmentResult) {
+                    const updateData = {
+                        metadata: attachmentResult.metadata,
+                    };
+                    if (attachmentResult.isXml && attachmentResult.xmlContent) {
+                        updateData.xmlContent = attachmentResult.xmlContent;
+                    }
+                    if (!attachmentResult.isXml) {
+                        updateData.pdfUrl = attachmentResult.uploadedUrl;
+                    }
+                    updatedDocument = await this.prisma.fiscalDocument.update({
+                        where: { id: fiscalDocument.id },
+                        data: updateData,
+                    });
+                }
+            }
+            this.logger.log(`Inbound invoice created successfully: ${updatedDocument.id}`);
             return {
-                id: fiscalDocument.id,
-                documentNumber: fiscalDocument.documentNumber,
-                documentType: fiscalDocument.documentType,
-                accessKey: fiscalDocument.accessKey,
-                status: fiscalDocument.status,
-                totalValue: fiscalDocument.totalValue,
-                supplierName: fiscalDocument.supplierName,
-                emissionDate: fiscalDocument.emissionDate,
+                id: updatedDocument.id,
+                documentNumber: updatedDocument.documentNumber,
+                documentType: updatedDocument.documentType,
+                accessKey: updatedDocument.accessKey,
+                status: updatedDocument.status,
+                totalValue: updatedDocument.totalValue,
+                supplierName: updatedDocument.supplierName,
+                emissionDate: updatedDocument.emissionDate,
+                pdfUrl: updatedDocument.pdfUrl,
+                inboundFileUrl: updatedDocument.metadata?.['inboundFile']?.['url'],
                 message: 'Nota fiscal de entrada registrada com sucesso'
             };
         }
@@ -1169,6 +1294,20 @@ startxref
             if (!isInboundInvoice) {
                 throw new common_1.BadRequestException('Apenas notas fiscais de entrada podem ser excluídas por este método');
             }
+            const metadata = fiscalDocument.metadata || {};
+            const inboundFileUrl = metadata?.inboundFile?.url;
+            const pdfUrl = fiscalDocument.pdfUrl;
+            const urlsToDelete = [inboundFileUrl, pdfUrl]
+                .filter((url) => typeof url === 'string' && url.length > 0);
+            for (const fileUrl of urlsToDelete) {
+                try {
+                    await this.uploadService.deleteFile(fileUrl);
+                    this.logger.log(`Deleted inbound attachment from Firebase: ${fileUrl}`);
+                }
+                catch (error) {
+                    this.logger.warn(`Could not delete inbound attachment ${fileUrl}: ${error instanceof Error ? error.message : error}`);
+                }
+            }
             await this.prisma.fiscalDocument.delete({
                 where: { id }
             });
@@ -1197,6 +1336,7 @@ exports.FiscalService = FiscalService = FiscalService_1 = __decorate([
         fiscal_api_service_1.FiscalApiService,
         validation_service_1.ValidationService,
         ibpt_service_1.IBPTService,
-        plan_limits_service_1.PlanLimitsService])
+        plan_limits_service_1.PlanLimitsService,
+        upload_service_1.UploadService])
 ], FiscalService);
 //# sourceMappingURL=fiscal.service.js.map

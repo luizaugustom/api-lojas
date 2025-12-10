@@ -15,6 +15,7 @@ export declare class ReportsService {
     private generateSalesReport;
     private generateProductsReport;
     private generateInvoicesReport;
+    private isInboundDocument;
     private calculateNetProfit;
     private generateCompleteReport;
     private getBillsToPay;
@@ -36,6 +37,8 @@ export declare class ReportsService {
     private buildZipPackage;
     private resolveInvoiceFolder;
     private buildInvoiceFilename;
+    private isXmlMime;
+    private fetchExternalFile;
     private sanitizeFileName;
     private tryGetInvoicePdf;
     private mapContentToBuffer;

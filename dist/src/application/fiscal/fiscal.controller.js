@@ -126,12 +126,12 @@ let FiscalController = class FiscalController {
         }
         return this.fiscalService.processXmlFile(file, companyId);
     }
-    async createInboundInvoice(createInboundInvoiceDto, user) {
+    async createInboundInvoice(createInboundInvoiceDto, file, user) {
         const companyId = user.role === roles_decorator_1.UserRole.ADMIN ? user.companyId : user.companyId;
         if (!companyId) {
             throw new Error('Company ID não encontrado');
         }
-        return this.fiscalService.createInboundInvoice(companyId, createInboundInvoiceDto);
+        return this.fiscalService.createInboundInvoice(companyId, createInboundInvoiceDto, file);
     }
     async updateInboundInvoice(id, updateInboundInvoiceDto, user) {
         const companyId = user.role === roles_decorator_1.UserRole.ADMIN ? user.companyId : user.companyId;
@@ -379,17 +379,20 @@ __decorate([
     (0, roles_decorator_1.Roles)(roles_decorator_1.UserRole.ADMIN, roles_decorator_1.UserRole.COMPANY),
     (0, swagger_1.ApiOperation)({
         summary: 'Criar nota fiscal de entrada manual',
-        description: 'Registra uma nota fiscal de entrada com informações básicas (chave de acesso, fornecedor, total)'
+        description: 'Registra uma nota fiscal de entrada com informações básicas (chave de acesso, fornecedor, total) e permite anexar o XML ou PDF no Firebase'
     }),
+    (0, common_1.UseInterceptors)((0, platform_express_1.FileInterceptor)('file')),
+    (0, swagger_1.ApiConsumes)('multipart/form-data'),
     (0, swagger_1.ApiResponse)({
         status: 201,
         description: 'Nota fiscal de entrada criada com sucesso',
     }),
     (0, swagger_1.ApiResponse)({ status: 400, description: 'Dados inválidos ou chave de acesso já existe' }),
     __param(0, (0, common_1.Body)()),
-    __param(1, (0, current_user_decorator_1.CurrentUser)()),
+    __param(1, (0, common_1.UploadedFile)()),
+    __param(2, (0, current_user_decorator_1.CurrentUser)()),
     __metadata("design:type", Function),
-    __metadata("design:paramtypes", [create_inbound_invoice_dto_1.CreateInboundInvoiceDto, Object]),
+    __metadata("design:paramtypes", [create_inbound_invoice_dto_1.CreateInboundInvoiceDto, Object, Object]),
     __metadata("design:returntype", Promise)
 ], FiscalController.prototype, "createInboundInvoice", null);
 __decorate([

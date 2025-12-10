@@ -5,6 +5,7 @@ import * as ExcelJS from 'exceljs';
 import { Builder } from 'xml2js';
 import { create as createArchiver } from 'archiver';
 import { PassThrough } from 'stream';
+import axios from 'axios';
 import {
   ClientTimeInfo,
   formatClientDate,
@@ -295,9 +296,20 @@ export class ReportsService {
         emissionDate: invoice.emissionDate,
         xmlContent: invoice.xmlContent,
         pdfUrl: invoice.pdfUrl,
+        metadata: invoice.metadata as any,
       })),
     };
   }
+
+    private isInboundDocument(documentType?: string | null): boolean {
+      const normalized = (documentType || '').toLowerCase();
+      return (
+        normalized.includes('entrada') ||
+        normalized.includes('inbound') ||
+        normalized.includes('compra') ||
+        normalized === 'nfe_inbound'
+      );
+    }
 
   private async calculateNetProfit(
     companyId: string,
@@ -1183,6 +1195,7 @@ export class ReportsService {
       xmlContent?: string | null;
       id?: string;
       pdfUrl?: string | null;
+      metadata?: Record<string, any> | null;
     }>,
     timestamp: string,
     companyId: string,
@@ -1215,7 +1228,10 @@ export class ReportsService {
     for (const invoice of invoices) {
       const folder = this.resolveInvoiceFolder(invoice.documentType);
 
-      // Incluir XML original se disponível (para notas de entrada ou qualquer documento com XML)
+      const inboundFile = invoice?.metadata?.inboundFile;
+      const isInbound = this.isInboundDocument(invoice.documentType);
+
+      // Incluir XML original se disponível (buffer no banco ou XML vindo do upload inbound)
       if (invoice?.xmlContent) {
         folderUsage[folder] = true;
         const xmlFileName = this.buildInvoiceFilename(invoice, timestamp, 'xml');
@@ -1229,10 +1245,29 @@ export class ReportsService {
             `Failed to include XML for invoice ${invoice.id}: ${error?.message || error}`,
           );
         }
+      } else if (isInbound && inboundFile?.url && this.isXmlMime(inboundFile?.mimeType)) {
+        // Tentar baixar XML do upload original quando não está salvo no banco
+        const xmlFileName = this.buildInvoiceFilename(invoice, timestamp, 'xml');
+        try {
+          const fetched = await this.fetchExternalFile(inboundFile.url);
+          if (fetched) {
+            folderUsage[folder] = true;
+            archive.append(fetched.buffer, {
+              name: `${folder}/${xmlFileName}`,
+            });
+            this.logger.log(
+              `Fetched and included uploaded XML for inbound invoice ${invoice.id} in ${folder}/${xmlFileName}`,
+            );
+          }
+        } catch (error: any) {
+          this.logger.warn(
+            `Failed to fetch inbound XML for invoice ${invoice.id}: ${error?.message || error}`,
+          );
+        }
       }
 
       // Incluir PDF se disponível (para todos os documentos que têm PDF)
-      const pdfFile = await this.tryGetInvoicePdf(invoice, timestamp, companyId);
+      const pdfFile = await this.tryGetInvoicePdf(invoice, timestamp, companyId, inboundFile, isInbound);
       if (pdfFile) {
         folderUsage[folder] = true;
         try {
@@ -1319,6 +1354,24 @@ export class ReportsService {
     return `${baseName}.${extension}`;
   }
 
+  private isXmlMime(mime?: string | null): boolean {
+    if (!mime) return false;
+    const normalized = mime.toLowerCase();
+    return normalized.includes('xml');
+  }
+
+  private async fetchExternalFile(url: string): Promise<{ buffer: Buffer; contentType?: string } | null> {
+    try {
+      const response = await axios.get(url, { responseType: 'arraybuffer' });
+      const buffer = Buffer.from(response.data);
+      const contentType = response.headers['content-type'];
+      return { buffer, contentType };
+    } catch (error) {
+      this.logger.warn(`Failed to fetch external file from ${url}: ${error?.message || error}`);
+      return null;
+    }
+  }
+
   private sanitizeFileName(value: string): string {
     return value
       .normalize('NFD')
@@ -1334,15 +1387,35 @@ export class ReportsService {
       accessKey?: string | null;
       pdfUrl?: string | null;
       xmlContent?: string | null;
+      metadata?: Record<string, any> | null;
     },
     timestamp: string,
     companyId: string,
+    inboundFile?: Record<string, any> | null,
+    isInbound?: boolean,
   ): Promise<{ buffer: Buffer; filename: string } | null> {
     if (!invoice?.id) {
       return null;
     }
 
-    // Só tentar obter PDF se existe pdfUrl (arquivo original enviado pelo usuário ou gerado pelo sistema)
+    // 1) Preferir arquivo original enviado (Firebase) para notas de entrada
+    if (isInbound && inboundFile?.url) {
+      try {
+        const fetched = await this.fetchExternalFile(inboundFile.url);
+        if (fetched) {
+          const filename = inboundFile.fileName
+            ? this.sanitizeFileName(inboundFile.fileName)
+            : this.buildInvoiceFilename(invoice, timestamp, 'pdf');
+          return { buffer: fetched.buffer, filename };
+        }
+      } catch (error: any) {
+        this.logger.warn(
+          `Unable to include inbound uploaded file as PDF for invoice ${invoice.id}: ${error?.message || error}`,
+        );
+      }
+    }
+
+    // 2) Usar pdfUrl (arquivo original ou gerado) se existir
     if (!invoice.pdfUrl) {
       this.logger.debug(`No PDF URL available for invoice ${invoice.id}, skipping PDF inclusion`);
       return null;

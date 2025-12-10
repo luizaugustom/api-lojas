@@ -67,8 +67,9 @@ export declare class FiscalController {
         status: string;
         totalValue: import("@prisma/client/runtime/library").Decimal;
         message: string;
+        inboundFileUrl: any;
     }>;
-    createInboundInvoice(createInboundInvoiceDto: CreateInboundInvoiceDto, user: any): Promise<{
+    createInboundInvoice(createInboundInvoiceDto: CreateInboundInvoiceDto, file: Express.Multer.File, user: any): Promise<{
         id: string;
         documentNumber: string;
         documentType: string;
@@ -77,6 +78,8 @@ export declare class FiscalController {
         totalValue: import("@prisma/client/runtime/library").Decimal;
         supplierName: string;
         emissionDate: Date;
+        pdfUrl: string;
+        inboundFileUrl: any;
         message: string;
     }>;
     updateInboundInvoice(id: string, updateInboundInvoiceDto: UpdateInboundInvoiceDto, user: any): Promise<{

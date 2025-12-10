@@ -246,8 +246,10 @@ export class FiscalController {
   @Roles(UserRole.ADMIN, UserRole.COMPANY)
   @ApiOperation({ 
     summary: 'Criar nota fiscal de entrada manual',
-    description: 'Registra uma nota fiscal de entrada com informações básicas (chave de acesso, fornecedor, total)'
+    description: 'Registra uma nota fiscal de entrada com informações básicas (chave de acesso, fornecedor, total) e permite anexar o XML ou PDF no Firebase'
   })
+  @UseInterceptors(FileInterceptor('file'))
+  @ApiConsumes('multipart/form-data')
   @ApiResponse({ 
     status: 201, 
     description: 'Nota fiscal de entrada criada com sucesso',
@@ -255,6 +257,7 @@ export class FiscalController {
   @ApiResponse({ status: 400, description: 'Dados inválidos ou chave de acesso já existe' })
   async createInboundInvoice(
     @Body() createInboundInvoiceDto: CreateInboundInvoiceDto,
+    @UploadedFile() file: Express.Multer.File,
     @CurrentUser() user: any,
   ) {
     const companyId = user.role === UserRole.ADMIN ? user.companyId : user.companyId;
@@ -263,7 +266,7 @@ export class FiscalController {
       throw new Error('Company ID não encontrado');
     }
 
-    return this.fiscalService.createInboundInvoice(companyId, createInboundInvoiceDto);
+    return this.fiscalService.createInboundInvoice(companyId, createInboundInvoiceDto, file);
   }
 
   @Patch('inbound-invoice/:id')
