@@ -179,6 +179,14 @@ export declare class FiscalController {
         emissionDate: Date;
         productExchangeId: string | null;
     }>;
+    getFiscalDocumentStatus(id: string, user: any): Promise<{
+        id: string;
+        accessKey: string;
+        documentType: string;
+        currentStatus: string;
+        sefazStatus: string;
+        error: string;
+    }>;
     deleteInboundInvoice(id: string, user: any): Promise<{
         message: string;
         deletedId: string;

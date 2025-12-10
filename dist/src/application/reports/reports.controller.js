@@ -11,6 +11,7 @@ var __metadata = (this && this.__metadata) || function (k, v) {
 var __param = (this && this.__param) || function (paramIndex, decorator) {
     return function (target, key) { decorator(target, key, paramIndex); }
 };
+var ReportsController_1;
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.ReportsController = void 0;
 const common_1 = require("@nestjs/common");
@@ -22,20 +23,28 @@ const roles_guard_1 = require("../../shared/guards/roles.guard");
 const roles_decorator_1 = require("../../shared/decorators/roles.decorator");
 const current_user_decorator_1 = require("../../shared/decorators/current-user.decorator");
 const client_time_util_1 = require("../../shared/utils/client-time.util");
-let ReportsController = class ReportsController {
+let ReportsController = ReportsController_1 = class ReportsController {
     constructor(reportsService) {
         this.reportsService = reportsService;
+        this.logger = new common_1.Logger(ReportsController_1.name);
     }
     async generateReport(user, generateReportDto, req, res) {
-        const clientTimeInfo = (0, client_time_util_1.extractClientTimeInfo)(req);
-        const result = await this.reportsService.generateReport(user.companyId, generateReportDto, clientTimeInfo);
-        res.setHeader('Content-Type', result.contentType);
-        res.setHeader('Content-Disposition', `attachment; filename="${result.filename}"`);
-        if (Buffer.isBuffer(result.data) || typeof result.data === 'string') {
-            res.setHeader('Content-Length', Buffer.byteLength(result.data));
-            return res.status(common_1.HttpStatus.OK).send(result.data);
+        try {
+            const clientTimeInfo = (0, client_time_util_1.extractClientTimeInfo)(req);
+            const result = await this.reportsService.generateReport(user.companyId, generateReportDto, clientTimeInfo);
+            res.setHeader('Content-Type', result.contentType);
+            res.setHeader('Content-Disposition', `attachment; filename="${result.filename}"`);
+            if (Buffer.isBuffer(result.data) || typeof result.data === 'string') {
+                res.setHeader('Content-Length', Buffer.byteLength(result.data));
+                return res.status(common_1.HttpStatus.OK).send(result.data);
+            }
+            return res.status(common_1.HttpStatus.OK).json(result.data);
         }
-        return res.status(common_1.HttpStatus.OK).json(result.data);
+        catch (error) {
+            this.logger.error('Erro ao gerar relatório:', error);
+            this.logger.error('Stack trace:', error?.stack);
+            throw new common_1.InternalServerErrorException(`Erro ao gerar relatório: ${error?.message || 'Erro desconhecido'}`);
+        }
     }
 };
 exports.ReportsController = ReportsController;
@@ -66,7 +75,7 @@ __decorate([
     __metadata("design:paramtypes", [Object, generate_report_dto_1.GenerateReportDto, Object, Object]),
     __metadata("design:returntype", Promise)
 ], ReportsController.prototype, "generateReport", null);
-exports.ReportsController = ReportsController = __decorate([
+exports.ReportsController = ReportsController = ReportsController_1 = __decorate([
     (0, swagger_1.ApiTags)('reports'),
     (0, common_1.Controller)('reports'),
     (0, common_1.UseGuards)(jwt_auth_guard_1.JwtAuthGuard, roles_guard_1.RolesGuard),

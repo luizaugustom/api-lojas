@@ -6,6 +6,7 @@ export declare enum TaxRegime {
 }
 export declare class UpdateFiscalConfigDto {
     taxRegime?: TaxRegime;
+    stateRegistration?: string;
     cnae?: string;
     certificatePassword?: string;
     certificateFileUrl?: string;

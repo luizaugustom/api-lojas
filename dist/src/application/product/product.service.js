@@ -451,7 +451,9 @@ let ProductService = ProductService_1 = class ProductService {
         if (companyId && existingProduct.companyId && existingProduct.companyId !== companyId) {
             throw new common_1.NotFoundException('Produto não encontrado');
         }
-        const updatedPhotos = [...this.normalizePhotos(existingProduct.photos), photoUrl];
+        const currentPhotos = this.normalizePhotos(existingProduct.photos);
+        await this.photoValidationService.validatePhotoLimit(existingProduct.companyId, currentPhotos.length, 1);
+        const updatedPhotos = [...currentPhotos, photoUrl];
         const product = await this.prisma.product.update({
             where: { id },
             data: {
@@ -477,7 +479,9 @@ let ProductService = ProductService_1 = class ProductService {
         if (companyId && existingProduct.companyId && existingProduct.companyId !== companyId) {
             throw new common_1.NotFoundException('Produto não encontrado');
         }
-        const updatedPhotos = [...this.normalizePhotos(existingProduct.photos), ...photoUrls];
+        const currentPhotos = this.normalizePhotos(existingProduct.photos);
+        await this.photoValidationService.validatePhotoLimit(existingProduct.companyId, currentPhotos.length, photoUrls.length);
+        const updatedPhotos = [...currentPhotos, ...photoUrls];
         const product = await this.prisma.product.update({
             where: { id },
             data: {

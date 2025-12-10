@@ -154,6 +154,14 @@ export declare class FiscalService {
         emissionDate: Date;
         productExchangeId: string | null;
     }>;
+    getFiscalDocumentStatus(id: string, companyId?: string): Promise<{
+        id: string;
+        accessKey: string;
+        documentType: string;
+        currentStatus: string;
+        sefazStatus: string;
+        error: string;
+    }>;
     cancelFiscalDocument(id: string, reason: string, companyId?: string): Promise<{
         id: string;
         createdAt: Date;
@@ -176,7 +184,7 @@ export declare class FiscalService {
         emissionDate: Date;
         productExchangeId: string | null;
     }>;
-    downloadFiscalDocument(id: string, format: 'xml' | 'pdf', companyId?: string): Promise<{
+    downloadFiscalDocument(id: string, format: 'xml' | 'pdf', companyId?: string, skipGeneration?: boolean): Promise<{
         content: string;
         filename: string;
         mimetype: string;

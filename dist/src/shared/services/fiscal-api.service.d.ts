@@ -128,4 +128,12 @@ export declare class FiscalApiService {
         status: string;
         environment: string;
     }>;
+    cancelFiscalDocument(companyId: string, accessKey: string, reason: string, documentType: 'NFe' | 'NFCe'): Promise<{
+        success: boolean;
+        error?: string;
+    }>;
+    getFiscalDocumentStatus(companyId: string, accessKey: string, documentType: 'NFe' | 'NFCe'): Promise<{
+        status: string;
+        error?: string;
+    }>;
 }

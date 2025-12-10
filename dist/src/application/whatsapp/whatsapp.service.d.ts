@@ -1,4 +1,5 @@
 import { ConfigService } from '@nestjs/config';
+import { ZApiProvider } from './providers/z-api.provider';
 export interface WhatsAppMessage {
     to: string;
     message: string;
@@ -24,18 +25,16 @@ export interface InstallmentBillingData {
 }
 export declare class WhatsappService {
     private readonly configService;
+    private readonly zApiProvider;
     private readonly logger;
-    private readonly evolutionApiUrl;
-    private readonly evolutionApiKey;
-    private readonly evolutionInstance;
-    private readonly httpClient;
-    constructor(configService: ConfigService);
+    private readonly provider;
+    private readonly providerName;
+    constructor(configService: ConfigService, zApiProvider: ZApiProvider);
     checkInstanceStatus(): Promise<{
         connected: boolean;
         status?: string;
     }>;
     sendMessage(message: WhatsAppMessage, retries?: number): Promise<boolean>;
-    private isRetryableError;
     sendSaleNotification(phone: string, saleData: any): Promise<boolean>;
     sendLowStockAlert(phone: string, productData: any): Promise<boolean>;
     sendPaymentReminder(phone: string, billData: any): Promise<boolean>;

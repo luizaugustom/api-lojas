@@ -340,6 +340,12 @@ let FiscalApiService = FiscalApiService_1 = class FiscalApiService {
                 this.logger.error(`Detalhes: ${JSON.stringify(error.response?.data || error.message)}`);
                 throw new common_1.BadRequestException('Erro de autenticação no Focus NFe. Verifique a configuração da API Key.');
             }
+            if (error.response?.status === 422) {
+                const errorMsg = `Erro de validação no Focus NFe. Verifique os dados enviados.`;
+                this.logger.error(errorMsg);
+                this.logger.error(`Detalhes: ${JSON.stringify(error.response?.data || error.message)}`);
+                throw new common_1.BadRequestException(`Erro de validação: ${JSON.stringify(error.response?.data || error.message)}`);
+            }
             return Promise.reject(error);
         });
         const endpoint = `/v2/nfce?ref=${request.saleId}`;
@@ -347,45 +353,56 @@ let FiscalApiService = FiscalApiService_1 = class FiscalApiService {
             natureza_operacao: request.operationNature || 'Venda',
             data_emissao: new Date().toISOString(),
             data_saida_entrada: new Date().toISOString(),
-            tipo_documento: 65,
+            tipo_documento: 1,
             local_destino: 1,
-            finalidade_emissao: request.emissionPurpose ?? 1,
-            consumidor_final: 1,
-            presenca_comprador: 1,
-            modalidade_frete: 9,
-            itens: request.items.map(item => ({
-                codigo: item.productId,
+            finalidade_emissao: String(request.emissionPurpose ?? 1),
+            consumidor_final: '1',
+            presenca_comprador: '1',
+            modalidade_frete: '9',
+            itens: request.items.map((item, index) => ({
+                numero_item: String(index + 1),
+                codigo_produto: item.productId,
                 descricao: item.productName,
                 ncm: item.ncm || '99999999',
                 cfop: item.cfop || '5102',
                 unidade_comercial: item.unitOfMeasure || 'UN',
                 quantidade_comercial: item.quantity,
                 valor_unitario_comercial: item.unitPrice,
-                valor_total_bruto: item.totalPrice,
+                valor_bruto: item.totalPrice,
                 codigo_barras_comercial: item.barcode,
-                ...(item.taxValue && { valor_total_tributos_item: item.taxValue }),
+                unidade_tributavel: item.unitOfMeasure || 'UN',
+                quantidade_tributavel: item.quantity,
+                valor_unitario_tributavel: item.unitPrice,
+                icms_situacao_tributaria: '102',
+                icms_origem: '0',
+                pis_situacao_tributaria: '07',
+                cofins_situacao_tributaria: '07',
+                ...(item.taxValue && { valor_total_tributos: Number(item.taxValue.toFixed(2)) }),
             })),
-            valor_total: request.totalValue,
+            valor_produtos: Number(request.totalValue.toFixed(2)),
+            valor_total: Number(request.totalValue.toFixed(2)),
             valor_frete: 0,
             valor_seguro: 0,
             valor_desconto: 0,
             valor_outras_despesas: 0,
             valor_total_tributos: Number((request.totalTaxValue ?? request.items.reduce((sum, item) => sum + (item.taxValue || 0), 0)).toFixed(2)),
-            valor_total_produtos: request.totalValue,
-            valor_total_servicos: 0,
-            valor_total_nota: request.totalValue,
         };
-        payload.pagamentos = this.mapPaymentMethods(request.payments);
+        payload.formas_pagamento = this.mapPaymentMethods(request.payments);
         if (request.referenceAccessKey) {
             payload.notas_referenciadas = [
                 {
-                    chave: request.referenceAccessKey,
+                    chave_nfe: request.referenceAccessKey,
                 },
             ];
         }
         if (request.additionalInfo) {
-            payload.informacoes_complementares = request.additionalInfo;
+            payload.informacoes_adicionais_contribuinte = request.additionalInfo;
         }
+        this.logger.debug(`Payload NFC-e para Focus NFe: ${JSON.stringify({
+            ...payload,
+            itens: `${payload.itens.length} itens`,
+            formas_pagamento: `${payload.formas_pagamento?.length || 0} formas`,
+        })}`);
         const response = await httpClient.post(endpoint, payload);
         return {
             success: true,
@@ -773,6 +790,123 @@ let FiscalApiService = FiscalApiService_1 = class FiscalApiService {
                 provider: this.config.provider,
                 status: 'Disconnected',
                 environment: this.config.environment,
+            };
+        }
+    }
+    async cancelFiscalDocument(companyId, accessKey, reason, documentType) {
+        try {
+            this.logger.log(`Cancelling ${documentType} ${accessKey} for company: ${companyId}`);
+            const company = await this.prisma.company.findUnique({
+                where: { id: companyId },
+                select: {
+                    focusNfeApiKey: true,
+                    focusNfeEnvironment: true,
+                    admin: {
+                        select: {
+                            focusNfeApiKey: true,
+                            focusNfeEnvironment: true,
+                        },
+                    },
+                },
+            });
+            if (!company) {
+                throw new common_1.BadRequestException('Empresa não encontrada');
+            }
+            const apiKey = company.focusNfeApiKey || company.admin?.focusNfeApiKey;
+            const environment = company.focusNfeEnvironment || company.admin?.focusNfeEnvironment || 'sandbox';
+            if (!apiKey) {
+                throw new common_1.BadRequestException('API Key do Focus NFe não configurada');
+            }
+            const baseUrl = environment === 'production'
+                ? 'https://api.focusnfe.com.br'
+                : 'https://homologacao.focusnfe.com.br';
+            const httpClient = axios_1.default.create({
+                baseURL: baseUrl,
+                headers: {
+                    'Content-Type': 'application/json',
+                    'User-Agent': 'API-Lojas-SaaS/1.0',
+                },
+                auth: {
+                    username: apiKey,
+                    password: '',
+                },
+            });
+            const tipo = documentType === 'NFCe' ? 'nfce' : 'nfe';
+            const endpoint = `/v2/${tipo}/${accessKey}`;
+            const payload = {
+                justificativa: reason,
+            };
+            this.logger.log(`Sending cancel request to Focus NFe: ${endpoint}`);
+            const response = await httpClient.delete(endpoint, { data: payload });
+            this.logger.log(`Document ${accessKey} cancelled successfully`);
+            return { success: true };
+        }
+        catch (error) {
+            this.logger.error(`Error cancelling document ${accessKey}:`, error);
+            const errorMessage = error?.response?.data?.mensagem
+                || error?.response?.data?.message
+                || error?.message
+                || 'Erro ao cancelar documento fiscal';
+            return {
+                success: false,
+                error: errorMessage,
+            };
+        }
+    }
+    async getFiscalDocumentStatus(companyId, accessKey, documentType) {
+        try {
+            this.logger.log(`Checking status of ${documentType} ${accessKey} for company: ${companyId}`);
+            const company = await this.prisma.company.findUnique({
+                where: { id: companyId },
+                select: {
+                    focusNfeApiKey: true,
+                    focusNfeEnvironment: true,
+                    admin: {
+                        select: {
+                            focusNfeApiKey: true,
+                            focusNfeEnvironment: true,
+                        },
+                    },
+                },
+            });
+            if (!company) {
+                throw new common_1.BadRequestException('Empresa não encontrada');
+            }
+            const apiKey = company.focusNfeApiKey || company.admin?.focusNfeApiKey;
+            const environment = company.focusNfeEnvironment || company.admin?.focusNfeEnvironment || 'sandbox';
+            if (!apiKey) {
+                throw new common_1.BadRequestException('API Key do Focus NFe não configurada');
+            }
+            const baseUrl = environment === 'production'
+                ? 'https://api.focusnfe.com.br'
+                : 'https://homologacao.focusnfe.com.br';
+            const httpClient = axios_1.default.create({
+                baseURL: baseUrl,
+                headers: {
+                    'Content-Type': 'application/json',
+                    'User-Agent': 'API-Lojas-SaaS/1.0',
+                },
+                auth: {
+                    username: apiKey,
+                    password: '',
+                },
+            });
+            const tipo = documentType === 'NFCe' ? 'nfce' : 'nfe';
+            const endpoint = `/v2/${tipo}/${accessKey}`;
+            const response = await httpClient.get(endpoint);
+            const status = response.data?.status || 'Desconhecido';
+            this.logger.log(`Document ${accessKey} status: ${status}`);
+            return { status };
+        }
+        catch (error) {
+            this.logger.error(`Error checking status of document ${accessKey}:`, error);
+            const errorMessage = error?.response?.data?.mensagem
+                || error?.response?.data?.message
+                || error?.message
+                || 'Erro ao consultar status do documento';
+            return {
+                status: 'Erro',
+                error: errorMessage,
             };
         }
     }

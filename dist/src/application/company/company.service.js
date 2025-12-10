@@ -48,6 +48,17 @@ let CompanyService = CompanyService_1 = class CompanyService {
                     phone: true,
                     plan: true,
                     isActive: true,
+                    brandColor: true,
+                    logoUrl: true,
+                    maxProducts: true,
+                    maxCustomers: true,
+                    maxSellers: true,
+                    maxPhotosPerProduct: true,
+                    photoUploadEnabled: true,
+                    nfceEmissionEnabled: true,
+                    nfeEmissionEnabled: true,
+                    catalogPageAllowed: true,
+                    autoMessageAllowed: true,
                     createdAt: true,
                     updatedAt: true,
                 },
@@ -89,6 +100,17 @@ let CompanyService = CompanyService_1 = class CompanyService {
                 phone: true,
                 plan: true,
                 isActive: true,
+                brandColor: true,
+                logoUrl: true,
+                maxProducts: true,
+                maxCustomers: true,
+                maxSellers: true,
+                maxPhotosPerProduct: true,
+                photoUploadEnabled: true,
+                nfceEmissionEnabled: true,
+                nfeEmissionEnabled: true,
+                catalogPageAllowed: true,
+                autoMessageAllowed: true,
                 createdAt: true,
                 updatedAt: true,
                 _count: {
@@ -214,6 +236,17 @@ let CompanyService = CompanyService_1 = class CompanyService {
                     phone: true,
                     plan: true,
                     isActive: true,
+                    brandColor: true,
+                    logoUrl: true,
+                    maxProducts: true,
+                    maxCustomers: true,
+                    maxSellers: true,
+                    maxPhotosPerProduct: true,
+                    photoUploadEnabled: true,
+                    nfceEmissionEnabled: true,
+                    nfeEmissionEnabled: true,
+                    catalogPageAllowed: true,
+                    autoMessageAllowed: true,
                     createdAt: true,
                     updatedAt: true,
                 },
@@ -378,6 +411,9 @@ let CompanyService = CompanyService_1 = class CompanyService {
             if (updateFiscalConfigDto.taxRegime !== undefined) {
                 updateData.taxRegime = updateFiscalConfigDto.taxRegime;
             }
+            if (updateFiscalConfigDto.stateRegistration !== undefined) {
+                updateData.stateRegistration = updateFiscalConfigDto.stateRegistration;
+            }
             if (updateFiscalConfigDto.cnae !== undefined) {
                 updateData.cnae = updateFiscalConfigDto.cnae;
             }
@@ -477,6 +513,7 @@ let CompanyService = CompanyService_1 = class CompanyService {
                 cscMasked: company.csc ? this.encryptionService.mask('********') : null,
                 idTokenCsc: company.idTokenCsc,
                 hasFocusNfeApiKey: !!(company.focusNfeApiKey || company.admin.focusNfeApiKey),
+                adminHasFocusNfeApiKey: !!company.admin.focusNfeApiKey,
                 focusNfeEnvironment: company.focusNfeEnvironment || company.admin.focusNfeEnvironment || 'sandbox',
             };
         }
@@ -1098,13 +1135,15 @@ let CompanyService = CompanyService_1 = class CompanyService {
         try {
             const company = await this.prisma.company.findUnique({
                 where: { id: companyId },
-                select: { id: true, name: true, catalogPageUrl: true, catalogPageEnabled: true, plan: true },
+                select: { id: true, name: true, catalogPageUrl: true, catalogPageEnabled: true, catalogPageAllowed: true, plan: true },
             });
             if (!company) {
                 throw new common_1.NotFoundException('Empresa não encontrada');
             }
-            if (updateCatalogPageDto.catalogPageEnabled === true && !company.catalogPageAllowed) {
-                throw new common_1.BadRequestException('A empresa não tem permissão para usar catálogo digital. Entre em contato com o administrador.');
+            if (updateCatalogPageDto.catalogPageEnabled === true) {
+                if (company.catalogPageAllowed === false || company.catalogPageAllowed === null || company.catalogPageAllowed === undefined) {
+                    throw new common_1.BadRequestException('A empresa não tem permissão para usar catálogo digital. Entre em contato com o administrador para autorizar esta funcionalidade.');
+                }
             }
             const updateData = {};
             if (updateCatalogPageDto.catalogPageUrl !== undefined) {
@@ -1155,6 +1194,7 @@ let CompanyService = CompanyService_1 = class CompanyService {
                     name: true,
                     catalogPageUrl: true,
                     catalogPageEnabled: true,
+                    catalogPageAllowed: true,
                 },
             });
             if (!company) {
@@ -1163,6 +1203,7 @@ let CompanyService = CompanyService_1 = class CompanyService {
             return {
                 catalogPageUrl: company.catalogPageUrl,
                 catalogPageEnabled: company.catalogPageEnabled,
+                catalogPageAllowed: company.catalogPageAllowed ?? true,
                 pageUrl: company.catalogPageUrl
                     ? `/catalog/${company.catalogPageUrl}`
                     : null,
@@ -1179,6 +1220,7 @@ let CompanyService = CompanyService_1 = class CompanyService {
                 where: {
                     catalogPageUrl: url,
                     catalogPageEnabled: true,
+                    catalogPageAllowed: true,
                 },
                 select: {
                     id: true,
@@ -1188,6 +1230,7 @@ let CompanyService = CompanyService_1 = class CompanyService {
                     logoUrl: true,
                     brandColor: true,
                     plan: true,
+                    catalogPageAllowed: true,
                     street: true,
                     number: true,
                     district: true,

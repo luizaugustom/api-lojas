@@ -240,6 +240,7 @@ let FiscalService = FiscalService_1 = class FiscalService {
             const company = await this.prisma.company.findUnique({
                 where: { id: companyId },
                 select: {
+                    name: true,
                     cnpj: true,
                     stateRegistration: true,
                     certificatePassword: true,
@@ -258,19 +259,43 @@ let FiscalService = FiscalService_1 = class FiscalService {
                 },
             });
             if (!company) {
+                this.logger.error(`❌ Empresa ${companyId} não encontrada`);
                 return false;
             }
-            const hasRequiredFields = !!(company.cnpj &&
-                company.stateRegistration &&
-                company.certificatePassword &&
-                company.nfceSerie &&
-                company.municipioIbge &&
-                company.csc &&
-                company.idTokenCsc &&
-                company.state &&
-                company.city);
+            const missingFields = [];
+            if (!company.cnpj)
+                missingFields.push('CNPJ');
+            if (!company.stateRegistration)
+                missingFields.push('Inscrição Estadual');
+            if (!company.certificatePassword)
+                missingFields.push('Senha do Certificado');
+            if (!company.nfceSerie)
+                missingFields.push('Série NFCe');
+            if (!company.municipioIbge)
+                missingFields.push('Código IBGE do Município');
+            if (!company.csc)
+                missingFields.push('CSC (Código de Segurança do Contribuinte)');
+            if (!company.idTokenCsc)
+                missingFields.push('ID Token CSC');
+            if (!company.state)
+                missingFields.push('Estado (UF)');
+            if (!company.city)
+                missingFields.push('Cidade');
             const hasFocusNfeApiKey = !!(company.focusNfeApiKey || company.admin?.focusNfeApiKey);
-            return hasRequiredFields && hasFocusNfeApiKey;
+            if (!hasFocusNfeApiKey) {
+                missingFields.push('API Key do Focus NFe (configurar pelo Admin)');
+            }
+            const hasRequiredFields = missingFields.length === 0;
+            if (!hasRequiredFields) {
+                this.logger.warn(`❌ Empresa "${company.name}" (${companyId}) - Campos fiscais faltando para emissão de NFC-e:`);
+                missingFields.forEach((field, index) => {
+                    this.logger.warn(`   ${index + 1}. ${field}`);
+                });
+            }
+            else {
+                this.logger.log(`✅ Empresa "${company.name}" (${companyId}) - Configuração fiscal completa para emissão de NFC-e`);
+            }
+            return hasRequiredFields;
         }
         catch (error) {
             this.logger.error('Error checking fiscal config:', error);
@@ -318,17 +343,22 @@ let FiscalService = FiscalService_1 = class FiscalService {
     async generateNFCe(nfceData) {
         try {
             this.logger.log(`Generating NFCe for sale: ${nfceData.saleId}`);
-            await this.planLimitsService.validateNfceEmissionEnabled(nfceData.companyId);
-            const hasValidConfig = await this.hasValidFiscalConfig(nfceData.companyId);
-            if (!hasValidConfig) {
-                this.logger.warn(`Empresa ${nfceData.companyId} não tem configuração fiscal válida. Gerando NFCe mockado.`);
-                return await this.generateMockNFCe(nfceData);
-            }
             const company = await this.prisma.company.findUnique({
                 where: { id: nfceData.companyId },
             });
             if (!company) {
                 throw new common_1.NotFoundException('Empresa não encontrada');
+            }
+            if (!company.nfceEmissionEnabled) {
+                this.logger.warn(`⚠️ ATENÇÃO: Emissão de NFCe está DESABILITADA para empresa ${nfceData.companyId}. Gerando NFCe MOCKADO (não fiscal).`);
+                return await this.generateMockNFCe(nfceData);
+            }
+            const hasValidConfig = await this.hasValidFiscalConfig(nfceData.companyId);
+            if (!hasValidConfig) {
+                this.logger.warn(`⚠️ ATENÇÃO: Empresa ${nfceData.companyId} não tem configuração fiscal válida. Gerando NFCe MOCKADO (não fiscal).`);
+                this.logger.warn(`Campos obrigatórios faltando: Verifique se a empresa tem CNPJ, Inscrição Estadual, Senha do Certificado, Série NFCe, Código IBGE, CSC, ID Token CSC, Estado e Cidade configurados.`);
+                this.logger.warn(`Também verifique se a API Key do Focus NFe está configurada (empresa ou admin).`);
+                return await this.generateMockNFCe(nfceData);
             }
             if (nfceData.clientCpfCnpj) {
                 this.validationService.validateCPFOrCNPJ(nfceData.clientCpfCnpj);
@@ -576,6 +606,39 @@ let FiscalService = FiscalService_1 = class FiscalService {
         }
         return document;
     }
+    async getFiscalDocumentStatus(id, companyId) {
+        try {
+            const document = await this.getFiscalDocument(id, companyId);
+            if (!document.accessKey) {
+                throw new common_1.BadRequestException('Documento não possui chave de acesso');
+            }
+            const documentType = document.documentType === 'NFCe' ? 'NFCe' : 'NFe';
+            const statusResult = await this.fiscalApiService.getFiscalDocumentStatus(document.companyId, document.accessKey, documentType);
+            if (statusResult.status && statusResult.status !== document.status) {
+                await this.prisma.fiscalDocument.update({
+                    where: { id },
+                    data: {
+                        status: statusResult.status,
+                    },
+                });
+            }
+            return {
+                id: document.id,
+                accessKey: document.accessKey,
+                documentType: document.documentType,
+                currentStatus: document.status,
+                sefazStatus: statusResult.status,
+                error: statusResult.error,
+            };
+        }
+        catch (error) {
+            this.logger.error('Error getting fiscal document status:', error);
+            if (error instanceof common_1.BadRequestException || error instanceof common_1.NotFoundException) {
+                throw error;
+            }
+            throw new common_1.BadRequestException(error?.message || 'Erro ao consultar status do documento');
+        }
+    }
     async cancelFiscalDocument(id, reason, companyId) {
         try {
             const where = { id };
@@ -591,25 +654,40 @@ let FiscalService = FiscalService_1 = class FiscalService {
             if (document.status === 'Cancelada') {
                 throw new common_1.BadRequestException('Documento já está cancelado');
             }
-            const response = {
-                status: 'Cancelada',
-                motivo: reason,
-            };
+            if (!document.accessKey) {
+                throw new common_1.BadRequestException('Documento não possui chave de acesso. Não é possível cancelar.');
+            }
+            if (!reason || reason.trim().length < 15) {
+                throw new common_1.BadRequestException('O motivo do cancelamento deve ter pelo menos 15 caracteres');
+            }
+            const documentType = document.documentType === 'NFCe' ? 'NFCe' : 'NFe';
+            const cancelResult = await this.fiscalApiService.cancelFiscalDocument(document.companyId, document.accessKey, reason.trim(), documentType);
+            if (!cancelResult.success) {
+                throw new common_1.BadRequestException(cancelResult.error || 'Erro ao cancelar documento na SEFAZ');
+            }
             const updatedDocument = await this.prisma.fiscalDocument.update({
                 where: { id },
                 data: {
                     status: 'Cancelada',
+                    metadata: {
+                        ...(document.metadata || {}),
+                        cancellationReason: reason.trim(),
+                        cancelledAt: new Date().toISOString(),
+                    },
                 },
             });
-            this.logger.log(`Fiscal document cancelled: ${id}`);
+            this.logger.log(`✅ Documento fiscal ${id} (${document.accessKey}) cancelado com sucesso na SEFAZ`);
             return updatedDocument;
         }
         catch (error) {
-            this.logger.error('Error cancelling fiscal document:', error);
-            throw new common_1.BadRequestException('Erro ao cancelar documento fiscal');
+            this.logger.error('❌ Erro ao cancelar documento fiscal:', error);
+            if (error instanceof common_1.BadRequestException || error instanceof common_1.NotFoundException) {
+                throw error;
+            }
+            throw new common_1.BadRequestException(error?.message || 'Erro ao cancelar documento fiscal');
         }
     }
-    async downloadFiscalDocument(id, format, companyId) {
+    async downloadFiscalDocument(id, format, companyId, skipGeneration = false) {
         const document = await this.getFiscalDocument(id, companyId);
         if (format === 'xml') {
             if (!document.xmlContent) {
@@ -626,6 +704,11 @@ let FiscalService = FiscalService_1 = class FiscalService {
         }
         if (format === 'pdf') {
             if (!document.pdfUrl) {
+                const isInboundInvoice = document.documentType === 'NFe_INBOUND' ||
+                    (document.documentType === 'NFe' && document.xmlContent !== null);
+                if (isInboundInvoice || skipGeneration) {
+                    throw new common_1.BadRequestException('Arquivo PDF não disponível para este documento. Use o arquivo original enviado.');
+                }
                 const generatedPdf = await this.generatePdfFromDocument(document);
                 return {
                     content: generatedPdf,

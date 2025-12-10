@@ -13,112 +13,89 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.WhatsappService = void 0;
 const common_1 = require("@nestjs/common");
 const config_1 = require("@nestjs/config");
-const axios_1 = require("axios");
+const z_api_provider_1 = require("./providers/z-api.provider");
 let WhatsappService = WhatsappService_1 = class WhatsappService {
-    constructor(configService) {
+    constructor(configService, zApiProvider) {
         this.configService = configService;
+        this.zApiProvider = zApiProvider;
         this.logger = new common_1.Logger(WhatsappService_1.name);
-        this.evolutionApiUrl = this.configService.get('EVOLUTION_API_URL', '').replace(/\/$/, '');
-        this.evolutionApiKey = this.configService.get('EVOLUTION_API_KEY', '');
-        this.evolutionInstance = this.configService.get('EVOLUTION_INSTANCE', 'default');
-        this.httpClient = axios_1.default.create({
-            timeout: 30000,
-            headers: {
-                'Content-Type': 'application/json',
-                'apikey': this.evolutionApiKey,
-            },
-        });
-        if (!this.evolutionApiUrl || !this.evolutionApiKey) {
-            this.logger.warn('Evolution API não configurada. Configure EVOLUTION_API_URL e EVOLUTION_API_KEY no .env');
+        const zApiInstanceId = this.configService.get('Z_API_INSTANCE_ID', '');
+        const zApiToken = this.configService.get('Z_API_TOKEN', '');
+        if (zApiInstanceId && zApiToken) {
+            this.provider = this.zApiProvider;
+            this.providerName = 'Z-API';
+            this.logger.log('✅ Z-API configurada como provider de WhatsApp');
         }
         else {
-            this.logger.log(`Evolution API configurada: ${this.evolutionApiUrl} (Instance: ${this.evolutionInstance})`);
+            this.provider = this.zApiProvider;
+            this.providerName = 'Z-API';
+            this.logger.warn('⚠️ Z-API não configurada completamente. Configure Z_API_INSTANCE_ID e Z_API_TOKEN no .env');
+            this.logger.warn('💡 Obtenha suas credenciais em: https://developer.z-api.io/');
         }
     }
     async checkInstanceStatus() {
-        try {
-            if (!this.evolutionApiUrl || !this.evolutionApiKey) {
-                return { connected: false, status: 'not_configured' };
-            }
-            const url = `${this.evolutionApiUrl}/instance/connectionState/${this.evolutionInstance}`;
-            const response = await this.httpClient.get(url);
-            if (response.status === 200 && response.data) {
-                const state = response.data.state || response.data.status;
-                const connected = state === 'open' || state === 'connected';
-                return { connected, status: state };
-            }
-            return { connected: false, status: 'unknown' };
-        }
-        catch (error) {
-            this.logger.warn(`Erro ao verificar status da instância: ${error.message}`);
-            return { connected: false, status: 'error' };
-        }
+        return this.provider.checkConnection();
     }
     async sendMessage(message, retries = 2) {
         const startTime = Date.now();
         try {
-            if (!this.evolutionApiUrl || !this.evolutionApiKey) {
-                this.logger.warn('Evolution API não configurada. Verifique EVOLUTION_API_URL e EVOLUTION_API_KEY no .env');
+            if (!message.to || message.to.trim() === '') {
+                this.logger.error('🚨 Número de telefone não fornecido');
+                return false;
+            }
+            if (!message.message || message.message.trim() === '') {
+                this.logger.error('🚨 Mensagem vazia não pode ser enviada');
+                return false;
+            }
+            if (message.message.length > 65536) {
+                this.logger.error(`🚨 Mensagem muito longa: ${message.message.length} caracteres (máximo: 65536)`);
                 return false;
             }
             if (retries === 2) {
                 const instanceStatus = await this.checkInstanceStatus();
                 if (!instanceStatus.connected) {
-                    this.logger.warn(`Instância ${this.evolutionInstance} não está conectada. Status: ${instanceStatus.status}`);
+                    this.logger.warn(`⚠️ Instância ${this.providerName} não está conectada. Status: ${instanceStatus.status}`);
                 }
             }
-            const formattedPhone = await this.formatPhoneNumber(message.to);
+            const isValid = await this.provider.validatePhoneNumber(message.to);
+            if (!isValid) {
+                this.logger.error(`📵 Número de telefone inválido: ${message.to}`);
+                return false;
+            }
+            const formattedPhone = await this.provider.formatPhoneNumber(message.to);
             const messageLength = message.message.length;
-            this.logger.log(`📤 Enviando mensagem WhatsApp | Destino: ${formattedPhone} | Tamanho: ${messageLength} chars | Tentativa: ${3 - retries}/3 | Instância: ${this.evolutionInstance}`);
-            const url = `${this.evolutionApiUrl}/message/sendText/${this.evolutionInstance}`;
-            const payload = {
-                number: formattedPhone,
-                text: message.message,
-            };
-            const response = await this.httpClient.post(url, payload);
+            this.logger.log(`📤 Enviando mensagem WhatsApp via ${this.providerName} | Destino: ${formattedPhone} | Tamanho: ${messageLength} chars | Tentativa: ${3 - retries}/3`);
+            const success = await this.provider.sendMessage(formattedPhone, message.message);
             const duration = Date.now() - startTime;
-            if (response.status === 200 || response.status === 201) {
-                this.logger.log(`✅ Mensagem WhatsApp enviada com sucesso | Destino: ${formattedPhone} | Tempo: ${duration}ms | Status: ${response.status}`);
+            if (success) {
+                this.logger.log(`✅ Mensagem WhatsApp enviada com sucesso via ${this.providerName} | Destino: ${formattedPhone} | Tempo: ${duration}ms`);
                 return true;
             }
-            this.logger.warn(`⚠️ Resposta inesperada da Evolution API | Status: ${response.status} | Tempo: ${duration}ms | Destino: ${formattedPhone}`);
+            this.logger.error(`❌ Erro ao enviar mensagem WhatsApp via ${this.providerName} | Destino: ${formattedPhone} | Tempo: ${duration}ms`);
             return false;
         }
         catch (error) {
-            if (retries > 0 && this.isRetryableError(error)) {
+            const duration = Date.now() - startTime;
+            const isPermanentError = error.response && [400, 401, 403, 404].includes(error.response.status);
+            if (isPermanentError) {
+                this.logger.error(`❌ Erro permanente ao enviar mensagem WhatsApp via ${this.providerName} | Destino: ${message.to} | Status: ${error.response.status} | Tempo: ${duration}ms`);
+                if (error.message) {
+                    this.logger.error(`💬 Mensagem de erro: ${error.message}`);
+                }
+                return false;
+            }
+            this.logger.error(`❌ Erro ao enviar mensagem WhatsApp via ${this.providerName} | Destino: ${message.to} | Tentativa: ${3 - retries}/3 | Tempo: ${duration}ms`);
+            if (error.message) {
+                this.logger.error(`💬 Mensagem de erro: ${error.message}`);
+            }
+            if (retries > 0) {
                 const delay = Math.pow(2, 3 - retries) * 1000;
-                this.logger.warn(`Erro temporário, tentando novamente em ${delay}ms... (tentativas restantes: ${retries})`);
+                this.logger.warn(`⚠️ Erro temporário, tentando novamente em ${delay}ms... (tentativas restantes: ${retries})`);
                 await new Promise(resolve => setTimeout(resolve, delay));
                 return this.sendMessage(message, retries - 1);
             }
-            const duration = Date.now() - startTime;
-            this.logger.error(`❌ Erro ao enviar mensagem WhatsApp | Destino: ${message.to} | Tentativa: ${3 - retries}/3 | Tempo: ${duration}ms`);
-            if (error.response) {
-                this.logger.error(`📊 Detalhes do erro | Status: ${error.response.status} | Resposta: ${JSON.stringify(error.response.data)}`);
-            }
-            else if (error.request) {
-                this.logger.error(`🔌 Erro de conexão | Não foi possível conectar à Evolution API | URL: ${this.evolutionApiUrl}`);
-            }
-            else {
-                this.logger.error(`⚠️ Erro desconhecido | Mensagem: ${error.message}`);
-            }
-            if (error.stack) {
-                this.logger.debug(`Stack trace: ${error.stack}`);
-            }
             return false;
         }
-    }
-    isRetryableError(error) {
-        if (error.code === 'ECONNREFUSED' || error.code === 'ETIMEDOUT' || error.code === 'ENOTFOUND') {
-            return true;
-        }
-        if (error.response && error.response.status >= 500 && error.response.status < 600) {
-            return true;
-        }
-        if (error.response && error.response.status === 429) {
-            return true;
-        }
-        return false;
     }
     async sendSaleNotification(phone, saleData) {
         const message = `
@@ -179,6 +156,18 @@ Por favor, efetue o pagamento até a data de vencimento.
     }
     async sendInstallmentBilling(billingData, phone) {
         try {
+            if (!billingData || !phone) {
+                this.logger.error('🚨 Dados de cobrança ou telefone inválidos');
+                return false;
+            }
+            if (!billingData.customerName) {
+                this.logger.error('🚨 Nome do cliente não fornecido');
+                return false;
+            }
+            if (!billingData.dueDate) {
+                this.logger.error('🚨 Data de vencimento não fornecida');
+                return false;
+            }
             const dueDateFormatted = new Date(billingData.dueDate).toLocaleDateString('pt-BR', {
                 day: '2-digit',
                 month: '2-digit',
@@ -226,12 +215,15 @@ Obrigado pela atenção! 🙏
                 type: 'text',
             });
             if (success) {
-                this.logger.log(`Mensagem de cobrança enviada para ${billingData.customerName} (${phone})`);
+                this.logger.log(`💰 Mensagem de cobrança enviada para ${billingData.customerName} (${phone})`);
+            }
+            else {
+                this.logger.error(`🚨 Falha ao enviar mensagem de cobrança para ${billingData.customerName} (${phone})`);
             }
             return success;
         }
         catch (error) {
-            this.logger.error(`Erro ao enviar mensagem de cobrança para ${phone}:`, error);
+            this.logger.error(`❌ Erro ao enviar mensagem de cobrança para ${phone}:`, error.message);
             return false;
         }
     }
@@ -358,23 +350,16 @@ Obrigado pela atenção! 🙏
         return methods[method] || method;
     }
     async validatePhoneNumber(phone) {
-        const phoneRegex = /^(\+55)?[\s]?[1-9]{2}[\s]?[9]?[\d]{4}[\s]?[\d]{4}$/;
-        return phoneRegex.test(phone.replace(/\D/g, ''));
+        return this.provider.validatePhoneNumber(phone);
     }
     async formatPhoneNumber(phone) {
-        const digits = phone.replace(/\D/g, '');
-        if (digits.length === 11) {
-            return `55${digits}`;
-        }
-        else if (digits.length === 13 && digits.startsWith('55')) {
-            return digits;
-        }
-        throw new Error('Número de telefone inválido');
+        return this.provider.formatPhoneNumber(phone);
     }
 };
 exports.WhatsappService = WhatsappService;
 exports.WhatsappService = WhatsappService = WhatsappService_1 = __decorate([
     (0, common_1.Injectable)(),
-    __metadata("design:paramtypes", [config_1.ConfigService])
+    __metadata("design:paramtypes", [config_1.ConfigService,
+        z_api_provider_1.ZApiProvider])
 ], WhatsappService);
 //# sourceMappingURL=whatsapp.service.js.map

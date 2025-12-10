@@ -15,6 +15,7 @@ export declare class ReportsService {
     private generateSalesReport;
     private generateProductsReport;
     private generateInvoicesReport;
+    private calculateNetProfit;
     private generateCompleteReport;
     private getBillsToPay;
     private getCashClosures;
@@ -30,6 +31,7 @@ export declare class ReportsService {
     private addCommissionsSheet;
     private getProductLosses;
     private addProductLossesSheet;
+    private addNetProfitSheet;
     private generateReportFile;
     private buildZipPackage;
     private resolveInvoiceFolder;

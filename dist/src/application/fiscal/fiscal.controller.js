@@ -245,6 +245,9 @@ let FiscalController = class FiscalController {
     async cancelFiscalDocument(id, cancelDto, user) {
         return this.fiscalService.cancelFiscalDocument(id, cancelDto.reason, user.companyId);
     }
+    async getFiscalDocumentStatus(id, user) {
+        return this.fiscalService.getFiscalDocumentStatus(id, user.companyId);
+    }
     async deleteInboundInvoice(id, user) {
         const companyId = user.role === roles_decorator_1.UserRole.ADMIN ? user.companyId : user.companyId;
         if (!companyId) {
@@ -525,6 +528,18 @@ __decorate([
     __metadata("design:paramtypes", [String, cancel_fiscal_document_dto_1.CancelFiscalDocumentDto, Object]),
     __metadata("design:returntype", Promise)
 ], FiscalController.prototype, "cancelFiscalDocument", null);
+__decorate([
+    (0, common_1.Get)(':id/status'),
+    (0, roles_decorator_1.Roles)(roles_decorator_1.UserRole.ADMIN, roles_decorator_1.UserRole.COMPANY),
+    (0, swagger_1.ApiOperation)({ summary: 'Consultar status do documento fiscal na SEFAZ' }),
+    (0, swagger_1.ApiResponse)({ status: 200, description: 'Status do documento obtido com sucesso' }),
+    (0, swagger_1.ApiResponse)({ status: 404, description: 'Documento fiscal não encontrado' }),
+    __param(0, (0, common_1.Param)('id', uuid_validation_pipe_1.UuidValidationPipe)),
+    __param(1, (0, current_user_decorator_1.CurrentUser)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String, Object]),
+    __metadata("design:returntype", Promise)
+], FiscalController.prototype, "getFiscalDocumentStatus", null);
 __decorate([
     (0, common_1.Delete)('inbound-invoice/:id'),
     (0, roles_decorator_1.Roles)(roles_decorator_1.UserRole.ADMIN, roles_decorator_1.UserRole.COMPANY),
