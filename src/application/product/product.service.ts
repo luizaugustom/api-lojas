@@ -44,6 +44,7 @@ export class ProductService {
     try {
       this.logger.log(`🚀 Creating product for company: ${companyId}`);
       this.logger.log(`📋 Product data: ${JSON.stringify(createProductDto)}`);
+      this.logger.log(`💰 costPrice: ${createProductDto.costPrice}`);
       
       // Validar limite de produtos do plano
       await this.planLimitsService.validateProductLimit(companyId);
@@ -54,7 +55,23 @@ export class ProductService {
           ...(createProductDto.photos ? { photos: this.serializePhotos(createProductDto.photos) as any } : {}),
           companyId,
         },
-        include: {
+        select: {
+          id: true,
+          name: true,
+          photos: true,
+          barcode: true,
+          size: true,
+          stockQuantity: true,
+          price: true,
+          costPrice: true,
+          category: true,
+          expirationDate: true,
+          ncm: true,
+          cfop: true,
+          unitOfMeasure: true,
+          createdAt: true,
+          updatedAt: true,
+          companyId: true,
           company: {
             select: {
               id: true,
@@ -66,6 +83,7 @@ export class ProductService {
 
       this.logger.log(`✅ Product created: ${product.id} for company: ${companyId}`);
       this.logger.log(`📸 Product photos: ${JSON.stringify(product.photos)}`);
+      this.logger.log(`💰 Product costPrice: ${product.costPrice}`);
       return { ...product, photos: this.normalizePhotos((product as any).photos) } as any;
     } catch (error) {
       if (error.code === 'P2002') {
@@ -84,6 +102,7 @@ export class ProductService {
     try {
       this.logger.log(`🚀 Creating product with photos for company: ${companyId}`);
       this.logger.log(`📸 Number of photos: ${photos?.length || 0}`);
+      this.logger.log(`💰 costPrice: ${createProductDto.costPrice}`);
       
       // Validar limite de produtos do plano
       await this.planLimitsService.validateProductLimit(companyId);
@@ -100,7 +119,23 @@ export class ProductService {
           photos: this.serializePhotos(photoUrls) as any,
           companyId,
         },
-        include: {
+        select: {
+          id: true,
+          name: true,
+          photos: true,
+          barcode: true,
+          size: true,
+          stockQuantity: true,
+          price: true,
+          costPrice: true,
+          category: true,
+          expirationDate: true,
+          ncm: true,
+          cfop: true,
+          unitOfMeasure: true,
+          createdAt: true,
+          updatedAt: true,
+          companyId: true,
           company: {
             select: {
               id: true,
@@ -112,6 +147,7 @@ export class ProductService {
 
       this.logger.log(`✅ Product with photos created: ${product.id}`);
       this.logger.log(`📸 Photos uploaded: ${photoUrls.length}`);
+      this.logger.log(`💰 Product costPrice: ${product.costPrice}`);
       return { ...product, photos: this.normalizePhotos((product as any).photos) } as any;
     } catch (error) {
       if (error.code === 'P2002') {
@@ -140,7 +176,23 @@ export class ProductService {
     const [products, total] = await Promise.all([
       this.prisma.product.findMany({
         where,
-        include: {
+        select: {
+          id: true,
+          name: true,
+          photos: true,
+          barcode: true,
+          size: true,
+          stockQuantity: true,
+          price: true,
+          costPrice: true,
+          category: true,
+          expirationDate: true,
+          ncm: true,
+          cfop: true,
+          unitOfMeasure: true,
+          createdAt: true,
+          updatedAt: true,
+          companyId: true,
           company: {
             select: {
               id: true,
