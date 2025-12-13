@@ -179,7 +179,23 @@ export class ProductService {
     // Always fetch by the unique id, then validate company ownership if provided
     const product = await this.prisma.product.findUnique({
       where: { id },
-      include: {
+      select: {
+        id: true,
+        name: true,
+        photos: true,
+        barcode: true,
+        size: true,
+        stockQuantity: true,
+        price: true,
+        costPrice: true,
+        category: true,
+        expirationDate: true,
+        ncm: true,
+        cfop: true,
+        unitOfMeasure: true,
+        createdAt: true,
+        updatedAt: true,
+        companyId: true,
         company: {
           select: {
             id: true,
