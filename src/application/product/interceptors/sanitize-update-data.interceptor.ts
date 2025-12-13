@@ -17,9 +17,13 @@ export class SanitizeUpdateDataInterceptor implements NestInterceptor {
         'size',
         'stockQuantity',
         'price',
+        'costPrice',
+        'minStockQuantity',
         'category',
         'expirationDate',
-        'unitOfMeasure'
+        'unitOfMeasure',
+        'ncm',
+        'cfop'
       ];
 
       // Filtrar apenas campos permitidos
@@ -64,12 +68,20 @@ export class SanitizeUpdateDataInterceptor implements NestInterceptor {
       }
 
       // Converter strings para números
-      if (sanitizedBody['stockQuantity']) {
+      if (sanitizedBody['stockQuantity'] !== undefined) {
         sanitizedBody['stockQuantity'] = parseInt(sanitizedBody['stockQuantity'], 10);
       }
       
-      if (sanitizedBody['price']) {
+      if (sanitizedBody['price'] !== undefined) {
         sanitizedBody['price'] = parseFloat(sanitizedBody['price']);
+      }
+
+      if (sanitizedBody['costPrice'] !== undefined) {
+        sanitizedBody['costPrice'] = parseFloat(sanitizedBody['costPrice']);
+      }
+
+      if (sanitizedBody['minStockQuantity'] !== undefined) {
+        sanitizedBody['minStockQuantity'] = parseInt(sanitizedBody['minStockQuantity'], 10);
       }
 
       // Converter data para formato ISO-8601 DateTime se necessário
